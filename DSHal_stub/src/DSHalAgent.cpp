@@ -48,14 +48,6 @@ std::string DSHalAgent::testmodulepre_requisites()
         DEBUG_PRINT(DEBUG_LOG,"\n Application Successfully connected with IARMBUS\n");
 
         dsMgr_init();
-        dsAudioPortInit();
-        dsVideoPortInit();
-        dsDisplayInit();
-        dsVideoDeviceInit();
-        dsFPInit();
-#ifndef NO_HDMI_INPUT
-        dsHdmiInInit();
-#endif
 
         DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule pre_requisites --> Exit\n");
         return "SUCCESS";
@@ -79,15 +71,7 @@ bool DSHalAgent::testmodulepost_requisites()
  
     IARM_Result_t ret;
     dsMgr_term();
-    dsAudioPortTerm();
-    dsVideoPortTerm();
-    dsDisplayTerm();
-    dsVideoDeviceTerm();
-    /*Commented to address RDKTT-2015. Developed has suggested to comment since DS itself is not using this API*/
-    //dsFPTerm();
-#ifndef NO_HDMI_INPUT
-    dsHdmiInTerm();
-#endif
+    
     vpHandle = 0;
     vdHandle = 0;
     apHandle = 0;
