@@ -419,6 +419,7 @@ AC_CONFIG_FILES([Makefile
          SNMP_stub/Makefile
          MocaHal_stub/Makefile
          Bluetooth_stub/Makefile
+	 AAMP_stub/Makefile
          BluetoothHal_stub/Makefile
          MfrHal_stub/Makefile
          FireboltCompliance_Validation/Makefile
