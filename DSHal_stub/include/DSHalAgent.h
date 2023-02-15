@@ -49,10 +49,10 @@
 
 using namespace std;
 
-int vpHandle = 0;
-int vdHandle = 0;
-int apHandle = 0;
-int dispHandle = 0;
+intptr_t vpHandle = 0;
+intptr_t vdHandle = 0;
+intptr_t apHandle = 0;
+intptr_t dispHandle = 0;
 string error = "";
 
 class RDKTestAgent;
