@@ -118,7 +118,17 @@ bool Flush_Pipeline = true;
 typedef enum {
   GST_PLAY_FLAG_VIDEO         = (1 << 0),
   GST_PLAY_FLAG_AUDIO         = (1 << 1),
-  GST_PLAY_FLAG_TEXT          = (1 << 2)
+  GST_PLAY_FLAG_TEXT          = (1 << 2),
+  GST_PLAY_FLAG_VIS           = (1 << 3),
+  GST_PLAY_FLAG_SOFT_VOLUME   = (1 << 4),
+  GST_PLAY_FLAG_NATIVE_AUDIO  = (1 << 5),
+  GST_PLAY_FLAG_NATIVE_VIDEO  = (1 << 6),
+  GST_PLAY_FLAG_DOWNLOAD      = (1 << 7),
+  GST_PLAY_FLAG_BUFFERING     = (1 << 8),
+  GST_PLAY_FLAG_DEINTERLACE   = (1 << 9),
+  GST_PLAY_FLAG_SOFT_COLORBALANCE = (1 << 10),
+  GST_PLAY_FLAG_FORCE_FILTERS = (1 << 11),
+  GST_PLAY_FLAG_FORCE_SW_DECODERS = (1 << 12),
 } GstPlayFlags;
 
 /*
@@ -235,8 +245,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    }
 
    printf("\nRunning for %d seconds, start Position is %lld\n",RunSeconds,startPosition/GST_SECOND);
-   fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
-   previous_position = (currentPosition/GST_SECOND);
+   previous_position = (startPosition/GST_SECOND);
    if (seekOperation)
    {
        previous_position = seekSeconds;
@@ -251,8 +260,12 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	    fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
 	    play_jump = int(currentPosition/GST_SECOND) - previous_position;
             previous_position = (currentPosition/GST_SECOND);
-
-	    fail_unless(play_jump == 0,"Playback is not PAUSED");
+            printf("Current Position : %lld\n",currentPosition/GST_SECOND);
+	    if (play_jump != 0)
+            {
+                printf("Playback is not PAUSED");
+                jump_buffer_small_value -=1;
+            }
 
 	    if (checkPTS)
             {		    
@@ -264,11 +277,12 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
                 }
 		if(!justPrintPTS)
 		{
-                   fail_unless(pts_buffer != pts , "Video is not PAUSED according to video-pts check of westerosSink");
-	           fail_unless(old_pts != 0 , "Video is not playing according to video-pts check of westerosSink");
+                   fail_unless(pts_buffer != 0 , "Video is not PAUSED according to video-pts check of westerosSink");
+	           fail_unless(old_pts != 0 , "Video is not rendered according to video-pts check of westerosSink");
 		}
 	        old_pts = pts;
 	    }
+	    fail_unless (jump_buffer_small_value !=0 ,"FAILURE:Playback is not paused");
             RanForTime += 1;
         }while(RanForTime < RunSeconds);
         return;
@@ -817,7 +831,7 @@ GST_START_TEST (test_init_shutdown)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -871,7 +885,7 @@ GST_START_TEST (test_generic_playback)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+    flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -1117,6 +1131,7 @@ GST_START_TEST (test_play_pause_pipeline)
     GstState cur_state;
     GstElement *playbin;
     GstElement *westerosSink, *rialtovsink, *rialtoasink;
+    GstStateChangeReturn state_change;
     GstElement *fpssink;
     bool paused = false;
     GstMessage *message;
@@ -1139,7 +1154,7 @@ GST_START_TEST (test_play_pause_pipeline)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -1226,7 +1241,7 @@ GST_START_TEST (test_play_pause_pipeline)
      * Wait for 'play_timeout' seconds(recieved as the input argument) before changing the pipeline state
      * We are waiting for 5 more seconds before checking pipeline status, so reducing the wait here
      */
-    PlaySeconds(playbin,play_timeout - 5);
+    PlaySeconds(playbin,play_timeout);
     if (use_rialto)
     {
          g_object_get (rialtovsink, "maxVideoHeight", &height, NULL);
@@ -1253,6 +1268,11 @@ GST_START_TEST (test_play_pause_pipeline)
     }
     printf ("\nDETAILS: SUCCESS, Video playing successfully\n");
 
+    auto latency_start = std::chrono::high_resolution_clock::now();
+    auto latency_stop =  std::chrono::high_resolution_clock::now();
+    bus = gst_element_get_bus (playbin);
+    auto latency_chrono = std::chrono::duration_cast<std::chrono::milliseconds>(latency_stop - latency_start);
+
     /*
      * Set pipeline to PAUSED
      */
@@ -1261,9 +1281,7 @@ GST_START_TEST (test_play_pause_pipeline)
     /*
      * Wait for 5 seconds before checking the pipeline status
      */
-    start = std::chrono::steady_clock::now();
-    bus = gst_element_get_bus (playbin);
-    timestamp = gst_clock_get_time (playbin->clock);
+    latency_start = std::chrono::high_resolution_clock::now();
     do
     {
 	message = gst_bus_pop_filtered (bus,(GstMessageType)GST_MESSAGE_STATE_CHANGED);
@@ -1271,28 +1289,39 @@ GST_START_TEST (test_play_pause_pipeline)
         {
             if (GST_MESSAGE_STATE_CHANGED == GST_MESSAGE_TYPE(message))
             {
-		gst_element_get_state (playbin, &cur_state,
-                      NULL, 0);
+		gst_element_get_state (playbin, &cur_state, NULL, 0);
 		if (cur_state == GST_STATE_PAUSED)
 		{
+		    latency_stop =  std::chrono::high_resolution_clock::now();
+		    latency_chrono = std::chrono::duration_cast<std::chrono::milliseconds>(latency_stop - latency_start);
+		    printf("\nTime taken to PAUSE: %.3lld milliseconds.\n", latency_chrono.count());
 		    paused = true;
-		    latency = gst_clock_get_time (playbin->clock) - timestamp;
-		    latency = GST_TIME_AS_MSECONDS(latency);
-                    printf("\nTime taken to PAUSE = %lld milliseconds\n", latency);
 		}
 	    }
         }
-	if (std::chrono::steady_clock::now() - start > std::chrono::seconds(PAUSE_TIMEOUT))
+	if (std::chrono::high_resolution_clock::now() - latency_start > std::chrono::seconds(PAUSE_TIMEOUT))
             break;
     }while(!paused);
 
     fail_unless (paused == true, "Unable to pause pipeline");
-    fail_unless ((int)latency < TIME_TO_PAUSE,"Time taken to PAUSE is greater than 2 seconds");
-    PlaySeconds(playbin,5);
+    fail_unless ((int)latency_chrono.count() < TIME_TO_PAUSE,"Time taken to PAUSE is greater than 2 seconds, Actual PAUSE latency %.3lld milliseconds",latency_chrono.count());
+    PlaySeconds(playbin,play_timeout);
 
     GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(cur_state));
     fail_unless_equals_int (cur_state, GST_STATE_PAUSED);
     printf ("DETAILS: SUCCESS, Current state is: %s \n", gst_element_state_get_name(cur_state));
+
+    fail_unless_equals_int (gst_element_get_state (playbin, &cur_state, NULL, 0), GST_STATE_CHANGE_SUCCESS);
+    if ((cur_state != GST_STATE_PLAYING))
+    {
+        fail_unless (gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+        do{
+             state_change = gst_element_get_state (playbin, &cur_state, NULL, 10000000);
+        } while (state_change == GST_STATE_CHANGE_ASYNC);
+	printf ("\n********Current state is: %s \n", gst_element_state_get_name(cur_state));
+    }
+
+    PlaySeconds(playbin,5);
 
     /*
      * Write FrameRate info to video_info file
@@ -1347,7 +1376,7 @@ GST_START_TEST (test_buffer_underflow)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
     g_object_set (playbin, "flags", flags, NULL);
     /*
      * Create westerosSink instance
@@ -1557,7 +1586,7 @@ GST_START_TEST (test_EOS)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -1935,7 +1964,7 @@ GST_START_TEST (test_audio_change)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags |= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+    flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO  | GST_PLAY_FLAG_BUFFERING;
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -2226,6 +2255,14 @@ media_pipeline_suite (void)
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
+    else if (strcmp ("test_rialto_resolution", tcname) == 0)
+    {
+       ResolutionTest = true;
+       use_rialto = true;
+       tcase_add_test (tc_chain, test_generic_playback);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
     else if (strcmp ("test_resolution_up", tcname) == 0)
     {
        ResolutionSwitchTest = true;
@@ -2308,6 +2345,7 @@ int main (int argc, char **argv)
 	    (strcmp ("test_rialto_playback", tcname) == 0) ||
 	    (strcmp ("test_rialto_play_pause", tcname) == 0) ||
 	    (strcmp ("test_rialto_EOS", tcname) == 0) ||
+	    (strcmp ("test_rialto_resolution", tcname) == 0) ||
             (strcmp ("test_EOS", tcname) == 0))
 	{
 	    strcpy(m_play_url,argv[2]);

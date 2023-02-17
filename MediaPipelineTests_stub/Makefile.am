@@ -28,12 +28,12 @@ AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
               -I${top_srcdir}/../agent/include
 
 
-bin_PROGRAMS = mediapipelinetests
+bin_PROGRAMS = tdk_mediapipelinetests
 
-mediapipelinetests_SOURCES = src/MediaPipelineSuite.cpp
-mediapipelinetests_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0
+tdk_mediapipelinetests_SOURCES = src/MediaPipelineSuite.cpp
+tdk_mediapipelinetests_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0
 
-bin_PROGRAMS += mediapipelinetests_trickplay
+bin_PROGRAMS += tdk_mediapipelinetests_trickplay
 
-mediapipelinetests_trickplay_SOURCES = src/mediapipelinetests_trickplay.cpp
-mediapipelinetests_trickplay_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0
+tdk_mediapipelinetests_trickplay_SOURCES = src/mediapipelinetests_trickplay.cpp
+tdk_mediapipelinetests_trickplay_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0

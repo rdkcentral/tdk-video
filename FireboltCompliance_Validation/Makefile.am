@@ -16,5 +16,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = playback graphics_validation GStreamer_plugins_test
+SUBDIRS = graphics_validation GStreamer_plugins_test
 DIST_SUBDIRS = @SUBDIRS@
