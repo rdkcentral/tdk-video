@@ -174,4 +174,24 @@
         </parser_section>
     </tdkTestUtility>
 
+    <tdkTestUtility name="stress-ng_Pipe">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Pipe Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] pipe/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_Io">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Io Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] io/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
 </parserConfig>
