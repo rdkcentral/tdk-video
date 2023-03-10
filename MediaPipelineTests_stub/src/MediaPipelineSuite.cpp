@@ -114,7 +114,11 @@ bool Flush_Pipeline = true;
 /*
  * Playbin flags
  */
-
+/*
+ * GstPlayFlags flags from playbin2. It is the policy of GStreamer to
+ * not publicly expose element-specific enums. That's why this
+ * GstPlayFlags enum has been copied here.
+ */
 typedef enum {
   GST_PLAY_FLAG_VIDEO         = (1 << 0),
   GST_PLAY_FLAG_AUDIO         = (1 << 1),
