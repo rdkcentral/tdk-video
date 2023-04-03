@@ -194,4 +194,104 @@
         </parser_section>
     </tdkTestUtility>
 
+    <tdkTestUtility name="stress-ng_Os">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Os Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] loop/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+     <tdkTestUtility name="stress-ng_mq">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Ipc Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] mq/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_shm">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Ipc Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] shm/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_sem">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Ipc Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sem/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_fork">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Filesystem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] fork/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+	
+    <tdkTestUtility name="stress-ng_open">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Filesystem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] open/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_close">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Filesystem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] close/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_seek">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Filesystem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] seek/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+	
+    <tdkTestUtility name="stress-ng_wait">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Filesystem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] wait/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+	
+    <tdkTestUtility name="stress-ng_kill">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Filesystem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] kill/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
 </parserConfig>
