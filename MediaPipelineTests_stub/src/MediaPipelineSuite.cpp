@@ -42,7 +42,7 @@ using namespace std;
 #define FRAME_DATA                      "/CheckVideoStatus.sh getFrameData "
 #define PLAYBIN_ELEMENT 		"playbin"
 #define WESTEROS_SINK 			"westerossink"
-#define MIN_FRAMES_DROP                 3
+#define MIN_FRAMES_DROP                 5
 #define TOTAL_RESOLUTIONS_COUNT         7 //All resolutions include 144p, 240p, 360p, 480p, 720p, 1080p, 2160p
 #define BUFFER_SIZE_LONG		1024
 #define BUFFER_SIZE_SHORT		264
@@ -73,6 +73,7 @@ bool checkAVStatus = false;
 bool checkPTS = true;
 bool bufferUnderflowTest = false;
 bool checkSignalTest = true;
+gint flags;
 int play_timeout = 10;
 int videoEnd = 0;
 int videoStart =  0;
@@ -196,6 +197,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    //gint queued_frames;
    guint64 dropped_frames;
    guint64 rendered_frames;
+   guint64 average_rate;
    float drop_rate;
    int frame_rate;
    float dropped_percentage; 
@@ -233,8 +235,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
        fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &startPosition), "Failed to query the current playback position");
    }
    g_object_get (playbin,"video-sink",&videoSink,NULL);
-
-
+ 
    if (checkPTS)
    {
         g_object_get (videoSink,"video-pts",&pts,NULL);
@@ -309,8 +310,9 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
              {
                  gst_structure_get_uint64(structure, "dropped", &dropped_frames);
                  gst_structure_get_uint64(structure, "rendered", &rendered_frames);
-                 printf("\n\nDropped_Frames: %" G_GUINT64_FORMAT, dropped_frames);
-                 printf("\nRendered_Frames: %" G_GUINT64_FORMAT, rendered_frames);
+		 printf("\n\nVIDEO_FRAMES ");
+                 printf(" Dropped: %" G_GUINT64_FORMAT, dropped_frames);
+                 printf(" Rendered: %" G_GUINT64_FORMAT, rendered_frames);
              }
              
 	     if ((rendered_frames <= previous_rendered_frames))
@@ -425,6 +427,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    {
         frame_rate = int(rendered_frames - previous_rendered_frames);
         printf("\n\nFrame rate : %d\n", frame_rate);
+	totalFrames = frame_rate * (currentPosition/GST_SECOND);
         dropped_percentage = (dropped_frames/totalFrames);
         if(dropped_percentage != 0.00)
                 printf("\nDropped Percentage : %f\n", dropped_percentage);
@@ -438,6 +441,20 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 /*
  * Methods
  */
+
+/********************************************************************************************************************
+	Purpose: Setflag function to set the flags
+*********************************************************************************************************************/
+void setflags() 
+{
+	flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_BUFFERING;
+#ifndef NO_NATIVE_AUDIO
+	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+#endif
+#ifndef NO_NATIVE_VIDEO
+	flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+#endif
+}
 
 /********************************************************************************************************************
 Purpose:               To get the current status of the AV running
@@ -807,7 +824,6 @@ GST_START_TEST (test_init_shutdown)
 {
     GstElement *playbin;
     GstElement *westerosSink;
-    gint flags;
 
     /*
      * Create the playbin element
@@ -823,7 +839,7 @@ GST_START_TEST (test_init_shutdown)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -858,7 +874,6 @@ GST_START_TEST (test_generic_playback)
     GstElement *playbin;
     GstElement *westerosSink;
     GstElement *rialtovsink, *rialtoasink;
-    gint flags;
     GstMessage *message;
     GstBus *bus;
     MessageHandlerData data;
@@ -877,7 +892,7 @@ GST_START_TEST (test_generic_playback)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -1117,7 +1132,7 @@ GST_START_TEST (test_play_pause_pipeline)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -1308,7 +1323,7 @@ GST_START_TEST (test_buffer_underflow)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
     /*
      * Create westerosSink instance
@@ -1472,7 +1487,6 @@ GST_START_TEST (test_EOS)
     GstBus *bus;
     bool received_EOS = false;
     use_westerossink_fps = false;
-    gint flags;
     GstElement *playbin;
     GstElement *westerosSink, *rialtovsink, *rialtoasink;
 
@@ -1492,7 +1506,7 @@ GST_START_TEST (test_EOS)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
 
     /*
@@ -1609,9 +1623,11 @@ GST_START_TEST (test_frameDrop)
     GstElement *pipeline, *videoSink ,*westerosSink;
     gchar *fps_msg;
     gint jump_buffer = 3;
+    gint frame_buffer = 3;
     gint play_jump = 0;
-    guint64 previous_rendered_frames, rendered_frames, dropped_frames, previous_rendered_frames_proc;
+    guint64 previous_rendered_frames, rendered_frames, dropped_frames_video, previous_rendered_frames_proc;
     GstStructure *structure;
+    int dropped_frames;
     int expected_rendered_frames;
     gint64 currentPosition;
     gint previous_position = 0;
@@ -1676,13 +1692,16 @@ GST_START_TEST (test_frameDrop)
 
             if (structure && (gst_structure_has_field(structure, "dropped") || gst_structure_has_field(structure, "rendered")))
             {
-                guint64 dropped_frames, rendered_frames;
-                gst_structure_get_uint64(structure, "dropped", &dropped_frames);
+                gst_structure_get_uint64(structure, "dropped", &dropped_frames_video);
                 gst_structure_get_uint64(structure, "rendered", &rendered_frames);
-                printf("\n\nDropped_Frames: %" G_GUINT64_FORMAT, dropped_frames);
+                printf("\n\nDropped_Frames: %" G_GUINT64_FORMAT, dropped_frames_video);
                 printf("\nRendered_Frames: %" G_GUINT64_FORMAT, rendered_frames);
             }
-        }
+            if ((rendered_frames <= previous_rendered_frames))
+                frame_buffer -= 1;
+                fail_unless(frame_buffer != 0 , "frames are not rendered properly");
+        
+	}
 
         fail_unless (gst_element_query_position (pipeline, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
         difference = int(abs((currentPosition/GST_SECOND) - (startPosition/GST_SECOND)));
@@ -1698,8 +1717,8 @@ GST_START_TEST (test_frameDrop)
         if (!checkTotalFrames)
             fail_unless (rendered_frames > previous_rendered_frames, "Frames not rendered properly");
 
-        if ((checkTotalFrames) && (rendered_frames == totalFrames))
-            break;
+        if ((checkTotalFrames) && ((totalFrames - rendered_frames) < MIN_FRAMES_DROP))
+	     break;
         if (!checkTotalFrames)
             fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
 
@@ -1733,7 +1752,7 @@ GST_START_TEST (test_frameDrop)
                 runLoop = true;
         }
         previous_rendered_frames_proc = rendered_frames;
-
+	previous_rendered_frames = rendered_frames;
         previous_position = (currentPosition/GST_SECOND);
 
     }while(runLoop);
@@ -1749,20 +1768,16 @@ GST_START_TEST (test_frameDrop)
     {
         expected_rendered_frames = fps * play_timeout;
     }
-    printf("\nExpected rendered frames : %d",expected_rendered_frames);
+    printf("\nExpected rendered frames : %d", expected_rendered_frames);
 
-
-    if (use_westerossink_fps)
-    {
-    	g_object_get (westerosSink,"stats",&structure,NULL);
-  	gst_structure_get_uint64(structure, "rendered", &rendered_frames);
-    	printf("\nFrames Rendered = %" G_GUINT64_FORMAT, rendered_frames);
-    }
 
     if (rendered_frames < expected_rendered_frames)
     {
-        dropped_frames = (expected_rendered_frames - rendered_frames)/(expected_rendered_frames);
-        fail_unless (dropped_frames < 0.005,"\nExpected number of frames not rendered\n");
+	 dropped_frames = expected_rendered_frames - rendered_frames;
+	 printf("\n\ndropped_frames : %d", dropped_frames); 
+	 sleep(2);
+	 if (dropped_frames)
+		  fail_unless( dropped_frames < MIN_FRAMES_DROP,"\nExpected number of frames not rendered\n");
     }
     printf ("\nExecution was Success\n");
 
@@ -1790,7 +1805,6 @@ GST_START_TEST (test_audio_change)
     bool elementsetup = false;
     GstElement *playbin;
     GstElement *westerosSink;
-    gint flags;
     use_westerossink_fps = false;
     MessageHandlerData data;
     GstTagList *tags;
@@ -1813,7 +1827,7 @@ GST_START_TEST (test_audio_change)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO  | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
 
     /*

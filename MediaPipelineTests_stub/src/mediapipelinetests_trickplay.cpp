@@ -64,6 +64,7 @@ vector<string> operationsList;
 bool enable_trace = false;
 bool checkAVStatus = false;
 int play_timeout = 10;
+gint flags;
 int Runforseconds;
 auto start = std::chrono::high_resolution_clock::now();
 bool latency_check_test = false;
@@ -721,6 +722,20 @@ static void trickplayOperation(MessageHandlerData *data)
 }
 
 /********************************************************************************************************************
+        Purpose: Setflag function to set the flags
+*********************************************************************************************************************/
+void setflags()
+{
+        flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_BUFFERING;
+#ifndef NO_NATIVE_AUDIO
+        flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+#endif
+#ifndef NO_NATIVE_VIDEO
+        flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+#endif
+}
+
+/********************************************************************************************************************
 Purpose:               Setup stream
 *********************************************************************************************************************/
 static void SetupStream (MessageHandlerData *data)
@@ -743,7 +758,7 @@ static void SetupStream (MessageHandlerData *data)
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (playbin, "flags", &flags, NULL);
-    flags = GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_NATIVE_AUDIO | GST_PLAY_FLAG_NATIVE_VIDEO  | GST_PLAY_FLAG_BUFFERING;
+    setflags();
     g_object_set (playbin, "flags", flags, NULL);
 
     if (forward_events)

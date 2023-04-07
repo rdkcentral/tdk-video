@@ -19,7 +19,7 @@
 ACLOCAL_AMFLAGS = -Im4 --install
 
 AM_CPPFLAGS = -g -Wall -std=c++0x -DGCC4_XXX \
-              -fPIC ${COPTS} $(GST_CFLAGS) $(GST_CHECK_CFLAGS) -DUSE_GST1
+              -fPIC ${COPTS} $(GST_CFLAGS) $(GST_CHECK_CFLAGS) -DUSE_GST1 $(MEDIAPIPELINE_FLAGS)
 
 AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
               -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/glib-2.0 \
