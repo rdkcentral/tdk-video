@@ -193,6 +193,220 @@
             </parser_info>
         </parser_section>
     </tdkTestUtility>
+    
+    <tdkTestUtility name="stress-ng_IPC">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>IPC mq Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] mq/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>IPC shm Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] shm/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>IPC sem Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sem/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+	
+    <tdkTestUtility name="stress-ng_OS">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>OS loop Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] loop/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+	
+    <tdkTestUtility name="stress-ng_System_calls">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>System calls fork Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] fork/' | awk  '{print $9}'</cmd>
+            </parser_info>
+            <parser_info>
+                <tag>System calls open Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] open/' | awk  '{print $9}'</cmd>
+            </parser_info>
+            <parser_info>
+                <tag>System calls close Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] close/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>System calls seek Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] seek/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>System calls wait Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] wait/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>System calls kill Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] kill/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_Disk_I/O">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Disk I/O aio Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] aio/' | awk  '{print $9}'</cmd>
+            </parser_info>
+            <parser_info>
+                <tag>Disk I/O hdd Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] hdd/' | awk  '{print $9}'</cmd>
+            </parser_info>
+            <parser_info>
+                <tag>Disk I/O revio Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] revio/' | awk  '{print $9}'</cmd>
+            </parser_info>
+            <parser_info>
+                <tag>Disk I/O seek Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] seek/' | awk  '{print $9}'</cmd>
+            </parser_info>
+            <parser_info>
+                <tag>Disk I/O sync-file Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sync-file/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+	
+    <tdkTestUtility name="stress-ng_Signals">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Signals sigfd Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigfd/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigfpe Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigfpe/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigchld Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigchld/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigio Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigio/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigpending Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigpending/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigsegv Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigsegv/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigsuspend Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigsuspend/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigq Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigq/' | awk  '{print $9}'</cmd>
+            </parser_info>
+             <parser_info>
+                <tag>Signals sigtrap Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sigtrap/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
+
+    <tdkTestUtility name="stress-ng_Timer">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Timer Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] timer /' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Timer rtc Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] rtc/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Timer clock Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] clock/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Timer itimer Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] itimer/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Timer timerfd Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] timerfd/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>    
+    
+    <tdkTestUtility name="stress-ng_Network">
+        <parser_section>
+            <log_file_path>&STRESSNG_REPORT;</log_file_path>
+            <parser_info>
+                <tag>Network epoll Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] epoll/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network icmp-flood Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] icmp-flood/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network netdev Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] netdev/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network rawpkt Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] rawpkt/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network rawsock Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] rawsock/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network rawudp Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] rawudp/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network sockabuse Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sockabuse/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network sockdiag Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sockdiag/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network sockfd Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sockfd/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Networ sockpair Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sockpair/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network sockmany Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] sockmany/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network tun Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] tun/' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network udp Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] udp /' | awk  '{print $9}'</cmd>
+            </parser_info>
+	    <parser_info>
+                <tag>Network udp-flood Stress in bogo ops/s</tag>
+                <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] udp-flood/' | awk  '{print $9}'</cmd>
+            </parser_info>
+        </parser_section>
+    </tdkTestUtility>
 
     <tdkTestUtility name="stress-ng_Os">
         <parser_section>
