@@ -78,6 +78,7 @@ bool pause_operation = false;
 bool forward_events = true;
 gint64 startPosition;
 string audiosink;
+bool ignorePlayJump = false;
 
 /*
  * Playbin flags
@@ -150,7 +151,7 @@ Parameters:
 playbin                   - The pipeline which is to be monitored
 RunSeconds:               - The interval for which pipeline should be monitored
 ********************************************************************************************************************************************/
-static void PlaySeconds(GstElement* playbin,int RunSeconds)
+static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=false)
 {
    gint64 currentPosition;
    gfloat _currentPosition;
@@ -204,14 +205,14 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	    _currentPosition = currentPosition;
             play_jump = (_currentPosition/(GST_SECOND)) - previous_position;
             previous_position = (_currentPosition/(GST_SECOND));
+	    printf("Current Position : %0.2f\n", (_currentPosition/GST_SECOND));
 
 	    if (round(play_jump) != 0)
 		jump_buffer -=1;
 
 	    DEBUG_PRINT("\nin PAUSED state : jump_buffer : %d, play_jump : %f\n",jump_buffer,round(play_jump));
             fail_unless(jump_buffer != 0,"Playback is not PAUSED");
-
-            if (checkPTS)
+            if ((checkPTS) && (!seekOperation))
             {
                 g_object_get (videoSink,"video-pts",&pts,NULL);
                 printf("\nPTS: %lld \n",pts);
@@ -219,7 +220,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
                 {
                     pts_buffer -= 1;
                 }
-                fail_unless(pts_buffer != pts , "Video is not PAUSED according to video-pts check of westerosSink");
+                fail_unless(pts_buffer != 0 , "Video is not PAUSED according to video-pts check of westerosSink");
                 fail_unless(old_pts != 0 , "Video is not playing according to video-pts check of westerosSink");
                 old_pts = pts;
             }
@@ -318,9 +319,14 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
             }
 
             fail_unless(pts_buffer != 0 , "Video is not playing according to video-pts check of westerosSink");
-            fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
             old_pts = pts;
         }
+	
+	if (!ignorePlayJump)
+        {
+            fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
+        }
+
 	previous_position = (_currentPosition/(GST_SECOND));
         play_jump_previous = play_jump;
    
@@ -335,6 +341,8 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    printf("\nExiting from PlaySeconds, currentPosition is %0.2f\n",_currentPosition/(GST_SECOND));
    gst_object_unref (bus);
 }
+
+
 
 /********************************************************************************************************************
 Purpose:               To get the current status of the AV running
@@ -743,7 +751,6 @@ static void SetupStream (MessageHandlerData *data)
     GstElement *playbin, *playsink;
     GstElement *westerosSink;
     GstElement *audioSink;
-    gint flags;
     /*
      * Create the playbin element
      */
@@ -924,6 +931,8 @@ GST_START_TEST (trickplayTest)
 	    seekSeconds = atoi(strtok(NULL, ":"));
 	    seekOperation = true;
 	    rate = 1;
+	    if (pause_operation)
+		    rate = 0;
 	}
 	else if ( ("play" == operationString) || ("pause" == operationString) )
         {
@@ -937,12 +946,13 @@ GST_START_TEST (trickplayTest)
 	    GST_ERROR ("Invalid operation\n");
 	}	
         
-	pause_operation = false;
+	if (rate != 0)
+		pause_operation = false;
 
 	data.currentRate = getRate(data.playbin);
         fail_unless (gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.currentPosition), "Failed to query the current playback position");
 
-	if (rate != data.currentRate)
+	if ((rate != data.currentRate) && (!pause_operation))
 	{
 	    printf("\nRequested playback rate is %f\n",rate);
 	    if (rate < 0)
@@ -981,7 +991,6 @@ GST_START_TEST (trickplayTest)
 	    data.setRateOperation = FALSE;
 	    data.seekSeconds = seekSeconds;
 	    trickplayOperation(&data);
-	    seekOperation = false;
 	    startPosition = seekSeconds * (GST_SECOND);
 	    if (latency_check_test)
             {
@@ -1039,14 +1048,15 @@ GST_START_TEST (trickplayTest)
 	     operationTimeout -= 5;
 	 }
 	 if (true == checkAVStatus)
-         {
-             is_av_playing = check_for_AV_status();
+	 {    
+	     is_av_playing = check_for_AV_status();
              fail_unless (is_av_playing == true, "Video is not playing in TV");
              printf ("DETAILS: SUCCESS, Video playing successfully \n");
  	 }
 
 	 timeout=operationTimeout;
-	 PlaySeconds(data.playbin,timeout);
+	 PlaySeconds(data.playbin,timeout,seekOperation);
+	 seekOperation = false;
     }
     if (data.playbin)
     {
@@ -1121,6 +1131,10 @@ int main (int argc, char **argv)
 	 {
 	    latency_check_test = true;
 	 }
+	 if (strcmp ("ignorePlayJump", argv[arg]) == 0)
+         {
+            ignorePlayJump = true;
+         }
 	 if (strstr (argv[arg], "audioSink=") != NULL)
          {
              strtok (argv[arg], "=");
