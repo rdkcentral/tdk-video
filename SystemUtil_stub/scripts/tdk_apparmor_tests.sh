@@ -28,6 +28,12 @@ echo "TDK_Apparmor_Test_04_Binary_Profile  aptest04"
 echo "TDK_Apparmor_Test_05_Profile_Check   aptest05"
 echo "TDK_Apparmor_Test_06_WriteExe_Check  aptest06"
 echo "TDK_Apparmor_Test_07_Capability_check aptest07"
+echo "TDK_Apparmor_Test_08_No_Profile_check aptest08"
+echo "TDK_Apparmor_Test_09_Complain_Reboot aptest09"
+echo "TDK_Apparmor_Test_10_Enforce_Reboot aptest10"
+echo "TDK_Apparmor_Test_11_Disable_Reboot aptest11"
+echo "TDK_Apparmor_Test_11_Complain_Enforce_Reboot aptest12"
+echo "TDK_Apparmor_Test_11_Denied_Messages aptest13"
 echo 
 echo "Note: if 'all' is passed as test number, all tests get executed"
 echo "e.g.: ./tdk_apparmor_tests.sh all"
@@ -225,6 +231,293 @@ source /opt/apparmor_profile.config
 	fi
 }
 
+#function to check no profiles
+function no_profiles_check {
+echo -e "Executing script : apparmor_no_profiles_check"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_08_No_Profiles_Check"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
+echo -e "This testcase requires profiles to be deleted before run to validate negative case"
+if [ -d "/etc/apparmor.d" ]; then
+	if [ "$(ls -A /etc/apparmor.d)" ]; then
+	echo "FAILURE: apparmor profiles are present in /etc/apparmor.d"
+	else
+		echo "No apparmor profiles found in /etc/apparmor.d"
+		
+		echo -e "To check if apparmor is still active after removing the profiles from /etc/apparmor.d/ path..."
+		systemctl status apparmor.service | grep "Active" >/dev/details
+		echo "DETAILS"
+		echo "-------------------------"
+		if cat /dev/details | grep 'Active: active' >/dev/null
+		then
+		echo "SUCCESS:Apparmor service is active and running in DUT"
+		else
+		echo "FAILURE:Apparmor service is inactive"
+		fi
+	fi
+else
+	echo "FAILURE: /etc/apparmor.d directory not found."
+fi
+}
+
+function call_reboot_complain {
+#logfile where pre and post reboot actions are captured
+logfile="/opt/apparmor_profile_status.log"
+#clear the logfile
+> "$logfile"
+# Redirecting all output to the log file
+exec >> "$logfile" 2>&1
+
+#calling profiles from profiles.config
+source /opt/apparmor_profile.config
+
+for profile in "${profiles[@]}"
+do
+    echo "Profile: $profile"
+done
+
+# Loop through the profiles and validate their status before running the test
+for profile in "${profiles[@]}"; do
+  echo "$(date)-Before running tr181 command for $profile:"
+  date
+
+  # Check if the output contains the string "$profile (complain)"
+  if ps -auxZ | grep "$profile" | grep -q "(complain)"; then
+    echo "$profile is already in complain mode, So running with an AppArmor profile already"
+    exit 1
+  else
+    echo "Verified that $profile is not in complain mode"
+  fi
+
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+# Waiting for 10 seconds to allow the system to initialize (if the script is executed immediately after reboot then it
+# might take some time for the command to fetch the status)
+sleep 10
+
+# Loop through the profiles and run the tr181 command to set them to "complain" mode
+for profile in "${profiles[@]}"; do
+  tr181 -s -v "$profile:complain" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+  echo "$(date)-After running tr181 command to set $profile to complain mode and it will be reflected after reboot"
+  date
+
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+#call reboot function
+call_reboot_function apparmor_profile_change_after_reboot.sh
+}
+
+function call_reboot_enforce {
+#logfile where pre and post reboot actions are captured
+logfile="/opt/apparmor_profile_status.log"
+#clear the logfile
+> "$logfile"
+# Redirecting all output to the log file
+exec >> "$logfile" 2>&1
+
+#calling profiles from profiles.config
+source /opt/apparmor_profile.config
+
+for profile in "${profiles[@]}"
+do
+    echo "Profile: $profile"
+done
+
+# Loop through the profiles and validate their status before running the test
+for profile in "${profiles[@]}"; do
+  echo "$(date)-Before running tr181 command for $profile:"
+  date
+
+  # Check if the output contains the string "$profile (enforce)"
+  if ps -auxZ | grep "$profile" | grep -q "(enforce)"; then
+    echo "$profile is already in enforce mode, So running with an AppArmor profile already"
+    exit 1
+  else
+    echo "Verified that $profile is not in enforce mode"
+  fi
+
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+# Waiting for 10 seconds to allow the system to initialize (if the script is executed immediately after reboot then it
+# might take some time for the command to fetch the status)
+sleep 10
+
+# Loop through the profiles and run the tr181 command to set them to "enforce" mode
+for profile in "${profiles[@]}"; do
+  tr181 -s -v "$profile:enforce" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+  echo "$(date)-After running tr181 command to set $profile to enforce mode and it will be reflected after reboot"
+  date
+
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+#call reboot function
+call_reboot_function apparmor_profile_change_after_reboot.sh
+}
+
+function call_reboot_disable {
+#logfile where pre and post reboot actions are captured
+logfile="/opt/apparmor_profile_status.log"
+#clear the logfile
+> "$logfile"
+# Redirecting all output to the log file
+exec >> "$logfile" 2>&1
+
+#calling profiles from profiles.config
+source /opt/apparmor_profile.config
+
+for profile in "${profiles[@]}"
+do
+    echo "Profile: $profile"
+done
+
+# Loop through the profiles and validate their status before running the test
+for profile in "${profiles[@]}"; do
+  echo "$(date)-Before running tr181 command for $profile:"
+  date
+
+  # Check if the output contains the string "$profile (null)"
+  if ps -auxZ | grep "$profile" | grep -q "(null)"; then
+    echo "$profile is already in disable mode, So running with an AppArmor profile already"
+    exit 1
+  else
+    echo "Verified that $profile is not in disable mode"
+  fi
+
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+# Waiting for 10 seconds to allow the system to initialize (if the script is executed immediately after reboot then it
+# might take some time for the command to fetch the status)
+sleep 10
+
+# Loop through the profiles and run the tr181 command to set them to "disable" mode
+for profile in "${profiles[@]}"; do
+  tr181 -s -v "$profile:disable" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+  echo "$(date)-After running tr181 command to set $profile to disable mode and it will be reflected after reboot"
+  date
+
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+#call reboot function
+call_reboot_function apparmor_profile_change_after_reboot.sh
+}
+
+function call_reboot_complain_enforce {
+#logfile where pre and post reboot actions are captured
+logfile="/opt/apparmor_profile_status.log"
+#clear the logfile
+> "$logfile"
+# Redirecting all output to the log file
+exec >> "$logfile" 2>&1
+
+#calling profiles from profiles.config
+source /opt/apparmor_profile.config
+
+# Check the AppArmor status of the profiles before changing to enforce mode
+echo "$(date) - profiles status before changing to enforce mode:"
+
+# Check if profiles are in complain mode
+for profile in "${profiles[@]}"
+do
+  if ps -auxZ | grep "$profile" | grep -q "(complain)"; then
+    echo "SUCCESS: $profile is running in complain mode"
+  else
+    echo "FAILURE: $profile not running in complain mode. Set $profile to complain mode."
+	exit 1
+  fi
+  
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+# Waiting for 10 seconds to allow the system to initialize (if the script is executed immediately after reboot then it
+# might take some time for the command to fetch the status)
+sleep 10
+
+
+# Change the profile to enforce mode
+for profile in "${profiles[@]}"
+do
+  echo "$(date) - Changing $profile profile to enforce mode"
+  tr181 -s -v "$profile:enforce" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+  echo "$(date)-After running tr181 command to set $profile to enforce mode and it will be reflected after reboot"
+  date
+  
+  # To print the status
+  ps -auxZ | grep "$profile"
+done
+
+#call reboot function
+call_reboot_function validate_complain_to_enforce.sh
+}
+
+function call_reboot_denied_messages {
+#logfile where pre and post reboot actions are captured
+logfile="/opt/apparmor_profile_status.log"
+#clear the logfile
+> "$logfile"
+# Redirecting all output to the log file
+exec >> "$logfile" 2>&1
+
+#check whether apparmor is enabled 
+if aa-enabled | grep -q "Yes"; then
+  echo "AppArmor is enabled"
+else
+  echo "AppArmor is not enabled"
+  exit 1
+fi
+
+#calling profiles from profiles.config
+source /opt/apparmor_profile.config
+
+# Waiting for 10 seconds to allow the system to initialize (if the script is executed immediately after reboot then it
+# might take some time for the command to fetch the status)
+sleep 10
+
+
+# Set profiles to disable mode
+for profile in "${profiles[@]}"
+do
+  echo "$(date) - Changing $profile profile to disable mode"
+  tr181 -s -v "$profile:disable" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+  echo "$(date)-After running tr181 command to set $profile to disable mode and it will be reflected after reboot"
+  date
+done
+
+#call reboot function
+call_reboot_function validate_logs_for_denied_message.sh
+}
+
+function call_reboot_function {
+#**********************Configuring the script to autostart after reboot************************************
+# Copy the validate script to "/etc/init.d directory to autostart the second script after reboot"
+echo "inside call_reboot_function: $1"
+fname=$1
+
+cp $(dirname "$0")/"$fname" /etc/init.d
+# Set the executable permission for second script
+chmod +x /etc/init.d/"$fname"
+# update the startup job list validate script"
+update-rc.d "$fname" defaults
+
+#********************Reboot******************
+echo "$(date)- Rebooting the device..."
+reboot
+}
+
 function call_action_default {
 enable_armor
 service_status
@@ -233,6 +526,12 @@ bin_process
 blocklist
 write_exe_check
 capability_check
+no_profiles_check
+call_reboot_complain
+call_reboot_enforce
+call_reboot_disable
+call_reboot_complain_enforce
+call_reboot_denied_messages
 }
 
 if [ $# -lt 1 ]
@@ -277,7 +576,31 @@ for test in "$@"; do
 	   ;;
 	  aptest07*)
 	   echo "calling capability check"
-	   capability_check 
+	   capability_check
+	   ;;
+	  aptest08*)
+	   echo "calling no profiles check"
+	   no_profiles_check
+	   ;;
+	   aptest09*)
+	   echo "calling complain reboot check"
+	   call_reboot_complain
+	   ;;
+	   aptest10*)
+	   echo "calling enforce reboot check"
+	   call_reboot_enforce
+	   ;;
+	   aptest11*)
+	   echo "calling disable reboot check"
+	   call_reboot_disable 
+	   ;;
+	   aptest12*)
+	   echo "calling change from complain to enforce reboot check"
+	   call_reboot_complain_enforce
+	   ;;
+	   aptest13*)
+	   echo "calling denied messages after reboot check"
+	   call_reboot_denied_messages
 	   ;;
 	  all*)
 	   echo "Call all tests"
