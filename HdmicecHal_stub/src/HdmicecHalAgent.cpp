@@ -45,7 +45,17 @@ static void get_cec_frame_rx(unsigned char *frame, int size)
              cec_frame_rx[cec_frame_size_rx] = (int)strtol(token,NULL, 16);
              cec_frame_size_rx++;
         }
-        received_status = 1;
+        switch(cec_frame_rx[OPCODE_OFFSET]){
+	    case CEC_VERSION:
+        case REPORT_POWER_STATUS:
+	    case DEVICE_VENDOR_ID:
+	    case SET_MENU_LANGUAGE:
+	    case FEATURE_ABORT:
+		          received_status = 1;
+		          break;
+	    default:
+		          received_status = 0;
+    	}
         DEBUG_PRINT(DEBUG_TRACE, "Rx frames stored successfully\n");
 }
 
@@ -110,6 +120,11 @@ static void driverTransmitCallback(int handle, void *callbackData,int result)
 static void driverReceiveCallback(int handle, void *callbackData, unsigned char *buf, int len)
 {
         DEBUG_PRINT(DEBUG_TRACE, "\n\n================ CEC Frame Received ==================\n");
+        if (len == 2 && buf[1] == 0x8C )
+        {
+            DEBUG_PRINT(DEBUG_TRACE, "driverReceiveCallback skip message \n");
+            return;
+        }
         disp_cec_frame((unsigned char*)buf,len);
         DEBUG_PRINT(DEBUG_TRACE, "HdmiCecSetRxCallback call success\n");
         m_cv.notify_one();
