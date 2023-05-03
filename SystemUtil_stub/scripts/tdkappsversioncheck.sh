@@ -22,14 +22,17 @@ echo -e "Executing script : version_validation"
 echo -e "======================================="
 echo -e "Test Execution Name is: version_validation"
 
-file="rdk6_version.config"
-if [ ! -f $file ];then
-echo "Please place the config file rdk6_version.config in the path and re-execute script"
+# Read the config file
+config_file="$(dirname "$0")/rdk6_version.config"
+if [ ! -f $config_file ];then
+echo "Please place the config file "$config_file" in the path and re-execute script"
 exit 1
 fi
 
+source $config_file
+
 MISMATCHED=()
-RESPONSE=$(cat rdk6_version.config)
+RESPONSE=$(cat "$config_file")
 Version_Validation() {
     PARAMETER=$1
 #Check if $PARAMETER is in expected format
@@ -92,8 +95,8 @@ Version_Validation "apparmor"
 
 #Printing Summary
 if [ ${#MISMATCHED[@]} -gt 0 ];then
-echo "FAILURE:FailedParameters:{${MISMATCHED[*]}}" | sed 's/[[:blank:]]/,/g'
+echo "FAILURE: FailedParameters:{${MISMATCHED[*]}}" | sed 's/[[:blank:]]/,/g'
 else
-echo "SUCCESS:All parameter versions are Matched"
+echo "SUCCESS: All parameter versions are Matched"
 fi
 echo "Script completed ..."
