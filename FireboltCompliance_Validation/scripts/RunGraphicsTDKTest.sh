@@ -43,7 +43,8 @@ systemctl stop wpeframework
 
 #Export westeros library
 export XDG_RUNTIME_DIR=/tmp
-export LD_PRELOAD=libwesteros_gl.so.0.0.0
+westeros_gl_library=`find /usr/lib -iname "libwesteros_gl.so*.0.0"`
+export LD_PRELOAD=$westeros_gl_library
 
 start_westeros_renderer(){
   timeout 30 westeros --renderer libwesteros_render_embedded.so.0.0.0 --display $DISPLAY --embedded --noFBO &
@@ -128,7 +129,8 @@ if [ "$TEST_OPTION" == "USE_WAYLAND" ];
 then
     start_westeros_renderer
     sleep 3
-    export LD_PRELOAD=libwayland-egl.so.0.0.0
+    wayland_egl_library=`find /usr/lib -iname libwayland-egl.so*.0.0`
+    export LD_PRELOAD=$wayland_egl_library
     export WAYLAND_DISPLAY=$DISPLAY
 else
     unset WAYLAND_DISPLAY
