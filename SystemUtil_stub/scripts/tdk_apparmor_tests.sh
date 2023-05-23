@@ -32,16 +32,21 @@ echo "TDK_Apparmor_Test_08_No_Profile_check aptest08"
 echo "TDK_Apparmor_Test_09_Complain_Reboot aptest09"
 echo "TDK_Apparmor_Test_10_Enforce_Reboot aptest10"
 echo "TDK_Apparmor_Test_11_Disable_Reboot aptest11"
-echo "TDK_Apparmor_Test_11_Complain_Enforce_Reboot aptest12"
-echo "TDK_Apparmor_Test_11_Denied_Messages aptest13"
-echo 
+echo "TDK_Apparmor_Test_12_Complain_Enforce_Reboot aptest12"
+echo "TDK_Apparmor_Test_13_Denied_Messages aptest13"
+echo "TDK_Apparmor_Test_14_Default_Enforce_check aptest14"
+echo "TDK_Apparmor_Test_15_Dac_Override_Remove_irMgrMain aptest15"
+echo "TDK_Apparmor_Test_16_Dac_Override_Remove_default aptest16"
+echo "TDK_Apparmor_Test_17_Dac_Override_lighttpd aptest17"
+echo "TDK_Apparmor_Test_18_Dac_Override_audiocapturemgr aptest18"
+echo "TDK_Apparmor_Test_19_Log_Check aptest19"
+
 echo "Note: if 'all' is passed as test number, all tests get executed"
 echo "e.g.: ./tdk_apparmor_tests.sh all"
 }
 
-#file declaration
-
-apparmor_file=/opt/apparmor_profile.config
+source /opt/apparmor_profile.config
+path=/etc/apparmor.d/
 
 
 #service status check script to check status of the apparmor service
@@ -130,11 +135,12 @@ then
         echo "Apparmor is enabled"
                 profile1=/etc/apparmor.d/binaryprofiles/usr.bin.tr69hostif
                 profile2=/etc/apparmor.d/binaryprofiles/usr.lib.bluez5.bluetooth.bluetoothd
-                echo "Profiles: $profile1, $profile2"
-	        if [[ -f "$profile1" ]] && [[ -f "$profile2" ]]
+                echo "Check for Profiles: $profile1, $profile2"
+                if ! [[ -f "$profile1" ]] && [[ -f "$profile2" ]]
                 then
-                        echo -e "SUCCESS:$profile1, $profile2 exists"
-                else "FAILURE:Profiles does not exists"
+                        echo -e "SUCCESS:$profile1, $profile2 does not exist"
+                else
+                        echo -e "FAILURE: Binary Profiles exists"
                 fi
 
 else
@@ -142,6 +148,7 @@ else
 fi
 
 }
+
 
 #check to see if profiles are present in /etc/apparmor.d/ directory 
 function profile_check {
@@ -156,15 +163,24 @@ command=$(aa-enabled)
 echo "$command"
 if [ $command == "Yes" ]
 then
-	source /opt/apparmor_profile.config
-        echo "Apparmor is enabled"
-	if [[ -f "$profile1" ]] && [[ -f "$profile2" ]] && [[ -f "$profile3" ]]
-                then
-                echo "SUCCESS: $profile1, $profile2, $profile3 exists"
-                else 
-		echo "FAILURE: One of Profiles does not exist"
-         fi
+	echo "Apparmor is enabled"
+	path=/etc/apparmor.d/ 
+	for profile in "${profiles[@]}"
+	do
+	    echo "Profile: $profile"
+	done
 
+	# Loop through the profiles and validate their status before running the test
+	for profile in "${profiles[@]}"; do
+ 
+	  if [ -f "$path/$profile" ]; then
+	    echo "SUCCESS: $profile exists"
+	  else
+	    echo "FAILURE: $profile is missing"
+	    exit 1
+  	fi
+
+	done
 else
         echo "FAILURE: Apparmor is disabled"
 fi
@@ -180,30 +196,20 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_06_Write_Exe_Check"
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
-source /opt/apparmor_profile.config
-apparmor_file=/opt/apparmor_profile.config
-        cat $profile1 | grep -i 'w.*x' >/dev/details
-        if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-                echo "FAILURE:$profile contains write and execute permission"
+   for profile in "${profiles[@]}"; do
+	cat $path/$profile | grep -i 'w.*x' >/dev/details
+        
+	if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+        	echo "FAILURE: $profile contains write and execute permission"
 		exit
-                else
-                echo "SUCCESS:$profile has no write and execute permission together"
+        else
+        	echo "SUCCESS: $profile has no write and execute permission together"
         fi
-	cat $profile2 | grep -i 'w.*x' >/dev/details
-        if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-                echo "FAILURE:$profile contains write and execute permission"
-                exit
-		else
-                echo "SUCCESS:$profile has no write and execute permission together"
-        fi
-	cat $profile3 | grep -i 'w.*x' >/dev/details
-        if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-                echo "FAILURE:$profile contains write and execute permission"
-                exit
-		else
-                echo "SUCCESS:$profile has no write and execute permission together"
-        fi
+
+    done
+
 }
+
 
 #function to check capabilities
 function capability_check {
@@ -212,24 +218,20 @@ echo -e "======================================="
 echo -e "Test Execution Name is: TDK_Apparmor_Test_07_Capability_Check"
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
-source /opt/apparmor_profile.config
 
-	res=$(cat $profile1 | grep -i 'CAP_*')
-	res2=$(cat $profile2 | grep -i 'CAP_*')
-	res3=$(cat $profile3 | grep -i 'CAP_*')
-	if [ $res ]; then
-                echo "FAILURE: Capability Roles are present in $profile1"
-                exit
-        elif [ $res2 ]; then
-                echo "FAILURE: Capability Roles are present in $profile2"
-                exit
-        elif [ $res3 ]; then
-                echo "FAILURE: Capabililty Roles are present in $profile3"
-                exit
-        else
-	echo "SUCCESS: Capability Roles are not present in all profiles"
-	fi
+	for profile in "${profiles[@]}"; do
+		cat $path/$profile | grep -i 'DAC_OVERRIDE\|MAC_ADMIN' >/dev/details
+
+		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+                	echo "FAILURE: Admin/Override Capability Roles are present in $profile"
+                	exit
+        	else
+		echo "SUCCESS: Admin/Override Capability roles are not present in $profile"
+		fi
+	done
 }
+
+
 
 #function to check no profiles
 function no_profiles_check {
@@ -239,7 +241,8 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_08_No_Profiles_Check"
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
-echo -e "This testcase requires profiles to be deleted before run to validate negative case"
+echo -e "This testcase serves negative scenario requires profiles to be deleted before run to validate negative case"
+
 if [ -d "/etc/apparmor.d" ]; then
 	if [ "$(ls -A /etc/apparmor.d)" ]; then
 	echo "FAILURE: apparmor profiles are present in /etc/apparmor.d"
@@ -263,15 +266,18 @@ fi
 }
 
 function call_reboot_complain {
+echo -e "Executing script : call_reboot_complain"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_09_Complain_Reboot"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
 #logfile where pre and post reboot actions are captured
 logfile="/opt/apparmor_profile_status.log"
 #clear the logfile
 > "$logfile"
 # Redirecting all output to the log file
 exec >> "$logfile" 2>&1
-
-#calling profiles from profiles.config
-source /opt/apparmor_profile.config
 
 for profile in "${profiles[@]}"
 do
@@ -314,15 +320,18 @@ call_reboot_function apparmor_profile_change_after_reboot.sh
 }
 
 function call_reboot_enforce {
+echo -e "Executing script : call_reboot_enforce"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_10_Enforce_Reboot"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
 #logfile where pre and post reboot actions are captured
 logfile="/opt/apparmor_profile_status.log"
 #clear the logfile
 > "$logfile"
 # Redirecting all output to the log file
 exec >> "$logfile" 2>&1
-
-#calling profiles from profiles.config
-source /opt/apparmor_profile.config
 
 for profile in "${profiles[@]}"
 do
@@ -365,15 +374,18 @@ call_reboot_function apparmor_profile_change_after_reboot.sh
 }
 
 function call_reboot_disable {
+echo -e "Executing script : call_reboot_disable"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_11_Disable_Reboot"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
 #logfile where pre and post reboot actions are captured
 logfile="/opt/apparmor_profile_status.log"
 #clear the logfile
 > "$logfile"
 # Redirecting all output to the log file
 exec >> "$logfile" 2>&1
-
-#calling profiles from profiles.config
-source /opt/apparmor_profile.config
 
 for profile in "${profiles[@]}"
 do
@@ -416,15 +428,18 @@ call_reboot_function apparmor_profile_change_after_reboot.sh
 }
 
 function call_reboot_complain_enforce {
+echo -e "Executing script : call_reboot_complain_enforce"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_12_Complain_Enforce_Reboot"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
 #logfile where pre and post reboot actions are captured
 logfile="/opt/apparmor_profile_status.log"
 #clear the logfile
 > "$logfile"
 # Redirecting all output to the log file
 exec >> "$logfile" 2>&1
-
-#calling profiles from profiles.config
-source /opt/apparmor_profile.config
 
 # Check the AppArmor status of the profiles before changing to enforce mode
 echo "$(date) - profiles status before changing to enforce mode:"
@@ -465,6 +480,12 @@ call_reboot_function validate_complain_to_enforce.sh
 }
 
 function call_reboot_denied_messages {
+echo -e "Executing script : call_reboot_denied_messages"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_13_Denied_Messages"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
 #logfile where pre and post reboot actions are captured
 logfile="/opt/apparmor_profile_status.log"
 #clear the logfile
@@ -479,9 +500,6 @@ else
   echo "AppArmor is not enabled"
   exit 1
 fi
-
-#calling profiles from profiles.config
-source /opt/apparmor_profile.config
 
 # Waiting for 10 seconds to allow the system to initialize (if the script is executed immediately after reboot then it
 # might take some time for the command to fetch the status)
@@ -518,6 +536,123 @@ echo "$(date)- Rebooting the device..."
 reboot
 }
 
+#check to see if enforce is default mode in the device
+function call_check_default_enforce_mode {
+echo -e "Executing script : call_check_default_enforce_mode"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_14_Default_Enforce_check"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
+for profile in "${profiles[@]}"
+do
+    echo "Profile: $profile"
+done
+
+# Loop through the profiles and validate their status before running the test
+for profile in "${profiles[@]}"; do
+  # To print the status
+  # ps -auxZ | grep "$profile"
+   ps -auxZ | grep "$profile" | awk 'NR==1{print $2}' >/dev/details
+  
+  # Check if the output for enforce"
+  if ps -auxZ | grep "$profile" | grep -q "(enforce)"; then
+    echo "SUCCESS: $profile is in enforce mode"
+  else
+    echo "FAILURE: $profile is not in enforce mode. Current mode: $(cat /dev/details)"
+  fi
+
+done
+}
+
+#function to check irmgr capabilities
+function remove_dac_override_irmgr {
+echo -e "Executing script : remove_dac_override_irmgr"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_15_Dac_Override_Remove_irMgrMain"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
+for profile in "${profiles[@]}"; do
+	if [ "$profile" == "irMgrMain" ]; then
+		cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+			echo "FAILURE: Override Roles are present in $profile"
+			exit
+		else
+			echo "SUCCESS: Override roles are not present in $profile"
+		fi
+	fi
+done
+}
+
+#function to remove dac override roles check
+function remove_dac_override_default {
+echo -e "Executing script : remove_dac_override_default"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_16_Dac_Override_Remove_default"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
+for profile in "${profiles[@]}"; do
+	if [ "$profile" == "default" ]; then
+	cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+			echo "FAILURE: Override Roles are present in $profile"
+			exit
+		else
+			echo "SUCCESS: Override roles are not present in $profile"
+		fi
+	fi
+done
+}
+
+#function to check audiocapturemgr capabilities
+function dac_override_audiocapture {
+echo -e "Executing script : dac_override_audiocapture"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_17_Dac_Override_Audiocapturemgr"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
+for profile in "${profiles[@]}"; do
+	if [ "$profile" == "audiocapturemgr" ]; then
+		cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+			echo "SUCCESS: Override Roles are present in $profile"
+			exit
+		else
+			echo "FAILURE: Override roles are not present in $profile"
+		fi
+	fi
+done
+}
+
+function dac_override_lighttpd {
+echo -e "Executing script : dac_override_lighttpd"
+echo -e "======================================="
+echo -e "Test Execution Name is: TDK_Apparmor_Test_18_Dac_Override_lighttpd"
+echo -e "Connected to $ip Box for validating profiles"
+echo -e "Connected to Server!\n"
+
+for profile in "${profiles[@]}"; do
+	if [ "$profile" == "lighttpd" ]; then
+		cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+			echo "SUCCESS: Override Roles are present in $profile"
+			exit
+		else
+			echo "FAILURE: Override roles are not present in $profile"
+		fi
+	fi
+done
+}
+
+#check_logging : TODO
+function check_logging {
+echo "TBA"
+}
+
 function call_action_default {
 enable_armor
 service_status
@@ -532,6 +667,11 @@ call_reboot_enforce
 call_reboot_disable
 call_reboot_complain_enforce
 call_reboot_denied_messages
+call_check_default_enforce_mode
+remove_dac_override_irmgr
+remove_dac_override_default
+dac_override_audiocapture
+dac_override_lighttpd
 }
 
 if [ $# -lt 1 ]
@@ -602,6 +742,30 @@ for test in "$@"; do
 	   echo "calling denied messages after reboot check"
 	   call_reboot_denied_messages
 	   ;;
+	   aptest14*)
+	   echo "calling default enforce mode check"
+	   call_check_default_enforce_mode
+	   ;;
+	   aptest15*)
+	   echo "calling check irmgrmain dac override"
+	   remove_dac_override_irmgr
+	   ;;
+	   aptest16*)
+	   echo "calling check default dac override"
+	   remove_dac_override_default
+	   ;;
+	   aptest17*)
+	   echo "calling check audiocapture dac override"
+	   dac_override_audiocapture
+	   ;;
+	   aptest18*)
+	   echo "calling check lighttpd dac override"
+	   dac_override_lighttpd
+	   ;;
+	   aptest19*)
+	   echo "calling check log for denied messages"
+	   check_logging
+	   ;;
 	  all*)
 	   echo "Call all tests"
 	   call_action_default
@@ -613,3 +777,4 @@ for test in "$@"; do
 	  ;;
 	esac
    done	
+
