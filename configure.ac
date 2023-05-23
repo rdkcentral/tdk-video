@@ -506,6 +506,7 @@ AC_CONFIG_FILES([Makefile
 	 FireboltCompliance_Validation/graphics_validation/Makefile
 	 FireboltCompliance_Validation/GStreamer_plugins_test/Makefile
 	 MediaPipelineTests_stub/Makefile
+	 Apparmor_Stub/Makefile
 	 AudioCaptureMgr_stub/Makefile
 	 USBCtrl_stub/Makefile
 	 SystemUtil_stub/Makefile

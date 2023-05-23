@@ -2,7 +2,7 @@
 # If not stated otherwise in this file or this component's Licenses.txt
 # file the following copyright and licenses apply:
 #
-# Copyright 2016 RDK Management
+# Copyright 2023 RDK Management
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = agent IARMBUS_stub DS_stub RDKLogger_stub AAMP_stub MediaPipelineTests_stub Apparmor_Stub \
-SystemUtil_stub DSHal_stub $(SUBDIR_HYBRID) $(SUBDIR_CLIENT) $(PLUGIN_SRC) $(SUBDIR_CLIENT_XI3V2) $(SUBDIR_CLIENT_XID) $(SUBDIR_XG1V3) $(SUBDIR_XI5) \
-$(SUBDIR_CLIENT_XI5)
-DIST_SUBDIRS = @SUBDIRS@
+ACLOCAL_AMFLAGS = -Im4 --install
 
-distcleancheck_listfiles = *-libtool
+AM_CPPFLAGS = -g -Wall -std=c++0x -DGCC4_XXX
+
+AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
+              -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/glib-2.0 \
+              -I${PKG_CONFIG_SYSROOT_DIR}/usr/lib/glib-2.0/include \
+              -I${top_srcdir}/../agent/include
+
+
+bin_PROGRAMS = tdk_apparmoraccess
+
+tdk_apparmoraccess_SOURCES = src/apparmoraccess.cpp
+
