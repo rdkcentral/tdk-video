@@ -94,8 +94,12 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetState",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetState);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetPlaybackPosition",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetPlaybackPosition);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetCurrentDRM",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetCurrentDRM);
-                  this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetPreferredDRM",PARAMS_BY_NAME,JSON_STRING,"preferredDrm",JSON_STRING,NULL), &AampAgent::AampSetPreferredDRM);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetPreferredDRM",PARAMS_BY_NAME,JSON_STRING,"preferredDrm",JSON_STRING,NULL), &AampAgent::AampSetPreferredDRM);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetPreferredDRM",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetPreferredDRM);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetAudioTrack",PARAMS_BY_NAME,JSON_STRING,"track_index",JSON_INTEGER,NULL), &AampAgent::AampSetAudioTrack);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetAudioTrack",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetAudioTrack);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampEnableVideoRectangle",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampEnableVideoRectangle);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetWesterosSinkConfig",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampSetWesterosSinkConfig);
 
                 }
 
@@ -134,6 +138,10 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                 void AampGetCurrentDRM(IN const Json::Value& req, OUT Json::Value& response);
                 void AampSetPreferredDRM(IN const Json::Value& req, OUT Json::Value& response);
                 void AampGetPreferredDRM(IN const Json::Value& req, OUT Json::Value& response);
+                void AampSetAudioTrack(IN const Json::Value& req, OUT Json::Value& response);
+                void AampGetAudioTrack(IN const Json::Value& req, OUT Json::Value& response);
+                void AampEnableVideoRectangle(IN const Json::Value& req, OUT Json::Value& response);
+                void AampSetWesterosSinkConfig(IN const Json::Value& req, OUT Json::Value& response);
                 bool cleanup(const char*);
                 std::string testmodulepre_requisites();
                 bool testmodulepost_requisites();

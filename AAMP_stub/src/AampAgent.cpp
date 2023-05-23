@@ -1394,6 +1394,103 @@ void AampAgent::AampSetPreferredDRM(IN const Json::Value& req, OUT Json::Value& 
         return;
 }
 
+/***********************************************************************************************************
+Function Name   : AampEnableVideoRectangle
+
+Description     : This function is used to control the setting of SetVideoRectangle property of westerossink
+************************************************************************************************************/
+void AampAgent::AampEnableVideoRectangle(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampEnableVideoRectangle Entry \n");
+	char enable[10];
+        strcpy(enable,req["enable"].asCString());
+	bool set_rectangle;
+        if (!strcmp(enable,"true"))
+            set_rectangle = true;
+        else if (!strcmp(enable,"false"))
+            set_rectangle = false;
+        else{
+            response["result"] = "FAILURE";
+            response["details"] = "Invalid Enable param";
+            return;
+        }
+	DEBUG_PRINT (DEBUG_TRACE, "Enable Video Rectangle : %s",enable);
+	mSingleton->EnableVideoRectangle(set_rectangle);
+	response["result"] = "SUCCESS";
+        response["details"] = "EnableVideoRectangle call is fine";
+        DEBUG_PRINT (DEBUG_TRACE, "EnableVideoRectangle call is fine\n");
+        DEBUG_PRINT (DEBUG_TRACE, "AampEnableVideoRectangle Exit \n");
+        return;
+}
+
+/***********************************************************************************************************
+Function Name   : AampSetWesterosSinkConfig
+
+Description     : This function is used to enable aamp to use westerossink as video-sink
+************************************************************************************************************/
+void AampAgent::AampSetWesterosSinkConfig(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetWesterosSinkConfig Entry \n");
+        char enable[10];
+        strcpy(enable,req["enable"].asCString());
+        bool set_westerossink;
+        if (!strcmp(enable,"true"))
+            set_westerossink = true;
+        else if (!strcmp(enable,"false"))
+            set_westerossink = false;
+        else{
+            response["result"] = "FAILURE";
+            response["details"] = "Invalid Enable param";
+            return;
+        }
+        DEBUG_PRINT (DEBUG_TRACE, "SetWesterosSinkConfig : %s",enable);
+        mSingleton->SetWesterosSinkConfig(set_westerossink);
+        response["result"] = "SUCCESS";
+        response["details"] = "SetWesterosSinkConfig call is fine";
+        DEBUG_PRINT (DEBUG_TRACE, "SetWesterosSinkConfig call is fine\n");
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetWesterosSinkConfig Exit \n");
+        return;
+}
+
+/***********************************************************************************************************
+Function Name   : AampSetAudioTrack
+
+Description     : This function is used to set the desired audio track
+************************************************************************************************************/
+void AampAgent::AampSetAudioTrack(IN const Json::Value& req, OUT Json::Value& response)
+{
+	DEBUG_PRINT (DEBUG_TRACE, "AampSetAudioTrack Entry \n");
+	int track_index = req["track_index"].asInt();
+	DEBUG_PRINT (DEBUG_TRACE, "Trying to set audio track index as %d",track_index);
+	mSingleton->SetAudioTrack(track_index);
+	response["result"] = "SUCCESS";
+	response["details"] = "SetAudioTrack call is fine";
+	DEBUG_PRINT (DEBUG_TRACE, "SetAudioTrack call is fine\n");
+	DEBUG_PRINT (DEBUG_TRACE, "AampSetAudioTrack Exit \n");
+        return;
+}
+
+/***********************************************************************************************************
+Function Name   : AampGetAudioTrack
+
+Description     : This function is used to get the current audio track
+************************************************************************************************************/
+void AampAgent::AampGetAudioTrack(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampGetAudioTrack Entry \n");
+	char details[30];
+        int track_index = 999;
+        track_index = mSingleton->GetAudioTrack();
+	sprintf(details, "TrackIndex:%d",track_index);
+	DEBUG_PRINT (DEBUG_TRACE, "Got Track Index as %d",track_index);
+        response["result"] = "SUCCESS";
+        response["details"] = details;
+        DEBUG_PRINT (DEBUG_TRACE, "GetAudioTrack call is fine\n");
+        DEBUG_PRINT (DEBUG_TRACE, "AampGetAudioTrack Exit \n");
+        return;
+}
+
+
 /*************************************************************************
 Function Name   : AampGetPreferredDRM
 
