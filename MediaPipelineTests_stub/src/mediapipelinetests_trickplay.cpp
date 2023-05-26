@@ -18,6 +18,7 @@
 */
 #include <stdio.h>
 #include <unistd.h>
+#include <bits/stdc++.h>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -79,6 +80,7 @@ bool forward_events = true;
 gint64 startPosition;
 string audiosink;
 bool ignorePlayJump = false;
+bool buffering_flag = true;
 
 /*
  * Playbin flags
@@ -734,12 +736,23 @@ static void trickplayOperation(MessageHandlerData *data)
 *********************************************************************************************************************/
 void setflags()
 {
-        flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_BUFFERING;
+        const char* substr = "aamp";
+	if (std::strstr(m_play_url, substr))
+        {
+            printf("\nAAMP is used as plugin\n");
+            flags |= 0x03 | 0x00000040;
+	    return;
+        }
+	flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+	if (buffering_flag)
+	{
+	    flags |= GST_PLAY_FLAG_BUFFERING;
+	}
 #ifndef NO_NATIVE_AUDIO
-        flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
 #endif
 #ifndef NO_NATIVE_VIDEO
-        flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+    	flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
 #endif
 }
 
@@ -1143,6 +1156,10 @@ int main (int argc, char **argv)
 	 if (strcmp ("forwardEvents=no", argv[arg]) == 0)
          {
             forward_events = false;
+         }
+	 if (strcmp ("buffering_flag=no", argv[arg]) == 0)
+         {
+            buffering_flag = false;
          }
     }
     gst_check_init (&argc, &argv);

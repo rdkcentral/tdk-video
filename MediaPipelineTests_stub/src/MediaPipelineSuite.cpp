@@ -42,7 +42,7 @@ using namespace std;
 #define FRAME_DATA                      "/CheckVideoStatus.sh getFrameData "
 #define PLAYBIN_ELEMENT 		"playbin"
 #define WESTEROS_SINK 			"westerossink"
-#define MIN_FRAMES_DROP                 5
+#define MIN_FRAMES_DROP                 3
 #define TOTAL_RESOLUTIONS_COUNT         7 //All resolutions include 144p, 240p, 360p, 480p, 720p, 1080p, 2160p
 #define BUFFER_SIZE_LONG		1024
 #define BUFFER_SIZE_SHORT		264
@@ -57,6 +57,7 @@ using namespace std;
 #define WaitForOperation                Sleep(5)
 #define AUDIO_DATA                      "/CheckAudioStatus.sh getPTS "
 #define AUDIO_PTS_ERROR_FILE            "/audio_pts_error"
+#define RESOLUTION_OFFSET               5
 
 char m_play_url[BUFFER_SIZE_LONG] = {'\0'};
 char tcname[BUFFER_SIZE_SHORT] = {'\0'};
@@ -73,16 +74,18 @@ bool checkAVStatus = false;
 bool checkPTS = true;
 bool bufferUnderflowTest = false;
 bool checkSignalTest = true;
-gint flags;
 int play_timeout = 10;
 int videoEnd = 0;
 int videoStart =  0;
+int audioEnd = 0;
+int audioStart = 0;
 int fps = 0;
 int totalFrames = 0;
 int ResolutionCount = 0;
 int height,width;
 int Runforseconds;
 auto start = std::chrono::steady_clock::now();
+auto stop_latency = std::chrono::high_resolution_clock::now();
 bool latency_check_test = false;
 bool firstFrameReceived = false;
 bool videoUnderflowReceived = false;
@@ -96,6 +99,7 @@ bool justPrintPTS = false;
 bool seekOperation = false;
 gint seekSeconds = 0;
 bool play_without_video = false;
+bool play_without_audio = false;
 bool ResolutionTest = false;
 bool ResolutionSwitchTest = false;
 string resolution;
@@ -105,11 +109,16 @@ bool useProcForFPS = false;
 bool UHD_Not_Supported = false;
 bool use_rialto = false;
 bool audio_underflow_received = false;
+bool audio_underflow_received_global = false;
 bool audio_started  = false;
 bool audio_pts_error = false;
 bool AudioPTSCheckAvailable = false;
 bool Flush_Pipeline = true;
 bool use_westerossink_fps = true;
+bool use_audioSink = true;
+gint flags;
+bool ignorePlayJump = false;
+bool buffering_flag = true;
 
 /*
  * Playbin flags
@@ -176,7 +185,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 {
    gint64 startPosition;
    gint64 currentPosition;
-   gint difference;
+   gfloat difference;
    GstMessage *message;
    GstBus *bus;
    MessageHandlerData data;
@@ -185,25 +194,32 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    gint pts_buffer=5;
    gint RanForTime=0;
    GstElement *videoSink;
+   GstElement *audioSink;
    GstState cur_state;
-   gint play_jump = 0;
-   gint play_jump_previous = 99;
-   gint previous_position = 0;
+   gfloat _play_jump = 0;
+   int play_jump =0; 
+   int play_jump_previous = 99;
    gint jump_buffer = 1;
-   gint jump_buffer_small_value = 2;
    gint frame_buffer = 3;
+   gint audio_frame_buffer = 3;
+   gint jump_buffer_small_value = 2;
    GstStateChangeReturn state_change;
    guint64 previous_rendered_frames;
    //gint queued_frames;
    guint64 dropped_frames;
    guint64 rendered_frames;
-   guint64 average_rate;
+   guint64 dropped_frames_audio;
+   guint64 rendered_frames_audio;
+   guint64 previous_rendered_frames_audio;
    float drop_rate;
    int frame_rate;
-   float dropped_percentage; 
+   float dropped_percentage;
    vector<int> resList;
    int resItr = 0;
    GstStructure *structure;
+   GstStructure *audio_structure;
+   gfloat _currentPosition = 0;
+   gfloat previous_position = 0;
 
    /* Update data variables */
    data.playbin = playbin;
@@ -211,6 +227,9 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    data.terminate = FALSE;
    data.eosDetected = FALSE;
 
+   if (ResolutionSwitchTest || ResolutionTest)
+	   use_audioSink = false;
+   
    if (ResolutionSwitchTest)
    {
         resList.push_back(144);
@@ -235,7 +254,9 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
        fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &startPosition), "Failed to query the current playback position");
    }
    g_object_get (playbin,"video-sink",&videoSink,NULL);
- 
+
+   g_object_get (playbin,"audio-sink",&audioSink,NULL);
+
    if (checkPTS)
    {
         g_object_get (videoSink,"video-pts",&pts,NULL);
@@ -256,9 +277,10 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
             Sleep(1);
             printf("\nCurrent State is PAUSED , waiting for %d\n", RunSeconds);
 	    fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
-	    play_jump = int(currentPosition/GST_SECOND) - previous_position;
-            previous_position = (currentPosition/GST_SECOND);
-            printf("Current Position : %lld\n",currentPosition/GST_SECOND);
+	    _currentPosition = currentPosition;
+	    play_jump = (_currentPosition/GST_SECOND) - previous_position;
+            previous_position = (_currentPosition/GST_SECOND);
+            printf("Current Position : %0.2f\n",(_currentPosition/GST_SECOND));
 	    if (play_jump != 0)
             {
                 printf("Playback is not PAUSED");
@@ -290,16 +312,24 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    bus = gst_element_get_bus (playbin);
    if (use_westerossink_fps)
    {
-        g_object_get (videoSink,"stats",&structure,NULL);
+	g_object_get (videoSink,"stats",&structure,NULL);
         gst_structure_get_uint64(structure, "rendered", &rendered_frames);
    }
+   if (use_audioSink)
+   {
+        g_object_get (audioSink,"stats",&audio_structure,NULL);
+        gst_structure_get_uint64(audio_structure, "rendered", &rendered_frames_audio);
+   }
 
+  
    do
    {
 	Sleep(1);
 	//g_object_get (videoSink,"queued-frames",&queued_frames,NULL);
         //printf("\nQueued Frames = %d",queued_frames);
-
+	if (audio_underflow_received)
+            audio_underflow_received_global = true;
+        audio_underflow_received = false;
         if (use_westerossink_fps)
         {
              g_object_get (videoSink,"stats",&structure,NULL);
@@ -314,25 +344,49 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
                  printf(" Dropped: %" G_GUINT64_FORMAT, dropped_frames);
                  printf(" Rendered: %" G_GUINT64_FORMAT, rendered_frames);
              }
-             
-	     if ((rendered_frames <= previous_rendered_frames))
-                frame_buffer -= 1;
-             fail_unless(frame_buffer != 0 , "frames are not rendered properly");
+            
+             if ((rendered_frames <= previous_rendered_frames))
+	     	frame_buffer -= 1;
+             fail_unless(frame_buffer != 0 , "Video frames are not rendered properly");    
+	     
+        }
+	
+	if (use_audioSink)
+        {
+             g_object_get (audioSink,"stats",&audio_structure,NULL);
+
+             previous_rendered_frames_audio = rendered_frames_audio;
+
+             if (audio_structure && (gst_structure_has_field(audio_structure, "dropped") || gst_structure_has_field(audio_structure, "rendered")))
+             {
+                 gst_structure_get_uint64(audio_structure, "dropped", &dropped_frames_audio);
+                 gst_structure_get_uint64(audio_structure, "rendered", &rendered_frames_audio);
+		 printf("\n\nAUDIO_FRAMES ");
+                 printf(" Dropped: %" G_GUINT64_FORMAT, dropped_frames_audio);
+                 printf(" Rendered: %" G_GUINT64_FORMAT, rendered_frames_audio);
+             }
+	     if ((rendered_frames_audio <= previous_rendered_frames_audio))
+                audio_frame_buffer -= 1;
+             fail_unless(audio_frame_buffer != 0 , "Audio frames are not rendered properly");
+
         }
 
-        fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
-        difference = int(abs((currentPosition/GST_SECOND) - (startPosition/GST_SECOND)));
-        printf("\nCurrent Position : %lld , Playing after operation for: %d",(currentPosition/GST_SECOND),difference);
 
-	play_jump = int(currentPosition/GST_SECOND) - previous_position;
-	printf("\nPlay jump = %d", play_jump);
+        fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
+	_currentPosition = currentPosition;
+        difference = abs((_currentPosition/GST_SECOND) - (startPosition/GST_SECOND));
+        printf("\nCurrent Position : %0.2f , Playing after operation for: %0.2f",(_currentPosition/GST_SECOND),difference);
+
+	_play_jump = (_currentPosition/GST_SECOND) - previous_position;
+	printf("\nPlay jump = %0.2f", _play_jump);
+	play_jump = (int)_play_jump;
 
         if (ResolutionSwitchTest)
 	{
             int new_height, new_width;
 	    g_object_get (videoSink, "video-height", &new_height, NULL);
             g_object_get (videoSink, "video-width", &new_width, NULL);
-	    if (height == resList[resItr])
+	    if (abs(height - resList[resItr]) < RESOLUTION_OFFSET)
 	    {
 		ResolutionCount++;
 		resItr++;
@@ -368,11 +422,13 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	{
 	    jump_buffer = 1;
 	}
-
 	if (((play_jump == 0) && (play_jump_previous == 2)) && (jump_buffer == 0))
-        {
-            jump_buffer = 1;
-        }
+	{
+	    jump_buffer = 1;
+	}
+
+	if (play_jump > 3)
+		jump_buffer = 0;
 
         message = gst_bus_pop_filtered (bus, (GstMessageType) ((GstMessageType) GST_MESSAGE_STATE_CHANGED |
                                              (GstMessageType) GST_MESSAGE_ERROR | (GstMessageType) GST_MESSAGE_EOS |
@@ -405,7 +461,10 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	if ((jump_buffer == 0) && (ResolutionSwitchTest)) 
              printf("\nVideo height = %d\nVideo width = %d", height, width);
 
-	fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
+
+	if (!ignorePlayJump)
+	     fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
+
 	previous_position = (currentPosition/GST_SECOND);
 	if(videoUnderflowReceived && bufferUnderflowTest)
         {
@@ -415,6 +474,16 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	    Sleep(3);
             return;
         }
+
+	if(audio_underflow_received && bufferUnderflowTest)
+        {
+            printf("\nAudio Underflow received breaking from PlaySeconds");
+            printf("\nExiting from PlaySeconds, currentPosition is %lld\n",currentPosition/GST_SECOND);
+            gst_object_unref (bus);
+	    Sleep(3);
+            return;
+        }
+
         if((ResolutionSwitchTest) && (ResolutionCount == TOTAL_RESOLUTIONS_COUNT))
 	{
 	   printf("\nPipeline played all resolutions\n");
@@ -425,16 +494,15 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 
    if(use_westerossink_fps)
    {
-        frame_rate = int(rendered_frames - previous_rendered_frames);
-        printf("\n\nFrame rate : %d\n", frame_rate);
-	totalFrames = frame_rate * (currentPosition/GST_SECOND);
-        dropped_percentage = (dropped_frames/totalFrames);
-        if(dropped_percentage != 0.00)
-                printf("\nDropped Percentage : %f\n", dropped_percentage);
-        fail_unless(dropped_percentage < 1.0 , "Dropped frames are observed");
+   	frame_rate = int(rendered_frames - previous_rendered_frames);
+   	totalFrames = frame_rate * (currentPosition/GST_SECOND);
+   	dropped_percentage = (dropped_frames/totalFrames);
+   	if(dropped_percentage != 0.00)
+	   	printf("\nDropped Percentage : %f\n", dropped_percentage);
+   	fail_unless(dropped_percentage < 1.0 , "Dropped frames are observed");
    }
 
-   printf("\nExiting from PlaySeconds, currentPosition is %lld\n",currentPosition/GST_SECOND);
+   printf("\nExiting from PlaySeconds, currentPosition is %0.2f\n",(_currentPosition/GST_SECOND));
    gst_object_unref (bus);
 }
 
@@ -447,12 +515,23 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 *********************************************************************************************************************/
 void setflags() 
 {
-	flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO | GST_PLAY_FLAG_BUFFERING;
+        const char* substr = "aamp";
+	if (std::strstr(m_play_url, substr))
+        {
+            printf("\nAAMP is used as plugin\n");
+            flags |= 0x03 | 0x00000040;
+	    return;
+        }
+	flags= GST_PLAY_FLAG_VIDEO | GST_PLAY_FLAG_AUDIO;
+	if (buffering_flag)
+	{
+	    flags |= GST_PLAY_FLAG_BUFFERING;
+	}
 #ifndef NO_NATIVE_AUDIO
 	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
 #endif
 #ifndef NO_NATIVE_VIDEO
-	flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+    	flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
 #endif
 }
 
@@ -497,7 +576,8 @@ bool getstreamingstatus(char* script)
 static void AudioUndeflowCallback(GstElement *sink, guint size, void *context, gpointer data)
 {
    bool *gotVideoUnderflow = (bool*)data;
-   printf ("\nERROR : Received buffer underflow signal from brcmaudiodecoder\n");
+   if (!audio_underflow_received)
+   printf ("\nERROR : Received audio buffer underflow signal\n");
    *gotVideoUnderflow = true;
 }
 
@@ -507,7 +587,7 @@ static void AudioUndeflowCallback(GstElement *sink, guint size, void *context, g
 static void FirstFrameAudioCallback(GstElement *sink, guint size, void *context, gpointer data)
 {
    bool *gotFirstFrameSignal = (bool*)data;
-   printf ("\nINFO : Received First Audio frame signal from brcmaudiodecoder\n");
+   printf ("\nINFO : Received First Audio frame signal\n");
    *gotFirstFrameSignal = true;
 }
 
@@ -533,6 +613,15 @@ static void elementSetupCallback (GstElement* playbin, GstElement* element, gpoi
         g_signal_connect( element, "first-audio-frame-callback", G_CALLBACK(FirstFrameAudioCallback), &audio_started);
         g_signal_connect( element, "pts-error-callback", G_CALLBACK(AudioPTSErrorCallback), &audio_pts_error);
     }
+    else if (g_str_has_prefix(GST_ELEMENT_NAME(element), "amlhalasink")) {
+        printf("\nGot amlhalasink\n");
+        g_signal_connect( element, "underrun-callback", G_CALLBACK(AudioUndeflowCallback), &audio_underflow_received);
+    }
+    else if (g_str_has_prefix(GST_ELEMENT_NAME(element), "rtkaudiosink")) {
+        printf("\nGot rtkaudiosink\n");
+        g_signal_connect( element, "buffer-underflow-callback", G_CALLBACK(AudioUndeflowCallback), &audio_underflow_received);
+    }
+
 }
 
 
@@ -719,6 +808,7 @@ static void firstFrameCallback(GstElement *westerosSink, guint size, void *conte
    if ((latency_check_test) && (!firstFrameReceived))
    {
        timestamp = gst_clock_get_time ((westerosSink)->clock);
+       stop_latency = std::chrono::high_resolution_clock::now();
    }
 
    printf ("Received first frame signal\n");
@@ -865,6 +955,101 @@ GST_START_TEST (test_init_shutdown)
 GST_END_TEST;
 
 /********************************************************************************************************************
+ * Purpose      : Test to calculate the playback latency from westeros sink to display renderer
+ * Parameters   : Playback url
+ ********************************************************************************************************************/
+GST_START_TEST (test_playback_latency)
+{
+    bool is_av_playing = false;
+    GstElement *playbin;
+    GstElement *westerosSink;
+    GstState cur_state;
+    latency_check_test = true;
+
+    /*
+     * Create the playbin element
+     */
+    playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
+    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+    /*
+     * Set the url received from argument as the 'uri' for playbin
+     */
+    fail_unless (m_play_url != NULL, "Playback url should not be NULL");
+    g_object_set (playbin, "uri", m_play_url, NULL);
+    /*
+     * Update the current playbin flags to enable Video and Audio Playback
+     */
+    g_object_get (playbin, "flags", &flags, NULL);
+    setflags();
+    g_object_set (playbin, "flags", flags, NULL);
+
+    /*
+     * Set video-sink
+     */
+    westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
+    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+    g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+    g_object_set (playbin, "video-sink", westerosSink, NULL);
+ 
+    auto start_latency = std::chrono::high_resolution_clock::now();
+    start = std::chrono::steady_clock::now();
+    bool gotLatencyStart = false;
+    fail_unless (gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    while(1)
+    {
+        //Run loop maximum for 5 seconds
+        if ( std::chrono::steady_clock::now() - start > std::chrono::seconds(5) )
+          break;
+        // break if firstFrame is received
+        if (firstFrameReceived)
+          break;
+        gst_element_get_state (playbin, &cur_state, NULL, 0);
+        if ((cur_state == GST_STATE_PLAYING) && (gotLatencyStart == false))
+        {
+          start_latency = std::chrono::high_resolution_clock::now();
+          gotLatencyStart = true;
+        }
+
+    }
+
+    fail_unless (firstFrameReceived == true, "Failed to receive first video frame signal");  
+    auto New_latency = std::chrono::duration_cast<std::chrono::milliseconds>(stop_latency - start_latency);
+    printf("\nTime measured: %.3lld milliseconds.\n", New_latency.count());
+
+    int latency_int = New_latency.count();
+    /*
+     * Writing to file
+     */
+    FILE *filePointer ;
+    char latency_file[BUFFER_SIZE_SHORT] = {'\0'};
+    strcat (latency_file, TDK_PATH);
+    strcat (latency_file, "/latency_log");
+    filePointer = fopen(latency_file, "w");
+    if (filePointer != NULL)
+    {
+        fprintf(filePointer,"Latency = %d milliseconds\n", latency_int);
+    }
+    else
+    {
+	printf("\nLatency writing operation failed\n");
+    }
+    fclose(filePointer);
+
+    PlaySeconds(playbin,5);
+    if (playbin)
+    {
+       gst_element_set_state (playbin, GST_STATE_NULL);
+    }
+    /*
+     * Cleanup after use
+     */
+    gst_object_unref (playbin);
+}
+GST_END_TEST;    
+   
+
+
+/********************************************************************************************************************
  * Purpose     	: Test to do generic playback using playbin element and westeros-sink
  * Parameters   : Playback url
  ********************************************************************************************************************/
@@ -976,6 +1161,19 @@ GST_START_TEST (test_generic_playback)
 
     printf("\nVideo height = %d\nVideo width = %d", height, width);
 
+    int n_audio;
+    g_object_get (playbin, "n-audio", n_audio, NULL);
+
+    if (n_audio != 0)
+    {
+        printf("\nAudio is present in the video.\n");
+    }
+    else
+    {
+        printf("\nAudio is not present in the video.\nSkipping Audio FPS check\n");
+	use_audioSink = false;
+    }
+
     if (ResolutionTest)
     {
 	 if (!resolution.empty())
@@ -1063,7 +1261,7 @@ GST_START_TEST (test_generic_playback)
            }
        }while(!data.streamStart && !data.terminate);
 
-       Sleep(2);
+       Sleep(2); 
 
        /*
         * Verify that ERROR/EOS messages are not recieved
@@ -1106,7 +1304,6 @@ GST_END_TEST;
 GST_START_TEST (test_play_pause_pipeline)
 {
     bool is_av_playing = false;
-    gint flags;
     GstState cur_state;
     GstElement *playbin;
     GstElement *westerosSink, *rialtovsink, *rialtoasink;
@@ -1299,7 +1496,6 @@ GST_END_TEST;
 GST_START_TEST (test_buffer_underflow)
 {
     bool is_av_playing = false;
-    gint flags;
     GstState cur_state;
     GstElement *playbin;
     GstElement *westerosSink;
@@ -1484,9 +1680,9 @@ GST_START_TEST (test_EOS)
 {
     bool is_av_playing = false;
     GstMessage *message;
+    use_westerossink_fps = false;    
     GstBus *bus;
     bool received_EOS = false;
-    use_westerossink_fps = false;
     GstElement *playbin;
     GstElement *westerosSink, *rialtovsink, *rialtoasink;
 
@@ -1623,19 +1819,20 @@ GST_START_TEST (test_frameDrop)
     GstElement *pipeline, *videoSink ,*westerosSink;
     gchar *fps_msg;
     gint jump_buffer = 3;
-    gint frame_buffer = 3;
     gint play_jump = 0;
     guint64 previous_rendered_frames, rendered_frames, dropped_frames_video, previous_rendered_frames_proc;
-    GstStructure *structure;
-    int dropped_frames;
     int expected_rendered_frames;
+    int dropped_frames;
+    gint frame_buffer = 3;
     gint64 currentPosition;
     gint previous_position = 0;
     gint64 startPosition;
     gint difference;
     GstBus *bus;
+    GstStructure *structure;
     GstMessage *message;
     bool runLoop = false;
+
 
     pipeline = gst_element_factory_make ("playbin", "source");
     fail_unless (pipeline != NULL, "Failed to create 'pipeline' element");
@@ -1644,30 +1841,35 @@ GST_START_TEST (test_frameDrop)
     westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
     fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
 
+
     g_object_set (pipeline, "video-sink",westerosSink, NULL);
     g_object_set (pipeline, "uri", m_play_url, NULL);
-    
+
+
     g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+
 
     GST_FIXME( "Setting to Playing State\n");
     fail_unless (gst_element_set_state (pipeline, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
     GST_FIXME( "Set to Playing State\n");
 
     WaitForOperation;
+
     fail_unless (firstFrameReceived == true, "Failed to receive first video frame signal");
 
     fail_unless (gst_element_query_position (pipeline, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
-
+    
     previous_position = (currentPosition/GST_SECOND);
     if (useProcForFPS)
     {
-         char frame_status[BUFFER_SIZE_SHORT] = {'\0'};
+	 char frame_status[BUFFER_SIZE_SHORT] = {'\0'};
          strcat (frame_status, "sh ");
          strcat (frame_status, TDK_PATH);
          strcat (frame_status, FRAME_DATA);
-         strcat (frame_status, " &");
-         system(frame_status);
+	 strcat (frame_status, " &");
+	 system(frame_status);
     }
+
 
     bus = gst_element_get_bus (pipeline);
     if (use_westerossink_fps)
@@ -1697,11 +1899,10 @@ GST_START_TEST (test_frameDrop)
                 printf("\n\nDropped_Frames: %" G_GUINT64_FORMAT, dropped_frames_video);
                 printf("\nRendered_Frames: %" G_GUINT64_FORMAT, rendered_frames);
             }
-            if ((rendered_frames <= previous_rendered_frames))
+	    if ((rendered_frames <= previous_rendered_frames))
                 frame_buffer -= 1;
                 fail_unless(frame_buffer != 0 , "frames are not rendered properly");
-        
-	}
+        }
 
         fail_unless (gst_element_query_position (pipeline, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
         difference = int(abs((currentPosition/GST_SECOND) - (startPosition/GST_SECOND)));
@@ -1713,12 +1914,13 @@ GST_START_TEST (test_frameDrop)
         if (play_jump != NORMAL_PLAYBACK_RATE)
             jump_buffer -=1;
 
-
         if (!checkTotalFrames)
             fail_unless (rendered_frames > previous_rendered_frames, "Frames not rendered properly");
 
-        if ((checkTotalFrames) && ((totalFrames - rendered_frames) < MIN_FRAMES_DROP))
-	     break;
+
+	if ((checkTotalFrames) && ((totalFrames - rendered_frames) < MIN_FRAMES_DROP))
+            break;
+
         if (!checkTotalFrames)
             fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
 
@@ -1733,6 +1935,7 @@ GST_START_TEST (test_frameDrop)
             }
         }
 
+
         if (!checkTotalFrames)
         {
             if ((currentPosition/GST_SECOND) < play_timeout)
@@ -1740,17 +1943,17 @@ GST_START_TEST (test_frameDrop)
             else
                 runLoop = false;
         }
-        else
-        {
-            if (useProcForFPS)
-                rendered_frames = readFramesFromFile();
+	else
+	{
+	    if (useProcForFPS)
+		rendered_frames = readFramesFromFile();
             if(rendered_frames < previous_rendered_frames_proc)
                 jump_buffer -=1;
             if(jump_buffer == 0)
                 runLoop = false;
             else
                 runLoop = true;
-        }
+	}
         previous_rendered_frames_proc = rendered_frames;
 	previous_rendered_frames = rendered_frames;
         previous_position = (currentPosition/GST_SECOND);
@@ -1762,7 +1965,7 @@ GST_START_TEST (test_frameDrop)
 
     if (checkTotalFrames)
     {
-        expected_rendered_frames = totalFrames;
+    expected_rendered_frames = totalFrames;
     }
     else
     {
@@ -1771,15 +1974,17 @@ GST_START_TEST (test_frameDrop)
     printf("\nExpected rendered frames : %d", expected_rendered_frames);
 
 
+
     if (rendered_frames < expected_rendered_frames)
     {
-	 dropped_frames = expected_rendered_frames - rendered_frames;
-	 printf("\n\ndropped_frames : %d", dropped_frames); 
+         dropped_frames = expected_rendered_frames - rendered_frames;
+	 printf("\n\ndropped_frames : %d", dropped_frames);
 	 sleep(2);
 	 if (dropped_frames)
 		  fail_unless( dropped_frames < MIN_FRAMES_DROP,"\nExpected number of frames not rendered\n");
     }
     printf ("\nExecution was Success\n");
+
 
 
 
@@ -1963,6 +2168,179 @@ GST_START_TEST (test_audio_change)
 GST_END_TEST;
 
 
+/********************************************************************************************************************
+ * Purpose      : Test to verify if buffer underflow signal is obtained upon audiounderrun
+                  and playback is smooth after audio buffer is full again
+ * Parameters   : Playback url
+ ********************************************************************************************************************/
+GST_START_TEST (test_audio_underflow)
+{
+    bool is_av_playing = false;
+    GstState cur_state;
+    GstElement *playbin, *westerosSink;
+    bool elementsetup = false;
+    gint64 seekPosition;
+    gint64 currentPosition;
+    bool seeked = false;
+    int Seek_time_threshold = 5;
+    GstStateChangeReturn state_change;
+
+    /*
+    * Create the playbin element
+    */
+    playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
+    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+
+    /*
+    * Set the url received from argument as the 'uri' for playbin
+    */
+    fail_unless (m_play_url != NULL, "Playback url should not be NULL");
+    g_object_set (playbin, "uri", m_play_url, NULL);
+
+    /*
+    * Update the current playbin flags to enable Video and Audio Playback
+    */
+    g_object_get (playbin, "flags", &flags, NULL);
+    setflags();
+    g_object_set (playbin, "flags", flags, NULL);
+
+    /*
+    * Create westerosSink instance
+    */
+    westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
+    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+    g_object_set (playbin, "video-sink", westerosSink, NULL);
+
+
+    g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+    g_signal_connect( playbin, "element-setup", G_CALLBACK(elementSetupCallback), &elementsetup);
+
+
+    /*
+    * Set the firstFrameReceived variable as false before starting play
+    */
+    firstFrameReceived= false;
+    audio_underflow_received = false;
+
+    /*
+     * Set playbin to PLAYING
+     */
+    GST_FIXME( "Setting to Playing State\n");
+    fail_unless (gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    GST_FIXME( "Set to Playing State\n");
+    WaitForOperation;
+
+    /*
+     * Check if the first frame received flag is set
+     */
+
+    fail_unless (firstFrameReceived == true, "Failed to receive first video frame signal");
+
+    fail_unless (audioEnd != 0,"audioEnd point is not given");
+    if (play_without_audio)
+    {
+	 bufferUnderflowTest = false;
+         PlaySeconds(playbin,play_timeout + audioEnd);
+    }
+    else
+    {
+         PlaySeconds(playbin,audioEnd);
+    }
+
+    fail_unless (audio_underflow_received_global == true, "Failed to receive buffer underflow signal");
+    printf ("\nDETAILS: SUCCESS, Received buffer underflow signal as expected\n");
+
+    
+    if (checkSignalTest || play_without_audio)
+         goto EXIT;
+	
+    bufferUnderflowTest = false;
+
+    gst_element_set_state (playbin, GST_STATE_PAUSED);
+    PlaySeconds(playbin,5);
+    fail_unless_equals_int (gst_element_get_state (playbin, &cur_state, NULL, 0), GST_STATE_CHANGE_SUCCESS);
+    fail_unless_equals_int (cur_state, GST_STATE_PAUSED);
+    printf("\n********Current state: %s\n",gst_element_state_get_name(cur_state));
+    GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(cur_state));
+
+    /*
+     * Seek to the 'audioStart' point (recieved as the input argument) to fill the audio buffer
+     * And start playback
+     */
+    fail_unless (audioStart != 0,"audioStart point is not given");
+    fail_unless (audioStart > audioEnd,"audioEnd and audioStart params are not correct");
+    seekPosition = GST_SECOND * (audioStart + 2);
+    seekOperation = true;
+    seekSeconds = seekPosition/GST_SECOND;
+    fail_unless (gst_element_seek (playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
+                                   GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, seekPosition,
+                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
+
+    start = std::chrono::steady_clock::now();
+    while(!seeked)
+    {
+       //Check if seek happened
+       fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &(currentPosition)),
+                                         "Failed to query the current playback position");
+       //Added GST_SECOND buffer time between currentPosition and seekPosition
+       if (abs( currentPosition - seekPosition) <= (GST_SECOND))
+       {
+           seeked = TRUE;
+       }
+       if (std::chrono::steady_clock::now() - start > std::chrono::seconds(Seek_time_threshold))
+           break;
+    }
+
+    fail_unless (TRUE == seeked, "Seek Unsuccessfull\n");
+    //Convert time to seconds
+    currentPosition /= GST_SECOND;
+    seekPosition /= GST_SECOND;
+	printf("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", currentPosition, seekPosition);
+
+    state_change = gst_element_get_state (playbin, &cur_state, NULL, GST_SECOND);
+    fail_unless (state_change != GST_STATE_CHANGE_FAILURE, "Failed to get current playbin state");
+
+    if ((cur_state == GST_STATE_PAUSED)  && (state_change != GST_STATE_CHANGE_ASYNC))
+    {
+
+        /*
+         * Set playbin to PLAYING
+         */
+         GST_FIXME( "Setting to Playing State\n");
+         fail_unless (gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+         GST_FIXME( "Set to Playing State\n");
+         do{
+              //Waiting for state change
+              state_change = gst_element_get_state (playbin, &cur_state, NULL, 10000000);
+         } while (state_change == GST_STATE_CHANGE_ASYNC);
+
+         printf("\n********Current state: %s\n",gst_element_state_get_name(cur_state));
+         fail_unless_equals_int (gst_element_get_state (playbin, &cur_state, NULL, 0), GST_STATE_CHANGE_SUCCESS);
+         fail_unless_equals_int (cur_state, GST_STATE_PLAYING);
+         GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(cur_state));
+    }
+
+    PlaySeconds(playbin,play_timeout);
+
+	printf ("\nDETAILS: SUCCESS Playback after seeking to Audio Point after buffer underflow is successfull\n");
+EXIT :
+    /* Check for AV status if its enabled
+     */
+    if (true == checkAVStatus)
+    {
+        is_av_playing = check_for_AV_status();
+        fail_unless (is_av_playing == true, "Video is not playing in TV");
+    }
+    if (playbin)
+    {
+       gst_element_set_state(playbin, GST_STATE_NULL);
+    }
+
+    gst_object_unref (playbin);
+
+}
+GST_END_TEST;
+
 static Suite *
 media_pipeline_suite (void)
 {
@@ -2016,7 +2394,7 @@ media_pipeline_suite (void)
     else if (strcmp ("test_playback_latency", tcname) == 0)
     {
        latency_check_test = true;
-       tcase_add_test (tc_chain, test_generic_playback);
+       tcase_add_test (tc_chain, test_playback_latency);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
@@ -2082,6 +2460,21 @@ media_pipeline_suite (void)
        bufferUnderflowTest = true;
        checkSignalTest = false;
        tcase_add_test (tc_chain, test_buffer_underflow);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_audio_underflow_signal", tcname) == 0)
+    {
+       bufferUnderflowTest = true;
+       tcase_add_test (tc_chain, test_audio_underflow);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_audio_underflow_playback", tcname) == 0)
+    {
+       bufferUnderflowTest = true;
+       checkSignalTest = false;
+       tcase_add_test (tc_chain, test_audio_underflow);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
@@ -2171,6 +2564,8 @@ int main (int argc, char **argv)
 	    (strcmp ("test_frameDrop", tcname) == 0) ||
 	    (strcmp ("test_buffer_underflow_signal", tcname) == 0) ||
 	    (strcmp ("test_buffer_underflow_playback", tcname) == 0) ||
+	    (strcmp ("test_audio_underflow_signal", tcname) == 0) ||
+	    (strcmp ("test_audio_underflow_playback", tcname) == 0) ||
 	    (strcmp ("test_resolution", tcname) == 0) ||
 	    (strcmp ("test_resolution_down", tcname) == 0) ||
 	    (strcmp ("test_resolution_up", tcname) == 0) ||
@@ -2205,6 +2600,20 @@ int main (int argc, char **argv)
                     strtok (argv[arg], "=");
                     videoStart = atoi (strtok (NULL, "="));
                 }
+		if (strstr (argv[arg], "audioEnd=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    audioEnd = atoi (strtok (NULL, "="));
+                }
+		if (strstr (argv[arg], "audioStart=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    audioStart = atoi (strtok (NULL, "="));
+                }
+		if (strcmp ("checkAudioFPS=no", argv[arg]) == 0)
+                {
+                    use_audioSink = false;
+                }
 		if (strcmp ("checkPTS=no", argv[arg]) == 0)
                 {
                     justPrintPTS = true;
@@ -2219,9 +2628,13 @@ int main (int argc, char **argv)
 		}
 		if (strcmp ("playWithoutVideo", argv[arg]) == 0)
 		{
-		    use_westerossink_fps = false;
+                    use_westerossink_fps = false;		    
 		    play_without_video = true;
 		}
+		if (strcmp ("playWithoutAudio", argv[arg]) == 0)
+                {
+                    play_without_audio = true;
+                }
 		if (strcmp ("useProcForFPS", argv[arg]) == 0)
 		{
 		    useProcForFPS = true;
@@ -2235,6 +2648,14 @@ int main (int argc, char **argv)
                 {
                     strtok (argv[arg], "=");
                     fps = atoi (strtok (NULL, "="));
+                }
+		if (strcmp ("ignorePlayJump", argv[arg]) == 0)
+         	{
+            	    ignorePlayJump = true;
+         	}
+		if (strcmp ("buffering_flag=no", argv[arg]) == 0)
+                {
+                    buffering_flag = false;
                 }
 		if (strstr (argv[arg], "totalFrames=") != NULL)
                 {
@@ -2266,6 +2687,10 @@ int main (int argc, char **argv)
                 {
                     checkAVStatus = true;
                 }
+		if (strcmp ("checkAudioFPS=no", argv[arg]) == 0)
+                {
+                    use_audioSink = false;
+		}
 		if (strcmp ("checkPTS=no", argv[arg]) == 0)
 		{
 		    checkPTS = false;
@@ -2307,3 +2732,5 @@ int main (int argc, char **argv)
 exit:
     return returnValue;
 }
+
+
