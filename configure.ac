@@ -85,7 +85,7 @@ AC_ARG_ENABLE([hybrid],
         [
           case "${enableval}" in
              yes) HYBRID=true
-                  SUBDIR_HYBRID="TRM_stub DTCP_stub SNMP_stub"
+                  SUBDIR_HYBRID=" "
                   AGENT_FLAGS=" -DPORT_FORWARD";;
            no) HYBRID=false ;;
           *) AC_MSG_ERROR([bad value ${enableval} for --enable-hybrid ]) ;;
@@ -99,7 +99,7 @@ AC_ARG_ENABLE([qemux86hyb],
         [
           case "${enableval}" in
              yes) qemux86hyb=true
-                  TDKINTEGRATION_HYBRID_LIBS="-ldvrmgr -lqamsrc -ltrm -ltrh" 
+                  TDKINTEGRATION_HYBRID_LIBS="-ldvrmgr -lqamsrc -ltrm -ltrh"
                   MEDIAFRAMEWORK_HYBRID_LIBS="";;
            no) qemux86hyb=false ;;
           *) AC_MSG_ERROR([bad value ${enableval} for --enable-qemux86hyb ]) ;;
@@ -113,7 +113,7 @@ AC_ARG_ENABLE([client],
         [
           case "${enableval}" in
              yes) CLIENT=true
-                  SUBDIR_CLIENT="TR069_stub NetSrvMgr_stub";;
+                  SUBDIR_CLIENT=" ";;
            no) CLIENT=false ;;
           *) AC_MSG_ERROR([bad value ${enableval} for --enable-client ]) ;;
            esac
@@ -133,6 +133,86 @@ AC_ARG_ENABLE([quemux86mc],
            ],
          [echo "client build is enable"])
 AM_CONDITIONAL([QEMUX86MC], [test x$QEMUX86MC = xtrue])
+
+AC_ARG_ENABLE([trm],
+         AS_HELP_STRING([--enable-trm],[enable trm (default is no)]),
+         [
+           case "${enableval}" in
+              yes) TRM=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" TRM_stub "],
+                          [echo trm enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" TRM_stub "],
+                          [echo trm enabled in Client]) ;;
+             no) TRM=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-trm ]) ;;
+             esac
+            ],
+           [echo "trm component is not enabled"])
+AM_CONDITIONAL([trm], [test x$trm = xtrue])
+
+AC_ARG_ENABLE([dtcp],
+         AS_HELP_STRING([--enable-dtcp],[enable dtcp (default is no)]),
+         [
+           case "${enableval}" in
+              yes) DTCP=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" DTCP_stub "],
+                          [echo dtcp enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" DTCP_stub "],
+                          [echo dtcp enabled in Client]) ;;
+             no) DTCP=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-dtcp ]) ;;
+             esac
+            ],
+           [echo "dtcp component is not enabled"])
+AM_CONDITIONAL([dtcp], [test x$dtcp = xtrue])
+
+AC_ARG_ENABLE([snmp],
+         AS_HELP_STRING([--enable-snmp],[enable snmp (default is no)]),
+         [
+           case "${enableval}" in
+              yes) SNMP=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" SNMP_stub "],
+                          [echo snmp enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" SNMP_stub "],
+                          [echo snmp enabled in Client]) ;;
+             no) SNMP=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-snmp ]) ;;
+             esac
+            ],
+           [echo "snmp component is not enabled"])
+AM_CONDITIONAL([snmp], [test x$snmp = xtrue])
+
+AC_ARG_ENABLE([tr69],
+         AS_HELP_STRING([--enable-tr69],[enable tr69 (default is no)]),
+         [
+           case "${enableval}" in
+              yes) TR069=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" TR069_stub "],
+                          [echo tr69 enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" TR069_stub "],
+                          [echo tr69 enabled in Client]) ;;
+             no) TR069=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-tr69 ]) ;;
+             esac
+            ],
+           [echo "tr69 component is not enabled"])
+AM_CONDITIONAL([tr69], [test x$tr69 = xtrue])
+
+AC_ARG_ENABLE([netsrvmgr],
+         AS_HELP_STRING([--enable-netsrvmgr],[enable netsrvmgr (default is no)]),
+         [
+           case "${enableval}" in
+              yes) NetSrvMgr=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" NetSrvMgr_stub "],
+                          [echo netsrvmgr enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" NetSrvMgr_stub "],
+                          [echo netsrvmgr enabled in Client]) ;;
+             no) NetSrvMgr=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-netsrvmgr ]) ;;
+             esac
+            ],
+           [echo "netsrvmgr component is not enabled"])
+AM_CONDITIONAL([netsrvmgr], [test x$netsrvmgr = xtrue])
 
 AC_ARG_ENABLE([audiocapturemgr],
          AS_HELP_STRING([--enable-audiocapturemgr],[enable audiocapturemgr (default is no)]),
