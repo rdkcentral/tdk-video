@@ -46,8 +46,16 @@ std::string DSHalAgent::testmodulepre_requisites()
     if(ret == 0)
     {
         DEBUG_PRINT(DEBUG_LOG,"\n Application Successfully connected with IARMBUS\n");
-
+#ifdef DSMGR_INIT
+        DEBUG_PRINT(DEBUG_LOG,"\ndsMgr Init\n");
         dsMgr_init();
+#else
+	DEBUG_PRINT(DEBUG_LOG,"\nSeparate Initializations\n");
+	dsDisplayInit();
+	dsAudioPortInit();
+	dsVideoPortInit();
+	dsVideoDeviceInit();
+#endif
 
         DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule pre_requisites --> Exit\n");
         return "SUCCESS";
@@ -70,8 +78,16 @@ bool DSHalAgent::testmodulepost_requisites()
     DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule post_requisites --> Entry\n");
  
     IARM_Result_t ret;
+#ifdef DSMGR_TERM
+    DEBUG_PRINT(DEBUG_LOG,"\ndsMgr Term\n");
     dsMgr_term();
-    
+#else
+    DEBUG_PRINT(DEBUG_TRACE, "\nSeparate Terminations\n");
+    dsVideoDeviceTerm();
+    dsVideoPortTerm();
+    dsAudioPortTerm();
+    dsDisplayTerm();
+#endif
     vpHandle = 0;
     vdHandle = 0;
     apHandle = 0;
