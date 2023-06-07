@@ -111,6 +111,22 @@ network()
 	stress-ng --sequential 1 --class network --exclude dccp,sctp,sock -t 3m --times --metrics-brief --log-file /tmp/stressng-report.txt ; $TDK_PATH/HWPerf_metric_parser.sh stress-ng_Network ; cat $TDK_PATH/logs/logparser-results.txt
 }
 
+file()
+{
+	stress-ng --sequential 1 --class filesystem --exclude binderfs,chattr,fiemap,xattr,iomix,copy-file,fanotify,procfs -t 1s --times --metrics-brief --log-file /tmp/stressng-report.txt ; $TDK_PATH/HWPerf_metric_parser.sh File ; cat $TDK_PATH/logs/logparser-results.txt
+}
+
+thermalzonetest()
+{
+	stress-ng --matrix 0 --tz -t 60 --log-brief -v --times --metrics-brief --log-file /tmp/stressng-report.txt ; $TDK_PATH/HWPerf_metric_parser.sh ThermalZoneTest ; cat $TDK_PATH/logs/logparser-results.txt
+}
+
+schedulertest()
+{
+	stress-ng --sequential 1 --class scheduler -t 20s --exclude netlink-task,vforkmany,clone,sem-sysv,schedpolicy,session,hrtimers,softlockup --metrics-brief --log-file /tmp/stressng-report.txt ; $TDK_PATH/HWPerf_metric_parser.sh SchedulerTest ; cat $TDK_PATH/logs/logparser-results.txt
+}
+
+
 #$# count the number of arguments passed
 arg_count=$#
 
@@ -139,7 +155,10 @@ then
 	echo "16  Signals"
 	echo "17  Timer"
 	echo "18  Network"
-        echo "19  all"
+        echo "19  File"
+	echo "20  ThermalZoneTest"
+	echo "21  SchedulerTest"
+	echo "22  all"
         read -p "Enter your Input : " value
         set -- $value
 fi
@@ -201,7 +220,16 @@ case $1 in
 	Network|18)
 		network
 		;;
-        all|19)
+	File|19)
+		file
+		;;
+	ThermalZoneTest|20)
+		thermalzonetest
+		;;
+        SchedulerTest|21)
+		schedulertest
+		;;
+        all|22)
                 io
                 switch
                 stress
@@ -219,6 +247,9 @@ case $1 in
 		signals
 		timer
 		network
+		file
+		thermalzonetest
+		schedulertest
                 bench
                 ;;
 #if a user provides a false argument, it will print
