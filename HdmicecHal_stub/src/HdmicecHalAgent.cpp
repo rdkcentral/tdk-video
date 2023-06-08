@@ -20,6 +20,19 @@
 #include "HdmicecHal.h"
 #include "HdmicecHalAgent.h"
 
+// Function to check which message was transmitted
+bool checkFrameRequested(uint8_t frame)
+{
+    for (int i = 0; i < cec_frame_size_tx; i++)
+    {
+        if (cec_frame_tx[i] == frame)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Function to store input cec frame string into tx array
 static void get_cec_frame_tx(char *frame)
 {
@@ -40,22 +53,53 @@ static void get_cec_frame_tx(char *frame)
 static void get_cec_frame_rx(unsigned char *frame, int size)
 {
         char token[5];
+	received_status = 0;
+	DEBUG_PRINT(DEBUG_TRACE, "\nFiltering Messages\n");
         for (int i = 0; i < size; i++){
              sprintf(token,"%02X", frame[i]);
              cec_frame_rx[cec_frame_size_rx] = (int)strtol(token,NULL, 16);
              cec_frame_size_rx++;
-        }
+
         switch(cec_frame_rx[OPCODE_OFFSET]){
 	    case CEC_VERSION:
-        case REPORT_POWER_STATUS:
+                    if (checkFrameRequested(GET_CEC_VERSION))
+                    {
+                           DEBUG_PRINT(DEBUG_TRACE, "\nReceived CEC_VERSION\n");
+                           received_status = 1;
+                           break;
+                    }
+            case REPORT_POWER_STATUS:
+                    if (checkFrameRequested(GIVE_DEVICE_POWER_STATUS))
+                    {
+                           DEBUG_PRINT(DEBUG_TRACE, "\nReceived REPORT_POWER_STATUS\n");
+                           received_status = 1;
+                           break;
+                    }
 	    case DEVICE_VENDOR_ID:
+                    if (checkFrameRequested(GIVE_DEVICE_VENDOR_ID))
+                    {
+                            DEBUG_PRINT(DEBUG_TRACE, "\nReceived DEVICE_VENDOR_ID\n");
+                            received_status = 1;
+                            break;
+                    }
 	    case SET_MENU_LANGUAGE:
+                    if (checkFrameRequested(GET_MENU_LANGUAGE))
+                    {
+                            DEBUG_PRINT(DEBUG_TRACE, "\nReceived SET_MENU_LANGUAGE\n");
+                            received_status = 1;
+                            break;
+                    }
 	    case FEATURE_ABORT:
-		          received_status = 1;
-		          break;
+                    if (checkFrameRequested(ABORT))
+                    {
+                            DEBUG_PRINT(DEBUG_TRACE, "\nReceived FEATURE_ABORT\n");
+                            received_status = 1;
+                            break;
+                    }
 	    default:
-		          received_status = 0;
+	         DEBUG_PRINT(DEBUG_TRACE, "\nSkipping unwanted message\n");
     	}
+	}
         DEBUG_PRINT(DEBUG_TRACE, "Rx frames stored successfully\n");
 }
 
