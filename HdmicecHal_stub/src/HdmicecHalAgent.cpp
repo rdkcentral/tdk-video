@@ -21,13 +21,15 @@
 #include "HdmicecHalAgent.h"
 
 // Function to check which message was transmitted
-bool checkFrameRequested(uint8_t frame)
+bool checkFrameRequested(unsigned char frame)
 {
     for (int i = 0; i < cec_frame_size_tx; i++)
     {
+	DEBUG_PRINT(DEBUG_TRACE, "\ncec_frame_tx[%d] = %02X frame = %02X\n", i, cec_frame_tx[i], frame);
         if (cec_frame_tx[i] == frame)
         {
-            return true;
+            DEBUG_PRINT(DEBUG_TRACE, "\nMatch found : cec_frame_tx[%d] = %02X frame = %02X\n", i, cec_frame_tx[i], frame);
+	    return true;
         }
     }
     return false;
@@ -54,52 +56,68 @@ static void get_cec_frame_rx(unsigned char *frame, int size)
 {
         char token[5];
 	received_status = 0;
+	int opcode_offset = OPCODE_OFFSET;
+	if (cec_frame_size_rx != 0)
+	{
+	    DEBUG_PRINT(DEBUG_TRACE, "\nAlready received %d frames\n",cec_frame_size_rx);
+	    opcode_offset = cec_frame_size_rx + opcode_offset;
+	    DEBUG_PRINT(DEBUG_TRACE, "\nOpcode offset = %d\n",opcode_offset);
+	}
 	DEBUG_PRINT(DEBUG_TRACE, "\nFiltering Messages\n");
         for (int i = 0; i < size; i++){
              sprintf(token,"%02X", frame[i]);
              cec_frame_rx[cec_frame_size_rx] = (int)strtol(token,NULL, 16);
              cec_frame_size_rx++;
-
-        switch(cec_frame_rx[OPCODE_OFFSET]){
-	    case CEC_VERSION:
+	}
+        switch(cec_frame_rx[opcode_offset]){
+ 	    case CEC_VERSION:
+                    DEBUG_PRINT(DEBUG_TRACE, "\nReceived CEC_VERSION\n");
                     if (checkFrameRequested(GET_CEC_VERSION))
                     {
-                           DEBUG_PRINT(DEBUG_TRACE, "\nReceived CEC_VERSION\n");
                            received_status = 1;
+			   DEBUG_PRINT(DEBUG_TRACE, "\nBreaking as intended message was received\n");
                            break;
                     }
+		    DEBUG_PRINT(DEBUG_TRACE, "\nSkipping as this is not the expected message\n");
             case REPORT_POWER_STATUS:
+		    DEBUG_PRINT(DEBUG_TRACE, "\nReceived REPORT_POWER_STATUS\n");
                     if (checkFrameRequested(GIVE_DEVICE_POWER_STATUS))
                     {
-                           DEBUG_PRINT(DEBUG_TRACE, "\nReceived REPORT_POWER_STATUS\n");
                            received_status = 1;
+			   DEBUG_PRINT(DEBUG_TRACE, "\nBreaking as intended message was received\n");
                            break;
                     }
+		    DEBUG_PRINT(DEBUG_TRACE, "\nSkipping as this is not the expected message\n");
 	    case DEVICE_VENDOR_ID:
+		    DEBUG_PRINT(DEBUG_TRACE, "\nReceived DEVICE_VENDOR_ID\n");
                     if (checkFrameRequested(GIVE_DEVICE_VENDOR_ID))
                     {
-                            DEBUG_PRINT(DEBUG_TRACE, "\nReceived DEVICE_VENDOR_ID\n");
                             received_status = 1;
+			    DEBUG_PRINT(DEBUG_TRACE, "\nBreaking as intended message was received\n");
                             break;
                     }
+		    DEBUG_PRINT(DEBUG_TRACE, "\nSkipping as this is not the expected message\n");
 	    case SET_MENU_LANGUAGE:
+		    DEBUG_PRINT(DEBUG_TRACE, "\nReceived SET_MENU_LANGUAGE\n");
                     if (checkFrameRequested(GET_MENU_LANGUAGE))
                     {
-                            DEBUG_PRINT(DEBUG_TRACE, "\nReceived SET_MENU_LANGUAGE\n");
                             received_status = 1;
+			    DEBUG_PRINT(DEBUG_TRACE, "\nBreaking as intended message was received\n");
                             break;
                     }
+		    DEBUG_PRINT(DEBUG_TRACE, "\nSkipping as this is not the expected message\n");
 	    case FEATURE_ABORT:
+		    DEBUG_PRINT(DEBUG_TRACE, "\nReceived FEATURE_ABORT\n");
                     if (checkFrameRequested(ABORT))
                     {
-                            DEBUG_PRINT(DEBUG_TRACE, "\nReceived FEATURE_ABORT\n");
                             received_status = 1;
+			    DEBUG_PRINT(DEBUG_TRACE, "\nBreaking as intended message was received\n");
                             break;
                     }
+		    DEBUG_PRINT(DEBUG_TRACE, "\nSkipping as this is not the expected message\n");
 	    default:
 	         DEBUG_PRINT(DEBUG_TRACE, "\nSkipping unwanted message\n");
     	}
-	}
         DEBUG_PRINT(DEBUG_TRACE, "Rx frames stored successfully\n");
 }
 
@@ -193,7 +211,14 @@ static void messageOpcodeAndOperandDecoder()
         char result[100];
         std::stringstream vendor_id;
         std::vector<uint8_t> language;
-        switch(cec_frame_rx[OPCODE_OFFSET]){
+	int opcode_offset = OPCODE_OFFSET;
+        if (cec_frame_size_rx != 0)
+        {
+            DEBUG_PRINT(DEBUG_TRACE, "\nAlready received %d frames\n",cec_frame_size_rx);
+            opcode_offset = cec_frame_size_rx + opcode_offset;
+            DEBUG_PRINT(DEBUG_TRACE, "\nOpcode offset = %d\n",opcode_offset);
+        }
+        switch(cec_frame_rx[opcode_offset]){
             case CEC_VERSION:
                 DEBUG_PRINT(DEBUG_TRACE, "Decoding CEC Version\n");
                 sprintf(result,"Version: %s",version_[cec_frame_rx[OPRAND_OFFSET]]);
