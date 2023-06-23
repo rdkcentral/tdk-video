@@ -1490,6 +1490,46 @@ void AampAgent::AampGetAudioTrack(IN const Json::Value& req, OUT Json::Value& re
         return;
 }
 
+/*************************************************************************************************
+Function Name   : AampCheckPlaybackRate
+
+Description     : This function is used to calculate the playback rate using GetPlaybackPosition()
+**************************************************************************************************/
+void AampAgent::AampCheckPlaybackRate(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampCheckPlaybackRate Entry \n");
+        char details[100];
+        double position, previous_position, play_jump, average_play_rate, play_jump_cumulative = 0;
+        int i;
+        for (i =0 ; i < 5; i++)
+        {
+             position = mSingleton->GetPlaybackPosition();
+             if (position < 0)
+             {
+                DEBUG_PRINT (DEBUG_TRACE, "PlaybackPosition not retrieved");
+                DEBUG_PRINT (DEBUG_TRACE, "AampCheckPlaybackRate Exit \n");
+                response["result"] = "FAILURE";
+                response["details"] = "PlaybackPosition not retrieved";
+                return;
+             }
+             DEBUG_PRINT (DEBUG_TRACE, "PlaybackPosition: %lf\n",position);
+             if ( i!=0 )
+             {
+                play_jump =  position - previous_position;
+                DEBUG_PRINT (DEBUG_TRACE, "Play jump %lf\n",play_jump);
+                play_jump_cumulative += play_jump;
+             }
+             previous_position = position;
+             sleep(1);
+        }
+        average_play_rate = play_jump_cumulative/(i-1);
+        DEBUG_PRINT (DEBUG_TRACE, "Average Playback Rate obtained as %lf\n",average_play_rate);
+        sprintf(details, "Average Playback Rate obtained as %lf",average_play_rate);
+        response["result"] = "SUCCESS";
+        response["details"] = details;
+        DEBUG_PRINT (DEBUG_TRACE, "AampCheckPlaybackRate Exit \n");
+        return;
+}
 
 /*************************************************************************
 Function Name   : AampGetPreferredDRM
