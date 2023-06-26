@@ -171,7 +171,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=fa
    gfloat play_jump = 0;
    gfloat play_jump_previous = 99;
    gfloat previous_position = 0;
-   gint jump_buffer = 1;
+   gint jump_buffer = 3;
    gint jump_buffer_small_value = 3;
    GstStateChangeReturn state_change;
 
@@ -748,7 +748,7 @@ void setflags()
 	{
 	    flags |= GST_PLAY_FLAG_BUFFERING;
 	}
-#ifndef NO_NATIVE_AUDIO
+#ifdef NATIVE_AUDIO
 	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
 #endif
 #ifndef NO_NATIVE_VIDEO

@@ -119,6 +119,8 @@ bool use_audioSink = true;
 gint flags;
 bool ignorePlayJump = false;
 bool buffering_flag = true;
+bool checkAudioSamplingrate = false;
+int sampling_rate = 0;
 
 /*
  * Playbin flags
@@ -199,7 +201,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    gfloat _play_jump = 0;
    int play_jump =0; 
    int play_jump_previous = 99;
-   gint jump_buffer = 1;
+   gint jump_buffer = 3;
    gint frame_buffer = 3;
    gint audio_frame_buffer = 3;
    gint jump_buffer_small_value = 2;
@@ -211,6 +213,11 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    guint64 dropped_frames_audio;
    guint64 rendered_frames_audio;
    guint64 previous_rendered_frames_audio;
+   guint64 audio_sampling_rate;
+   int audio_sampling_rate_buffer = 3;
+   int audio_sampling_rate_diff = 0;
+   int audio_sampling_diff = 0;
+   int rate_diff_threshold = -3;
    float drop_rate;
    int frame_rate;
    float dropped_percentage;
@@ -319,9 +326,10 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    {
         g_object_get (audioSink,"stats",&audio_structure,NULL);
         gst_structure_get_uint64(audio_structure, "rendered", &rendered_frames_audio);
+	previous_rendered_frames_audio = rendered_frames_audio;
    }
 
-  
+   
    do
    {
 	Sleep(1);
@@ -355,31 +363,49 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
         {
              g_object_get (audioSink,"stats",&audio_structure,NULL);
 
-             previous_rendered_frames_audio = rendered_frames_audio;
-
              if (audio_structure && (gst_structure_has_field(audio_structure, "dropped") || gst_structure_has_field(audio_structure, "rendered")))
              {
                  gst_structure_get_uint64(audio_structure, "dropped", &dropped_frames_audio);
                  gst_structure_get_uint64(audio_structure, "rendered", &rendered_frames_audio);
-		 printf("\n\nAUDIO_FRAMES ");
+		 printf("\nAUDIO_FRAMES ");
                  printf(" Dropped: %" G_GUINT64_FORMAT, dropped_frames_audio);
                  printf(" Rendered: %" G_GUINT64_FORMAT, rendered_frames_audio);
              }
 	     if ((rendered_frames_audio <= previous_rendered_frames_audio))
                 audio_frame_buffer -= 1;
              fail_unless(audio_frame_buffer != 0 , "Audio frames are not rendered properly");
+	     if (checkAudioSamplingrate)
+	     {
+		audio_sampling_rate = rendered_frames_audio - previous_rendered_frames_audio;
+    		printf("\nAudio sampling rate = %" G_GUINT64_FORMAT, audio_sampling_rate);
+    		previous_rendered_frames_audio = rendered_frames_audio;
+
+
+		audio_sampling_diff = sampling_rate - (int)audio_sampling_rate;
+		printf(" Sampling rate = %d",sampling_rate);
+		printf(" Audio_sampling_rate_diff = %d",audio_sampling_diff);
+
+
+		if (audio_sampling_diff > 0)
+		{
+			if (audio_sampling_diff <= rate_diff_threshold)
+				audio_sampling_rate_buffer -= 1;
+		}
+
+		fail_unless(audio_sampling_rate_buffer != 0, "Audio sampling rate was not rendered properly");
+	     }
 
         }
 
 
         fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
 	_currentPosition = currentPosition;
-        difference = abs((_currentPosition/GST_SECOND) - (startPosition/GST_SECOND));
+        difference = abs((_currentPosition/GST_SECOND) - previous_position);
         printf("\nCurrent Position : %0.2f , Playing after operation for: %0.2f",(_currentPosition/GST_SECOND),difference);
 
 	_play_jump = (_currentPosition/GST_SECOND) - previous_position;
 	printf("\nPlay jump = %0.2f", _play_jump);
-	play_jump = (int)_play_jump;
+	play_jump = round(_play_jump);
 
         if (ResolutionSwitchTest)
 	{
@@ -399,13 +425,13 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	        printf("\nres-comparison value = %d",resList[resItr]);
             }	
 	}
-
 	/*
 	 * Ignore if first jump is 0
 	 */
         if ((play_jump != NORMAL_PLAYBACK_RATE) && !(((play_jump == 0) && (play_jump_previous == 99))) && !(play_jump == -1))
+	{
             jump_buffer -=1;
-
+        }
 	/*
 	 * For small jumps until 2 , jump_buffer is 2
 	 */
@@ -428,7 +454,9 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	}
 
 	if (play_jump > 3)
+	{
 		jump_buffer = 0;
+	}
 
         message = gst_bus_pop_filtered (bus, (GstMessageType) ((GstMessageType) GST_MESSAGE_STATE_CHANGED |
                                              (GstMessageType) GST_MESSAGE_ERROR | (GstMessageType) GST_MESSAGE_EOS |
@@ -465,7 +493,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	if (!ignorePlayJump)
 	     fail_unless(jump_buffer != 0 , "Playback is not happening at the expected rate");
 
-	previous_position = (currentPosition/GST_SECOND);
+	previous_position = (_currentPosition/GST_SECOND);
 	if(videoUnderflowReceived && bufferUnderflowTest)
         {
             printf("\nVideo Underflow received breaking from PlaySeconds");
@@ -490,16 +518,26 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
            break;
 	}
 	play_jump_previous = play_jump;
-   }while((difference <= RunSeconds) && !data.terminate && !data.eosDetected);
 
-   if(use_westerossink_fps)
-   {
-   	frame_rate = int(rendered_frames - previous_rendered_frames);
-   	totalFrames = frame_rate * (currentPosition/GST_SECOND);
-   	dropped_percentage = (dropped_frames/totalFrames);
-   	if(dropped_percentage != 0.00)
+        if(use_westerossink_fps)
+        {
+   	   frame_rate = int(rendered_frames - previous_rendered_frames);
+   	   totalFrames = frame_rate * (currentPosition/GST_SECOND);
+   	   dropped_percentage = (dropped_frames/totalFrames);
+   	   if(dropped_percentage != 0.00)
 	   	printf("\nDropped Percentage : %f\n", dropped_percentage);
-   	fail_unless(dropped_percentage < 1.0 , "Dropped frames are observed");
+   	   fail_unless(dropped_percentage < 1.0 , "Dropped frames are observed");
+        }
+	RanForTime++;
+   }while((RanForTime < RunSeconds) && !data.terminate && !data.eosDetected);
+ 
+   if (use_audioSink)
+   {
+   	if (checkAudioSamplingrate)
+   	{	   	
+   		if (sampling_rate == 96)
+                     rate_diff_threshold = 5;
+   	}
    }
 
    printf("\nExiting from PlaySeconds, currentPosition is %0.2f\n",(_currentPosition/GST_SECOND));
@@ -527,7 +565,7 @@ void setflags()
 	{
 	    flags |= GST_PLAY_FLAG_BUFFERING;
 	}
-#ifndef NO_NATIVE_AUDIO
+#ifdef NATIVE_AUDIO
 	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
 #endif
 #ifndef NO_NATIVE_VIDEO
@@ -1162,7 +1200,7 @@ GST_START_TEST (test_generic_playback)
     printf("\nVideo height = %d\nVideo width = %d", height, width);
 
     int n_audio;
-    g_object_get (playbin, "n-audio", n_audio, NULL);
+    g_object_get (playbin, "n-audio", &n_audio, NULL);
 
     if (n_audio != 0)
     {
@@ -2341,6 +2379,44 @@ EXIT :
 }
 GST_END_TEST;
 
+GST_START_TEST(test_only_audio)
+{
+	GstElement *playbin;
+	GstElement *westerosSink;
+	gint flags;
+	GstMessage *message;
+	GstBus *bus;
+	MessageHandlerData data;
+	checkPTS = false;
+	use_westerossink_fps = false;
+
+	playbin = gst_element_factory_make(PLAYBIN_ELEMENT , NULL);
+	fail_unless(playbin != NULL ,"Failed to create Playbin Element");
+
+	fail_unless (m_play_url != NULL , "Playback URL should not be NULL");
+	g_object_set(playbin, "uri", m_play_url, NULL);
+
+	g_object_get(playbin,"flags",&flags,NULL);
+	flags = GST_PLAY_FLAG_AUDIO;
+	g_object_set(playbin,"flags", flags,NULL);
+
+
+	GST_FIXME( "Setting to Playing State\n");
+        fail_unless (gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+        GST_FIXME( "Set to Playing State\n");
+
+	PlaySeconds(playbin,play_timeout);
+
+	if (playbin)
+    	{
+       		fail_unless (gst_element_set_state (playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
+    	}
+	
+	gst_object_unref (playbin);
+}
+GST_END_TEST;
+
+
 static Suite *
 media_pipeline_suite (void)
 {
@@ -2508,6 +2584,20 @@ media_pipeline_suite (void)
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
+    else if (strcmp ("test_audio_sampling_rate", tcname) == 0)
+    {
+       checkAudioSamplingrate = true;
+       tcase_add_test (tc_chain, test_play_pause_pipeline);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_only_audio", tcname) == 0)
+    {
+       checkAudioSamplingrate = true;
+       tcase_add_test (tc_chain, test_only_audio);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
     else
     {
        printf("\nNo such testcase is present in app");
@@ -2574,7 +2664,9 @@ int main (int argc, char **argv)
 	    (strcmp ("test_rialto_play_pause", tcname) == 0) ||
 	    (strcmp ("test_rialto_EOS", tcname) == 0) ||
 	    (strcmp ("test_rialto_resolution", tcname) == 0) ||
-            (strcmp ("test_EOS", tcname) == 0))
+            (strcmp ("test_EOS", tcname) == 0) ||
+	    (strcmp ("test_audio_sampling_rate", tcname) == 0) ||
+	    (strcmp ("test_only_audio", tcname) == 0))
 	{
 	    strcpy(m_play_url,argv[2]);
             arg = 3;
@@ -2613,6 +2705,10 @@ int main (int argc, char **argv)
 		if (strcmp ("checkAudioFPS=no", argv[arg]) == 0)
                 {
                     use_audioSink = false;
+                }
+		if (strcmp ("checkASR=yes", argv[arg]) == 0)
+                {
+                    checkAudioSamplingrate = true;
                 }
 		if (strcmp ("checkPTS=no", argv[arg]) == 0)
                 {
@@ -2670,6 +2766,11 @@ int main (int argc, char **argv)
                 {
                     Flush_Pipeline = false;
                 }
+		if (strstr (argv[arg], "sampling_rate=") != NULL)
+		{
+		    strtok (argv[arg], "=");
+		    sampling_rate = atoi (strtok (NULL, "="));
+		}
             }
 
             printf ("\nArg : TestCase Name: %s \n", tcname);
