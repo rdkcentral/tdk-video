@@ -196,17 +196,20 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_06_Write_Exe_Check"
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
-   for profile in "${profiles[@]}"; do
-	cat $path/$profile | grep -i 'w.*x' >/dev/details
-        
-	if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-        	echo "FAILURE: $profile contains write and execute permission"
-		exit
-        else
-        	echo "SUCCESS: $profile has no write and execute permission together"
-        fi
-
-    done
+for profile in "${profiles[@]}"; do
+	if ! [ -f "$path$profile" ]; then
+                echo "FAILURE: $profile profile is missing"
+                exit
+	else
+		cat $path/$profile | grep -i 'w.*x' >/dev/details
+       	        if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+        		echo "FAILURE: $profile contains write and execute permission"
+			exit
+        	else
+        		echo "SUCCESS: $profile has no write and execute permission together"
+        	fi
+	fi
+done
 
 }
 
@@ -219,19 +222,22 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_07_Capability_Check"
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
-	for profile in "${profiles[@]}"; do
-		cat $path/$profile | grep -i 'DAC_OVERRIDE\|MAC_ADMIN' >/dev/details
-
+for profile in "${profiles[@]}"; do
+	if ! [ -f "$path$profile" ]; then
+		echo "FAILURE: $profile profile is missing"
+		exit
+    	else
+		cat $path$profile | grep -i 'DAC_OVERRIDE\|MAC_ADMIN' >/dev/details
 		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-                	echo "FAILURE: Admin/Override Capability Roles are present in $profile"
-                	exit
-        	else
-		echo "SUCCESS: Admin/Override Capability roles are not present in $profile"
-		fi
-	done
+			echo "FAILURE: Admin/Override Roles are present in $profile"
+			exit
+       	        else
+			echo "SUCCESS: Admin/Override roles are not present in $profile"
+       		fi
+	fi
+done
+
 }
-
-
 
 #function to check no profiles
 function no_profiles_check {
@@ -574,13 +580,18 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 for profile in "${profiles[@]}"; do
-	if [ "$profile" == "irMgrMain" ]; then
-		cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-			echo "FAILURE: Override Roles are present in $profile"
-			exit
-		else
-			echo "SUCCESS: Override roles are not present in $profile"
+	if ! [ -f "$path$profile" ]; then
+		echo "FAILURE: $profile profile is missing"
+		exit
+    	else
+		if [ "$profile" == "usr.bin.irMgrMain" ]; then
+			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+				echo "FAILURE: Override Roles are present in $profile"
+				exit
+			else
+				echo "SUCCESS: Override roles are not present in $profile"
+			fi
 		fi
 	fi
 done
@@ -595,13 +606,18 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 for profile in "${profiles[@]}"; do
-	if [ "$profile" == "default" ]; then
-	cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-			echo "FAILURE: Override Roles are present in $profile"
-			exit
-		else
-			echo "SUCCESS: Override roles are not present in $profile"
+	if ! [ -f "$path$profile" ]; then
+		echo "FAILURE: $profile profile is missing"
+		exit
+    	else
+		if [ "$profile" == "default" ]; then
+			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+				echo "FAILURE: Override Roles are present in $profile"
+				exit
+			else
+				echo "SUCCESS: Override roles are not present in $profile"
+			fi
 		fi
 	fi
 done
@@ -616,13 +632,18 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 for profile in "${profiles[@]}"; do
-	if [ "$profile" == "audiocapturemgr" ]; then
-		cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-			echo "SUCCESS: Override Roles are present in $profile"
-			exit
-		else
-			echo "FAILURE: Override roles are not present in $profile"
+	if ! [ -f "$path$profile" ]; then
+		echo "FAILURE: $profile profile is missing"
+		exit
+   	else
+		if [ "$profile" == "usr.bin.audiocapturemgr" ]; then
+			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+				echo "SUCCESS: Override Roles are present in $profile"
+				exit
+			else
+				echo "FAILURE: Override roles are not present in $profile"
+			fi
 		fi
 	fi
 done
@@ -636,13 +657,18 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 for profile in "${profiles[@]}"; do
-	if [ "$profile" == "lighttpd" ]; then
-		cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-			echo "SUCCESS: Override Roles are present in $profile"
-			exit
-		else
-			echo "FAILURE: Override roles are not present in $profile"
+	if ! [ -f "$path$profile" ]; then
+		echo "FAILURE: $profile profile is missing"
+		exit
+    	else
+		if [ "$profile" == "usr.sbin.lighttpd" ]; then
+			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+				echo "SUCCESS: Override Roles are present in $profile"
+				exit
+			else
+				echo "FAILURE: Override roles are not present in $profile"
+			fi
 		fi
 	fi
 done
