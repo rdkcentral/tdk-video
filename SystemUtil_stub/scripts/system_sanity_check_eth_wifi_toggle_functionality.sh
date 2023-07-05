@@ -20,12 +20,6 @@
 #Test Objective     : To Validate Ethernet_Wifi Toggle functionality.
 #Automation_approch : To Toggle to Ethernet/Eth0 or Wifi/Wlano interfaces based on currently connected interface and Validate the ping response.
 #Expected Output    : When network interface is altered the test case expects ping response to be success within the given timeout.
-#logfile
-logfile="$(dirname "$0")/system_sanity_check_eth_wifi_toggle_functionality.log"
-#clear the logfile
-> "$logfile"
-#Redirecting output to the log file
-exec >> "$logfile"
 date
 echo -e "Executing script : system_sanity_check_eth_wifi_toggle_functionality"
 echo -e "======================================="
@@ -44,18 +38,25 @@ source "$config_file"
 eth_interface="eth0"
 wifi_interface="wlan0"
 
+
+#Check if ssid, password,timeout,wpa_supplicant_file_path and security are configured
+missing_parameters=()
+
+[ -z "$ssid" ] && missing_parameters+=("SSID")
+[ -z "$password" ] && missing_parameters+=("PASSWORD")
+[ -z "$wpa_supplicant_file_path" ] && missing_parameters+=("WPA SUPPLICANT FILEPATH")
+[ -z "$security" ] && missing_parameters+=("SECURITY MODE")
+
+if [ ${#missing_parameters[@]} -gt 0 ]; then
+  echo "Error: ${missing_parameters[*]} not found in config file.Pls configure and re-run."
+  exit 1
+fi
+
 #Read SSID,password,wpa supplicant file path,timeout & security from configuration file
 ssid=$(grep "ssid=" "$config_file" | cut -d "=" -f 2 | tr -d '[:space:]')
 password=$(grep "password=" "$config_file" | cut -d "=" -f 2 | tr -d '[:space:]')
 wpa_supplicant_file_path=$(grep "wpa_supplicant_file_path=" "$config_file" | cut -d "=" -f 2 | tr -d '[:space:]')
-timeout=$(grep "timeout=" "$config_file" | cut -d "=" -f 2 | tr -d '[:space:]')
 security=$(grep "security=" "$config_file" | cut -d "=" -f 2 | tr -d '[:space:]')
-
-#Check if SSID and password are configured
-if [ -z "$ssid" ] || [ -z "$password" ] || [ -z "$timeout" ] || [ -z "$wpa_supplicant_file_path" ] || [ -z "$security" ]; then
-  echo "Error:  SSID/PASSWORD/TIMEOUT/WPA SUPPLICANT FILEPATH/SECURITY MODE  is not configured in the configuration file,Pls configure and re-run"
-  exit 1
-fi
 
 #Append network configuration to wpa_supplicant.conf
 echo -e "network={
@@ -87,6 +88,7 @@ if [ "$current_connection" = "$eth_interface" ]; then
   ip link set "$eth_interface" down
   ip link set "$wifi_interface" up
   SECONDS=0
+  timeout=60
   #Initialize IP_ADDRESS variable
   IP_ADDRESS=""
   #Extract the assigned IP,Connect to Wi-Fi network using wpa_supplicant&Ping the extracted Wifi interface IP
@@ -110,6 +112,7 @@ if [ "$current_connection" = "$eth_interface" ]; then
   ip link set "$wifi_interface" down
   ip link set "$eth_interface" up
   SECONDS=0
+  timeout=60
   #Initialize IP_ADDRESS variable
   IP_ADDRESS=""
   #Ping the extracted Eth interface Ip
@@ -134,6 +137,7 @@ else
   ip link set "$wifi_interface" down
   ip link set "$eth_interface" up
   SECONDS=0
+  timeout=60
   #Initialize IP_ADDRESS variable
   IP_ADDRESS=""
   #Extract the assigned IP address & Ping
@@ -155,6 +159,7 @@ else
   ip link set "$eth_interface" down
   ip link set "$wifi_interface" up
   SECONDS=0
+  timeout=60
   #Initialize IP_ADDRESS variable
   IP_ADDRESS=""
   #Extract the assigned IP address for the WiFi interface

@@ -49,7 +49,7 @@ ACTIVE_SERVICES=()
 temp_file="$(dirname "$0")/pre_lightsleep_services.tmp"
 
 #Services running before lightsleep
-systemctl --type=service --state=running --no-legend | awk '{print $1}' > "$temp_file"
+systemctl --type=service --state=running --no-legend | awk '{print $1}' | grep -v "dropbear" > "$temp_file"
 pre_lightsleep_services=($(cat "$temp_file"))
 
 echo "*******************************************************"

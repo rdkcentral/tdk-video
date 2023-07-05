@@ -17,10 +17,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
+#Note 1: To execute all testcases in shell script execute with full name and all argument.
+#Eg    : sh system_sanity_check.sh all
+#Note 2: To execute specific testcase/testcases in shell script execute with the full name followed by testcase number.
+#Eg    : sh system_sanity_check.sh 1/sh system_sanity_check.sh 1 2
 date
 echo -e "Executing script : System_Sanity_Check"
-echo -e "======================================="
+echo -e "============================================="
 echo -e "Test Execution Name is: System_Sanity_Check"
+echo -e "============================================="
+#Function to print the help message
+print_help() {
+  echo "----------------------------------------------------"
+  echo " Basic Sanity Testcase Help"
+  echo "----------------------------------------------------"   
+  echo "Note: To execute all testcases in shell script execute with full name - sh system_sanity_check.sh all"
+  echo "Note: To execute specific testcase/testcases in shell script execute with the full name followed by testcase number - sh system_sanity_check.sh 1/sh system_sanity_check.sh 1 2"
+  echo "Test cases:"
+  echo "  1: DUT Connectivity."
+  echo "  2: SSH Connectivity of DUT."
+  echo "  3: DUT Standby state."
+  echo "  4: Essential Services required for framework running in DUT."
+  echo "  5: Essential Processes required for framework running in DUT."
+  echo "  6: Essential Logfiles required for framework running in DUT."
+  echo "  7: Display the Storage of directories and it's Partitions in DUT."
+  echo "  8: Validate versions of gstreamer libraries."
+  echo "  9: Check if Services are failed or in activating state from systemd services."
+  echo " 10: Validate the System Device Details available in the device with regex pattern."
+  echo " 11: Validate RDK6 component versions with the Config file in the DUT."
+  echo " 12: Display supported resolution modes, aspect ratios and status of the currently connected output"
+  echo " 13: Unknown keypress check."
+
+  exit 0
+}
 
 # Read the config file
 config_file="$(dirname "$0")/sanity_check.config"
@@ -32,7 +61,11 @@ fi
 source $config_file
 
 
-# Checking if Dut is connected to Ethernet or Wifi and have Internet Connectivity
+#Checking if Dut is connected to Ethernet or Wifi and have Internet Connectivity
+testcase1 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 1 : DUT Connectivity "
+echo "---------------------------------------------------------------------------------------"
 ETHERNET_IP=$(ifconfig eth0 | awk '/inet addr/{print substr($2,6)}')
 if [ -z "$ETHERNET_IP" ];then
   echo "Ethernet is not connected"
@@ -41,9 +74,7 @@ else
   echo "ip address : $ETHERNET_IP"
     ping -c 3 8.8.8.8
     if [ "$?" -eq "0" ]; then
-            echo "Ethernet interface is connected and has internet connectivity"
-    else
-            echo "Ethernet interface is connected but doesn't have internet connectivity"
+     echo "Ethernet interface is connected and has internet connectivity"
     fi
 fi
 
@@ -55,16 +86,15 @@ else
   echo "ip address : $WIFI_IP"
     ping -c 3 8.8.8.8
     if [ "$?" = "0"  ]; then
-            echo "WIFI interface is connected and has internet connectivity"
-    else
-            echo "WIFI interface is connected but doesn't have internet connectivity"
+     echo "WIFI interface is connected and has internet connectivity"
     fi
 fi
-
-echo "---------------------------------------------------------------------------------------"
-
+}
 #Validate SSH Connectivity of DUT through netcat command
-
+testcase2 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 2 :  SSH Connectivity of DUT "
+echo "---------------------------------------------------------------------------------------"
 if [[ -n "$(ifconfig eth0 | awk '/inet addr/{print substr($2,6)}')" ]]; then
   ip_address="$(ifconfig eth0 | awk '/inet addr/{print substr($2,6)}')"
 elif [[ -n "$(ifconfig wlan0 | awk '/inet addr/{print substr($2,6)}')" ]]; then
@@ -72,29 +102,42 @@ elif [[ -n "$(ifconfig wlan0 | awk '/inet addr/{print substr($2,6)}')" ]]; then
 fi
 
 IP_ADDRESS="$ip_address"
-#SSH port number
-PORT_NUMBER=22
 
-if echo | timeout 5 nc -w 3 "${IP_ADDRESS}" "${PORT_NUMBER}" > /dev/null 2>&1; then
-    echo  "SSH is running on IP_ADDRESS:${IP_ADDRESS} PORT_NUMBER:${PORT_NUMBER}"
-else
-    echo  "SSH is not running on IP_ADDRESS:${IP_ADDRESS} PORT_NUMBER:${PORT_NUMBER}"
-fi
+SECONDS=0
+TIMEOUT=20
+#Loop through a range of port numbers and checking for SSH port
+port=1
+until [ $port -gt 65535 ]; do
+  if [[ $SECONDS -gt $TIMEOUT ]]; then
+    echo "IP_ADDRESS:${IP_ADDRESS}, Timeout: No SSH port found"
+    return 1
+  fi
+  output=$(echo >/dev/null | nc -w 1 $IP_ADDRESS $port 2>&1)
+  if [[ -n $output ]] && echo "$output" | grep -q "SSH"; then
+    echo "SSH is running on IP_ADDRESS:${IP_ADDRESS} PORT_NUMBER: $port"
+    return 1
+  fi
+  ((port++))
+done
 
-echo "---------------------------------------------------------------------------------------"
+}
 
 #Checking Device Standby state of DUT
-
+testcase3 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 3 : DUT Standby state "
+echo "---------------------------------------------------------------------------------------"
 if [[ $(systemctl status systemd-suspend.service | grep Active) == *"active (standby)"* ]]; then
   echo "DUT is currently in standby mode."
 else
   echo "DUT is not in standby mode."
 fi
-
-echo "---------------------------------------------------------------------------------------"
-
+}
 #Validate Status of the Essential Services required for framework running in DUT
-
+testcase4 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 4 : Essential Services required for framework running in DUT "
+echo "---------------------------------------------------------------------------------------"
 running_services=()
 failed_services=()
 
@@ -107,19 +150,21 @@ do
     fi
 done
 
-echo "Running_services:{"${running_services[@]}"}" | sed 's/[[:blank:]]/,/g'
+echo "Running_services:{"${running_services[*]}"}" | sed 's/[[:blank:]]/,/g'
 
 #Printing Failed Services
 if [[ ${#failed_services[@]} -gt 0 ]];then
-  echo "FAILURE:FAILED_SERVICES:{"${failed_services[*]}"}" | sed 's/[[:blank:]]/,/g'
+  echo "FAILURE: FAILED_SERVICES:{"${failed_services[*]}"}" | sed 's/[[:blank:]]/,/g'
 else
-  echo "SUCCESS:All ESSENTIAL SERVICES ARE RUNNING"
+  echo "SUCCESS: All ESSENTIAL SERVICES ARE RUNNING"
 fi
 
+}
+#Checking if Essential Processes are running in DUT
+testcase5 () {
 echo "---------------------------------------------------------------------------------------"
-
-# Checking if Essential Processes are running in DUT
-
+echo  "Testcase 5 : Essential Processes required for framework running in DUT "
+echo "---------------------------------------------------------------------------------------"
 running_process=()
 failed_process=()
 
@@ -132,18 +177,21 @@ do
     fi
 done
 
-echo "Running_processes:{"${running_process[@]}"}" | sed 's/[[:blank:]]/,/g'
+echo "Running_processes:{"${running_process[*]}"}" | sed 's/[[:blank:]]/,/g'
 
 #Printing Failed processes
 if [[ ${#failed_process[@]} -gt 0 ]];then
-  echo "FAILURE:FAILED_PROCESSES:{"${failed_process[*]}"}" | sed 's/[[:blank:]]/,/g'
+  echo "FAILURE: FAILED_PROCESSES:{"${failed_process[*]}"}" | sed 's/[[:blank:]]/,/g'
 else
-  echo "SUCCESS:All ESSENTIAL PROCESSES ARE RUNNING"
+  echo "SUCCESS: All ESSENTIAL PROCESSES ARE RUNNING"
 fi
+}
 
+#Checking if Required Logfiles are Present in DUT
+testcase6 () {
 echo "---------------------------------------------------------------------------------------"
-
-# Checking if Required Logfiles are Present in DUT
+echo  "Testcase 6 : Essential Logfiles required for framework running in DUT "
+echo "---------------------------------------------------------------------------------------"
 
 Files_Present=()
 Files_Missing=()
@@ -158,20 +206,24 @@ do
   fi
 done
 
-echo "Required_LOG_FILES:{"${Files_Present[@]}"}" | sed 's/[[:blank:]]/,/g'
+echo "Required_LOG_FILES:{'"${Files_Present[*]}"'}" | sed 's/[[:blank:]]/,/g'
 
 #Printing Missing LOG_FILES
 if [[ ${#Files_Missing[@]} -gt 0 ]];then
-  echo "FAILURE:MISSSING_LOGFILES:{"${Files_Missing[@]}"}" | sed 's/[[:blank:]]/,/g'
+  echo "FAILURE: MISSSING_LOGFILES:{"${Files_Missing[*]}"}" | sed 's/[[:blank:]]/,/g'
 else
-  echo "SUCCESS:All REQUIRED LOG_FILES are Present"
+  echo "SUCCESS: All REQUIRED LOG_FILES are Present"
 fi
 
-echo "---------------------------------------------------------------------------------------"
+}
+
 #Test Objective     : To display the Storage of directories and it's Partitions in DUT.
 #Automation_approch : To display Storage of directories and Partitions.
 #Expected Output    : Display the available and used memory of each directories and it's associated partitions.
-
+testcase7 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 7 : Display the Storage of directories and it's Partitions in DUT "
+echo "---------------------------------------------------------------------------------------"
 # Specify the starting directory for the search
 starting_directory="/"
 
@@ -190,13 +242,19 @@ for directory in $(find "$starting_directory"* -maxdepth 0 -type d | grep -v "/p
     echo "Directory Space used: $directory_used | Directory Space available: $directory_available"
     echo "Partition Space used: $partition_used | Partition Space available: $partition_available "
   else
-    echo "Directory does not exist: $directory"
+    echo "FAILURE: Directory does not exist: $directory"
   fi
   echo "------------------------------------------------------------------"
 done
-#Test Objective     : To check if gstreamer libraries match with package version installed in DUT.
-#Automation_approch : To validate versions of gstreamer libraries.
-#ExpectedOutput     : Versions should match with the package version installed in DUT.
+}
+
+#Test Objective      : To check if gstreamer libraries match with package version installed in DUT.
+#Automation_approach : To validate versions of gstreamer libraries.
+#ExpectedOutput      : validate versions of gstreamer libraries.
+testcase8 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 8 : Validate versions of gstreamer libraries "
+echo "---------------------------------------------------------------------------------------"
 version=$(gst-launch-1.0 --version | grep -o 'GStreamer [0-9.]*' | cut -d ' ' -f 2)
 echo "Checking version of GStreamer libraries..."
 
@@ -204,42 +262,270 @@ matching=()
 not_matching=()
 
 for lib in $(find / -name "*lib*gst*.so" -type f 2>/dev/null  ); do
-    # Check library file version
+  #Check only if version is not empty
+  if [[ -n $(strings "$lib" | grep "$version") ]]; then
+    #Check library file version
     if strings "$lib" | grep "$version" ; then
         matching+=("$lib")
     else
         not_matching+=("$lib")
     fi
+  fi
 done 2>&1 >/dev/null
 
-echo "Summary:"
-echo "Total libraries checked: ${#matching[@]} + ${#not_matching[@]}"
-echo "*******************************************************"
-echo "Libraries matching GStreamer package version installed in DUT: ${#matching[@]}"
-if [[ ${#matching[@]} -gt 0 ]]; then
-    echo "*******************************************************"
-    echo "Matching libraries:"
-    printf '%s\n' "${matching[@]}"
-	echo "*******************************************************"
-fi
-echo "*******************************************************"
-echo "Libraries not matching GStreamer package version installed in DUT: ${#not_matching[@]}"
+echo "Total libraries checked: Matching: ${#matching[@]} :: Non Matching: ${#not_matching[@]}"
 if [[ ${#not_matching[@]} -gt 0 ]]; then
     echo "*******************************************************"
     echo "Non-matching libraries:"
     printf '%s\n' "${not_matching[@]}"
     echo "*******************************************************"
+    echo "FAILURE: Libraries are not matching GStreamer package version installed in DUT: ${#not_matching[@]}"
+else
+    echo "SUCCESS: Libraries are matching with GStreamer package version installed in DUT"
 fi
-echo "---------------------------------------------------------------------------------------"
+}
+
+#Test Objective       : To check whether any systemd services are in failed or activating state.
+#Automation_approach  : Check if Services are failed or in activating state from systemd services.
+#ExpectedOutput       : Services which are failed or activating should be listed from systemd services.
+testcase9 () {
+echo "----------------------------------------------------------------------------------------------------------"
+echo  "Testcase 9 : Check if Services are failed or in activating state from systemd services"
+echo "----------------------------------------------------------------------------------------------------------"
+
+echo "List of the Systemd Services in Device"
+Failed_Services()
+{
+RESPONSE=$(systemctl -a --state=failed,activating | grep 'failed\|activating')
+echo "$RESPONSE"
+}
+Failed_Services
+
+if [[ $RESPONSE ]];then
+	echo "FAILURE: A few systemd services are in failed or activating state"
+else
+	echo "SUCCESS: No systemd services are in failed or activating state"
+fi
+}
+
+#Test Objective       : To Validate the System Device Details available in the device with regex pattern.
+#Automation_approach  : To read parameters from file /tmp/.deviceDetails.cache and check using regex for each parameter.
+#ExpectedOutput       : Device Parameters should be matched with the Regex Pattern.
+testcase10 () {
+echo "----------------------------------------------------------------------------------------------------------"
+echo  "Testcase 10 : Validate the System Device Details available in the device with regex pattern"
+echo "----------------------------------------------------------------------------------------------------------"
+
+#Check if wifi is supported
+IS_WIFI_SUPPORTED=$(cat /etc/device.properties | grep -q WIFI_SUPPORT=true)
+if $IS_WIFI_SUPPORTED
+then
+  echo -e "Device supports wifi\n"
+else
+  echo -e "Device does not have wifi Support\n"
+fi
+
+#Check if Bluetooth is supported
+IS_BLUETOOTH_SUPPORTED=$(cat /etc/device.properties | grep -q BLUETOOTH_ENABLED=true)
+if $IS_BLUETOOTH_SUPPORTED
+then
+  echo -e "Device supports Bluetooth\n"
+else
+  echo -e "Device does not have Bluetooth Support\n"
+fi
+
+FAILEDPARAMETER=()
+
+#Check if box_IP is in expected format
+BOX_IP=$(cat /tmp/.deviceDetails.cache | grep boxIP | cut -d "=" -f2)
+FORMAT=$(ifconfig | grep 'inet addr:' | cut -d ':' -f2 | awk '{ print $1}'| grep -v '[127.0|172.17].0.1')
+if [ "$BOX_IP" == "$FORMAT"  ]; then
+  echo -e "Verification of box_IP is SUCCESS \nValue=${BOX_IP}\n"
+else
+  echo -e "Verification of box_IP is FAILURE \nValue=${BOX_IP}\n"
+  BOX_IP_DEVICE_DETAILS=$(cat /tmp/.deviceDetails.cache | grep boxIP)
+  FAILEDPARAMETER=("$BOX_IP_DEVICE_DETAILS")
+fi
+
+VALIDATE_VALUE()
+{
+  PARAMETER=$1
+  #Check if $PARAMETER is in expected format
+  echo "Executing ExecuteCommand...."
+  RESPONSE=$(cat /tmp/.deviceDetails.cache)
+  RESULT=$(echo "$RESPONSE" | grep "$PARAMETER")
+  regex=""
+  if [ "$PARAMETER" == "bluetooth_mac" ]; then
+    if $IS_BLUETOOTH_SUPPORTED
+    then
+      regex='^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]){2}$'
+    else
+      regex='^$'
+    fi
+  elif [ "$PARAMETER" == "boxip" ]; then
+    regex='^([0-9a-f]*[:-])+([0-9a-f])*$'
+  elif [ $PARAMETER == "build_type" ]; then
+    regex='(VBN|DEV)'
+  elif [ $PARAMETER == "estb_mac" ]; then
+    regex='^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]){2}$'
+  elif [ $PARAMETER == "eth_mac" ]; then
+    regex='^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]){2}$'
+  elif [ $PARAMETER == "imageVersion" ]; then
+    regex=$(cat /tmp/.deviceDetails.cache | grep imageVersion | cut -d "=" -f2)
+  elif [ $PARAMETER == "model_number" ]; then
+    regex='[A-Z0-9]*'
+  elif [ $PARAMETER == "rf4ce_mac" ]; then
+    regex='^([0-9A-Fa-f]{2}[:-]){7}([0-9A-Fa-f]){2}$'
+  elif [ $PARAMETER == "wifi_mac" ]; then
+    if $IS_WIFI_SUPPORTED
+    then
+      regex='^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]){2}$'
+    else
+      regex='^$'
+    fi
+  fi
+  VALUE=$(cat /tmp/.deviceDetails.cache | grep $PARAMETER  | cut -d "=" -f2)
+  if [[ $VALUE =~ $regex ]]; then
+    echo -e "Verification of $PARAMETER is SUCCESS \nValue=${VALUE}\n"
+  else
+    if [[ $PARAMETER == "wifi_mac" && ! $IS_WIFI_SUPPORTED && ! -z $VALUE  ]]; then
+      echo "wifi_mac should be empty for this device(WIFI NOT SUPPORTED)"
+    elif [[ $PARAMETER == "bluetooth_mac" && ! $IS_BLUETOOTH_SUPPORTED && ! -z $VALUE ]]; then
+      echo "bluetooth_mac should be empty for this device(Bluetooth NOT SUPPORTED)"
+    fi
+    echo -e "Verification of $PARAMETER is FAILED \nValue=${VALUE}\n"
+    FAILEDPARAMETER+=( "$PARAMETER=$VALUE" )
+  fi
+}
+
+#Check if bluetooth_mac is in expected format
+VALIDATE_VALUE "bluetooth_mac"
+#Check if build_type is in expected format
+VALIDATE_VALUE "build_type"
+#Check if estb_mac is in expected format
+VALIDATE_VALUE "estb_mac"
+#Check if eth_mac is in expected format
+VALIDATE_VALUE "eth_mac"
+#Check if imageVersion is in expected format
+VALIDATE_VALUE "imageVersion"
+#Check if model_number is in expected format
+VALIDATE_VALUE "model_number"
+#Check if rf4ce_mac is in expected format
+VALIDATE_VALUE "rf4ce_mac"
+#Check if wifi_mac is in expected format
+VALIDATE_VALUE "wifi_mac"
+
+
+#Printing Summary
+if [ ${#FAILEDPARAMETER[@]} -gt 0 ]; then
+    failedParameters=$(IFS=,; echo "${FAILEDPARAMETER[*]}")
+    echo "FAILURE: FailedParameters:{${failedParameters}}"
+else
+    echo "SUCCESS: All parameters are verified"
+fi
+}
+
+#Test Objective      : To Validate RDK6 component versions with the Config file in the DUT.
+#Automation_approach : To Check if Versions are matching in the DUT with RDK6 release components.
+#ExpectedOutput      : Versions should match with the configured file in DUT.
+testcase11 () {
+echo "---------------------------------------------------------------------------------------------------"
+echo  "Testcase 11 : Validate RDK6 component versions with the Config file in the DUT "
+echo "---------------------------------------------------------------------------------------------------"
+
+MISMATCHED=()
+RESPONSE=$(cat "$config_file")
+Version_Validation() {
+    PARAMETER=$1
+#Check if $PARAMETER is in expected format
+echo "Version Validation of $PARAMETER"
+RESULT=$(echo "$RESPONSE" | grep "$PARAMETER")
+echo "Executing ExecuteCommand...."
+command=""
+#Compares the version from DUT with $parameter mentioned in configuration file
+if [ "$PARAMETER" = "kernel_version" ]; then
+command=$(uname -r | cut -d "-" -f1)
+elif [ "$PARAMETER" == "Gstreamer_version" ]; then
+command=$(gst-inspect-1.0 --version | sed -n 2p | cut -d " " -f2)
+elif [ "$PARAMETER" == "wpa_supplicant_version" ]; then
+command=$(wpa_supplicant -v | grep wpa_supplicant | cut -d ' ' -f2 | grep -o '[0-9.]*')
+elif [ "$PARAMETER" == "Glibc_version" ]; then
+command=$(ls -l /lib/libc.so.6 | cut -d '-' -f3)
+elif [ "$PARAMETER" == "Openssl_version" ]; then
+command=$(openssl version | cut -d " " -f2 | grep -o '[0-9.]*')
+elif [ "$PARAMETER" == "dbus_daemon_version" ]; then
+command=$(dbus-daemon --version | grep D-Bus | cut -d ' ' -f5)
+elif [ "$PARAMETER" == "bluetoothctl_version" ]; then
+command=$(bluetoothctl --version | cut -d ":" -f2 | sed 's/^[[:space:]]*//')
+elif [ "$PARAMETER" == "systemd_version" ]; then
+command=$(systemctl --version | grep "systemd" | cut -d " " -f2)
+elif [ "$PARAMETER" == "apparmor_version" ]; then
+command=$(apparmor_parser -V | grep "version" | cut -d " " -f4)
+elif [ "$PARAMETER" == "YOCTO_VERSION" ]; then
+command=$(grep VERSION_ID /etc/os-release | cut -d '=' -f2)
+elif [ "$PARAMETER" == "Lightning_version" ]; then
+command=$(grep "Lightning v" /home/root/lxresui/js/lightning.min.js | cut -d' ' -f4 | grep -o '[0-9.]*' )
+elif [ "$PARAMETER" == "Browser_WPEWebkit_version" ]; then
+command=$(strings /usr/lib/libWPEWebKit-1.0.so.3 | grep -oE '/usr/src/debug/wpe-webkit/[^:]+' | grep -oE '[0-9.]+' | head -n1)
+fi
+
+
+command=$(echo "$command" | tr -d '[:space:]')
+echo "Version Specified in configuration file for RDK6:${RESULT// } & Response From DUT:${PARAMETER// }=$command"
+VALUE=$(echo "$RESULT" | cut -d "=" -f2 | tr -d '[:space:]')
+if [ "$VALUE" == "$command" ]; then
+echo -e "Version Verification of $PARAMETER is Successful\n"
+else
+echo -e "Version Verification of $PARAMETER is Failed\n"
+MISMATCHED+=( "$PARAMETER=$VALUE" )
+fi
+}
+#Check if kernel version is matching with the Given value
+Version_Validation "kernel_version"
+#Check if Gstreamer version is matching with the specified value
+Version_Validation "Gstreamer_version"
+#Check if wpa_supplicant version is matching with the specified value
+Version_Validation "wpa_supplicant_version"
+#Check if Glibc version is matching with the specified value
+Version_Validation "Glibc_version"
+#Check if Openssl version is matching with the specified value
+Version_Validation "Openssl_version"
+#Check if dbus-daemon version is matching with the specified value
+Version_Validation "dbus_daemon_version"
+#Check if bluetoothctl version is matching with the specified value
+Version_Validation "bluetoothctl_version"
+#Check if systemd version is matching with the specified value
+Version_Validation "systemd_version"
+#Check if apparmor version is matching with the specified value
+Version_Validation "apparmor_version"
+#Check if YOCTO_VERSION is matching with the specified value
+Version_Validation "YOCTO_VERSION"
+#Check if Lightning version is matching with the specified value
+Version_Validation "Lightning_version"
+#Check if Browser_WPEWebkit version is matching with the specified value
+Version_Validation "Browser_WPEWebkit_version"
+
+#Printing Summary
+if [ ${#MISMATCHED[@]} -gt 0 ]; then
+    failedParameters=$(IFS=,; echo "${MISMATCHED[*]}")
+    echo "FAILURE: FailedParameters:{${failedParameters}}"
+else
+    echo "SUCCESS: All parameters are verified"
+fi
+}
+
 #Test Objective      : To display supported resolution modes, aspect ratios and status of the currently connected output.
 #Automation_approach : To check whether card0-HDMI-A-1 is present(It is a virtual file present only when hdmi interface is detected).
 #ExpectedOutput      : Supported resolution modes, aspect ratios and status of the currently connected output.
-
+testcase12 (){
+echo "-----------------------------------------------------------------------------------------------------------"
+echo "Testcase 12: Display supported resolution modes, aspect ratios and status of the currently connected output"
+echo "-----------------------------------------------------------------------------------------------------------"
 hdmi_device_path=$(find /sys/class/drm -name "*HDMI*")
 # Check if HDMI device is present and HDMI is connected
 if [[ -z $hdmi_device_path ]] ||  [[ $(cat "$hdmi_device_path/status") != "connected" ]]; then
-    echo "HDMI is not connected"
-    exit 1
+    echo "FAILURE: HDMI is not connected"
+    return 1
 fi
 
 # Function to calculate the aspect ratio (resolution width/resolution height)
@@ -281,7 +567,7 @@ echo "-------------------------------------------------------------"
 current_resolution=$(fbset -s | grep -o '[0-9]\{3,4\}x[0-9]\{3,4\}')
 if [[ -z $current_resolution ]]; then
     echo "Failed to extract resolution."
-    exit 1
+    return 1
 fi
 # Check if the connected device name is available
 device_name=$(cat "$hdmi_device_path/device/device/graphics/fb0/name" 2>/dev/null)
@@ -297,8 +583,154 @@ aspect_ratio_width=$((resolution_width / divisor))
 aspect_ratio_height=$((resolution_height / divisor))
 # Print the aspect ratio
 echo "Current Aspect Ratio: $aspect_ratio_width:$aspect_ratio_height"
+}
+
+
+#Test Objective     : To connect to bluetooth device and detect unknown keypress events in the logfile if any.
+#Automation_approach: Pair and Connect to bluetooth device and find error messages if any.
+#Expected Output    : Detect unknown keypress events in the logfile and report if any.
+#pre_requisite      : The script expects the bluetooth device(emulator) to be discoverable.
+#Note               : Pls accept the pairing popup on bluetooth device(emulator) when prompted
+#print the note and prerequisite
+testcase13 () {
+echo "---------------------------------------------------------------------------------------"
+echo "Testcase 13: Unknown keypress check"
 echo "---------------------------------------------------------------------------------------"
 
+echo "pre_requisite      : The script expects the bluetooth device(emulator) to be discoverable"
+echo "Note               : Pls accept the pairing popup on bluetooth device(emulator) when prompted"
 
+#Checking if device name and timeout_seconds are configured
+missing_parameters=()
 
+[ -z "$device_name" ] && missing_parameters+=("DEVICE NAME")
+[ -z "$timeout_seconds" ] && missing_parameters+=("TIMEOUT_SECONDS")
 
+if [ ${#missing_parameters[@]} -gt 0 ]; then
+  echo "Error: ${missing_parameters[*]} not found in config file.Pls configure and re-run."
+  return 1
+fi
+
+#Removing paired devices from rdk-device if any
+rdk_device=($(bluetoothctl <<< paired-devices | awk '{print $2}' |  grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}'))
+#Looping through the MAC addresses and removing the paired devices if any
+for mac_address in $rdk_device; do
+  {
+    echo "remove $mac_address"
+    sleep 5
+  } | bluetoothctl
+done
+
+#Scan for available devices
+scan_output=""
+scan_output=$( {
+  echo "scan on"
+  sleep 20
+  echo "quit"
+} | bluetoothctl )
+
+#Finding the MAC address of the specified device
+#Check if any devices were found
+if [[ -z "$scan_output" ]]; then
+  echo "No devices found.Device are not discoverable"
+else
+  echo "Devices found: "
+  echo "$scan_output"
+fi
+
+#Fetch the MAC address of the device based on its name
+device_mac=$(echo "$scan_output" | grep -i "Device.*"$device_name"" | grep -oE '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}')
+
+#Check if the bluetooth MAC address was found
+if [[ -z "$device_mac" ]]; then
+    echo "FAILURE: "$device_name" Bluetooth MAC address was not found. Pls make the device discoverable and try again"
+    return 1
+fi
+echo "-----------------------------------------------------------"
+echo "Emulator mac retrieved: Device name: $device_name:$device_mac"
+echo "-----------------------------------------------------------"
+#Pair to the device
+#Wait until the device is paired
+echo "Pairing to the device"
+echo "-------------------------------------------------------------"
+echo "Please confirm the pairing request on the screen"
+echo "------------------------------------------------------------"
+{
+  echo "pair $device_mac"
+  sleep 20
+  echo "yes"
+  sleep 5
+} | bluetoothctl
+
+SECONDS=0
+TIMEOUT_PAIR_CONNECT=10
+until [[ "$(bluetoothctl <<< "info $device_mac")" =~ "Paired: yes" ]] ; do
+  if [[ SECONDS -gt TIMEOUT_PAIR_CONNECT ]]; then
+    echo "FAILURE: Failed to pair with the device: "$device_name": "$device_mac", Pls rerun and accept the pairing popup"
+    return 1
+  fi
+  sleep 5
+done
+
+echo "----------------------------------------------------------------------"
+echo "Device is paired Successfully to Device name: $device_name:$device_mac"
+echo "----------------------------------------------------------------------"
+
+#Connect to the device
+#Wait until the device is connected
+echo "Connecting to the device"
+{
+echo "connect $device_mac"
+sleep 5
+} | bluetoothctl
+
+SECONDS=0
+until  [[ "$(bluetoothctl <<< "info $device_mac")" =~ "Connected: yes" ]]  ; do
+  if [[ SECONDS -gt TIMEOUT_PAIR_CONNECT ]]; then
+    echo "FAILURE: Failed to connect with the device: $device_name: $device_mac, Pls rerun and accept the pairing popup"
+    return 1
+  fi
+  sleep 5
+done
+
+echo "--------------------------------------------------------------------------"
+echo "Device is connected Successfully to Device name: $device_name:$device_mac"
+echo "--------------------------------------------------------------------------"
+
+echo "Monitoring Wpeframework.log for unknown keypress events"
+#Running tail command with a timeout to monitor keypress events
+output=$(timeout "$timeout_seconds" tail -n 0 -f "$log_file" | grep -nE "unknown key code|common key code not found")
+if [ -z "$output" ]; then
+    echo "No unknown keypress event logs found"
+else
+    echo "$output"
+fi
+
+}
+#Check if "all" is provided as an argument
+if [ "$1" = "all" ]; then
+  #Iterating dynamically through test case number
+  max_test_cases=0
+  i=1
+  until [ "$(type -t "testcase$i")" != "function" ]; do
+    test_case_function="testcase$i"
+    max_test_cases=$((i - 1))
+    "$test_case_function"
+     echo " "
+    i=$((i + 1))
+  done
+elif [ $# -gt 0 ]; then
+  #Looping through each provided test case number
+  for test_case_number in "$@"; do
+    test_case_function="testcase$test_case_number"
+    if [ "$(type -t "$test_case_function")" = "function" ]; then
+      "$test_case_function"
+      echo " "
+    else
+      echo "Test case number: $test_case_number doesn't exist"
+      print_help
+    fi
+  done
+else
+  print_help
+fi
