@@ -21,6 +21,9 @@
 
 /*Work around to take care of getting AAMP_EVENT_TUNED print in agentconsole log. This will be removed later.*/
 bool AAMP_EVENT_TUNED_received=false;
+bool speed_changed_received=false;
+bool bitrate_changed_received=false;
+bool cc_handle_received=false;
 char errordescription[ERROR_DESCRIPTION_LENGTH]={0};
 pthread_cond_t cond1;
 pthread_mutex_t aamp_pthread_lock;
@@ -70,6 +73,7 @@ public:
                         }
                         break;
                 case AAMP_EVENT_SPEED_CHANGED:
+                        speed_changed_received = true;
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_SPEED_CHANGED\n");
                         break;
                 case AAMP_EVENT_EOS:
@@ -85,9 +89,11 @@ public:
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_PROGRESS\n");
                         break;
                 case AAMP_EVENT_CC_HANDLE_RECEIVED:
+                        cc_handle_received=true;
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_CC_HANDLE_RECEIVED\n");
                         break;
                 case AAMP_EVENT_BITRATE_CHANGED:
+                        bitrate_changed_received=true;
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_BITRATE_CHANGED\n");
                         break;
                }
@@ -317,14 +323,21 @@ void AampAgent::AampTune (IN const Json::Value& req, OUT Json::Value& response)
 	/*Work around to take care of getting AAMP_EVENT_TUNED print in agentconsole log. This will be removed later.*/
 	sleep(10);
 	if (AAMP_EVENT_TUNED_received)
-		printf("\n received event is : AAMP_EVENT_TUNED\n");
+    {
+        response["details"] = "AAMP TUNE call is success, received AAMP_EVENT_TUNED";
+        if (cc_handle_received)
+        {
+            response["details"] = "AAMP TUNE call is success, received AAMP_EVENT_TUNED, AAMP_EVENT_CC_HANDLE_RECEIVED";
+        }
+    }
 	else
-		printf ("\n No tuned event is received\n");
+    {
+        response["details"] = "AAMP TUNE call is success";
+    }
 
         if (strlen(errordescription)==0)
         {
                 response["result"] = "SUCCESS";
-                response["details"] = "AAMP TUNE call is success";
                 DEBUG_PRINT (DEBUG_TRACE, "AAMP TUNE call is success\n");
         }
         else
@@ -472,8 +485,15 @@ void AampAgent::AampSetRate (IN const Json::Value& req, OUT Json::Value& respons
         mSingleton->SetRate(rate);
         /* Sleep for 5 seconds to get AAMP_EVENT_SPEED_CHANGED event*/
         sleep(5);
+        if (speed_changed_received)
+        {
+            response["details"] = "AAMP Setrate call is fine, received AAMP_EVENT_SPEED_CHANGED";
+        }
+        else
+        {
+            response["details"] = "AAMP Setrate call is fine";
+        }
         response["result"] = "SUCCESS";
-        response["details"] = "AAMP Setrate call is fine";
 
         DEBUG_PRINT (DEBUG_TRACE, "AampSetRate Exit \n");
         return;
@@ -648,8 +668,15 @@ void AampAgent::AampSetRateAndSeek (IN const Json::Value& req, OUT Json::Value& 
         mSingleton->SetRateAndSeek(rate,seconds);
 	/* Sleep for 5 seconds to get AAMP_EVENT_BITRATE_CHANGED event*/
 	sleep(5);
+        if (bitrate_changed_received)
+        {
+            response["details"] = "AAMP SetRateAndSeek call is fine, received AAMP_EVENT_BITRATE_CHANGED";
+        }
+        else
+        {
+            response["details"] = "AAMP SetRateAndSeek call is fine";
+        }
         response["result"] = "SUCCESS";
-        response["details"] = "AAMP SetRateAndSeek call is fine";
         DEBUG_PRINT (DEBUG_TRACE, "AampSetRateAndSeek Exit \n");
         return;
 }
