@@ -31,8 +31,8 @@ print_help() {
   echo "----------------------------------------------------"
   echo " Basic Sanity Testcase Help"
   echo "----------------------------------------------------"   
-  echo "Note: To execute all testcases in shell script execute with full name - sh system_sanity_check.sh all"
-  echo "Note: To execute specific testcase/testcases in shell script execute with the full name followed by testcase number - sh system_sanity_check.sh 1/sh system_sanity_check.sh 1 2"
+  echo "Note: To execute all testcases available in this script: sh system_sanity_check.sh all"
+  echo "Note: To execute specific testcase/testcases from this script: sh system_sanity_check.sh 1 | sh system_sanity_check.sh 1 2"
   echo "Test cases:"
   echo "  1: DUT Connectivity."
   echo "  2: SSH Connectivity of DUT."
@@ -47,7 +47,7 @@ print_help() {
   echo " 11: Validate RDK6 component versions with the Config file in the DUT."
   echo " 12: Display supported resolution modes, aspect ratios and status of the currently connected output"
   echo " 13: Unknown keypress check."
-
+  echo " 14: Binary Files update checker."
   exit 0
 }
 
@@ -138,6 +138,13 @@ testcase4 () {
 echo "---------------------------------------------------------------------------------------"
 echo  "Testcase 4 : Essential Services required for framework running in DUT "
 echo "---------------------------------------------------------------------------------------"
+
+#Check if the paths are configured
+if [ -z "$services" ]; then
+  echo "The services are missing in the configuration file, Pls configure and re-run."
+  return 1
+fi
+
 running_services=()
 failed_services=()
 
@@ -154,7 +161,8 @@ echo "Running_services:{"${running_services[*]}"}" | sed 's/[[:blank:]]/,/g'
 
 #Printing Failed Services
 if [[ ${#failed_services[@]} -gt 0 ]];then
-  echo "FAILURE: FAILED_SERVICES:{"${failed_services[*]}"}" | sed 's/[[:blank:]]/,/g'
+  failedservices=$(IFS=,; echo "${failed_services[*]}")
+  echo "FAILURE: FAILED_SERVICES:{"${failedservices}"}" 
 else
   echo "SUCCESS: All ESSENTIAL SERVICES ARE RUNNING"
 fi
@@ -165,6 +173,13 @@ testcase5 () {
 echo "---------------------------------------------------------------------------------------"
 echo  "Testcase 5 : Essential Processes required for framework running in DUT "
 echo "---------------------------------------------------------------------------------------"
+
+#Check if the paths are configured
+if [ -z "$processes" ]; then
+  echo "The processes are missing in the configuration file, Pls configure and re-run."
+  return 1
+fi
+
 running_process=()
 failed_process=()
 
@@ -181,7 +196,8 @@ echo "Running_processes:{"${running_process[*]}"}" | sed 's/[[:blank:]]/,/g'
 
 #Printing Failed processes
 if [[ ${#failed_process[@]} -gt 0 ]];then
-  echo "FAILURE: FAILED_PROCESSES:{"${failed_process[*]}"}" | sed 's/[[:blank:]]/,/g'
+  failedprocesses=$(IFS=,; echo "${failed_process[*]}")
+  echo "FAILURE: FAILED_PROCESSES:{"${failedprocesses}"}" 
 else
   echo "SUCCESS: All ESSENTIAL PROCESSES ARE RUNNING"
 fi
@@ -192,6 +208,12 @@ testcase6 () {
 echo "---------------------------------------------------------------------------------------"
 echo  "Testcase 6 : Essential Logfiles required for framework running in DUT "
 echo "---------------------------------------------------------------------------------------"
+
+#Check if the paths are configured
+if [ -z "$LOG_FILES" ]; then
+  echo "The LOG_FILES are missing in the configuration file, Pls configure and re-run."
+  return 1
+fi
 
 Files_Present=()
 Files_Missing=()
@@ -210,7 +232,8 @@ echo "Required_LOG_FILES:{'"${Files_Present[*]}"'}" | sed 's/[[:blank:]]/,/g'
 
 #Printing Missing LOG_FILES
 if [[ ${#Files_Missing[@]} -gt 0 ]];then
-  echo "FAILURE: MISSSING_LOGFILES:{"${Files_Missing[*]}"}" | sed 's/[[:blank:]]/,/g'
+  failedlogfiles=$(IFS=,; echo "${Files_Missing[*]}")
+  echo "FAILURE: MISSSING_LOGFILES:{"${failedlogfiles}"}"
 else
   echo "SUCCESS: All REQUIRED LOG_FILES are Present"
 fi
@@ -224,17 +247,17 @@ testcase7 () {
 echo "---------------------------------------------------------------------------------------"
 echo  "Testcase 7 : Display the Storage of directories and it's Partitions in DUT "
 echo "---------------------------------------------------------------------------------------"
-# Specify the starting directory for the search
+#Specify the starting directory for the search
 starting_directory="/"
 
-# Find all main directories and validate each one and excluding proc since it is a virtual directory
+#Find all main directories and validate each one and excluding proc since it is a virtual directory
 for directory in $(find "$starting_directory"* -maxdepth 0 -type d | grep -v "/proc"); do
   if [ -d "$directory" ]; then
     echo "Validating Directory: $directory & Associated Partition: $partition "
-    # Checking the size of the directory
+    #Checking the size of the directory
     directory_used=$(du -sh "$directory" | awk '{print $1}')
     directory_available=$(df -hP "$directory" | awk 'NR==2 {print $4}')
-    # Checking the partition details of the directory
+    #Checking the partition details of the directory
     partition=$(df -hP "$directory" | awk 'NR==2 {print $1}')
     partition_used=$(df -hP "$directory" | awk 'NR==2 {print $3}')
     partition_available=$(df -hP "$directory" | awk 'NR==2 {print $4}')
@@ -466,7 +489,7 @@ command=$(grep VERSION_ID /etc/os-release | cut -d '=' -f2)
 elif [ "$PARAMETER" == "Lightning_version" ]; then
 command=$(grep "Lightning v" /home/root/lxresui/js/lightning.min.js | cut -d' ' -f4 | grep -o '[0-9.]*' )
 elif [ "$PARAMETER" == "Browser_WPEWebkit_version" ]; then
-command=$(strings /usr/lib/libWPEWebKit-1.0.so.3 | grep -oE '/usr/src/debug/wpe-webkit/[^:]+' | grep -oE '[0-9.]+' | head -n1)
+command=$(grep -o 'WPE_WEBKIT_VERSION=[0-9.]*' /version.txt | grep -o '[0-9.]*')
 fi
 
 
@@ -477,7 +500,7 @@ if [ "$VALUE" == "$command" ]; then
 echo -e "Version Verification of $PARAMETER is Successful\n"
 else
 echo -e "Version Verification of $PARAMETER is Failed\n"
-MISMATCHED+=( "$PARAMETER=$VALUE" )
+MISMATCHED+=( "$PARAMETER=$command" )
 fi
 }
 #Check if kernel version is matching with the Given value
@@ -591,7 +614,6 @@ echo "Current Aspect Ratio: $aspect_ratio_width:$aspect_ratio_height"
 #Expected Output    : Detect unknown keypress events in the logfile and report if any.
 #pre_requisite      : The script expects the bluetooth device(emulator) to be discoverable.
 #Note               : Pls accept the pairing popup on bluetooth device(emulator) when prompted
-#print the note and prerequisite
 testcase13 () {
 echo "---------------------------------------------------------------------------------------"
 echo "Testcase 13: Unknown keypress check"
@@ -707,6 +729,70 @@ else
 fi
 
 }
+
+#Test Objective     : To Compare binary files with image build date and report if any old binary files are found.
+#Automation_approach: List down all the files in the given locations and filter the files based on image build date.
+#Expected Output    : Lists Success when no old binaries are found and Failure when old binaries are found.
+testcase14 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 14 : Binary Files update checker "
+echo "---------------------------------------------------------------------------------------"
+
+#Check if the paths are configured
+if [ -z "$SEARCH_PATHS" ]; then
+  echo "The search paths are missing in the configuration file, Pls configure and re-run."
+  return 1
+fi
+
+#Splitting the SEARCH_PATHS variable into an array using the ',' delimiter
+IFS="," read -r -a search_paths <<< "$SEARCH_PATHS"
+
+#Find version.txt file and retrieve its date
+version_date=$(grep "BUILD_TIME" /version.txt | awk -F'"' '{print $2}' | awk -F' ' '{print $1}')
+if [[ -z "$version_date" ]]; then
+  echo "version.txt file not found or has an invalid format."
+  return 1
+fi
+
+#Get the image date in the format YYYY-MM-DD for comparison
+image_date=$(date -d "$version_date" +"%Y-%m-%d")
+formatted_date=$(date -d "$version_date" +"%b %d")
+echo "---------------------------------------------"
+echo "Image build date: $formatted_date"
+echo "---------------------------------------------"
+
+#Execute find command on search paths
+files=$(find "${search_paths[@]}" -type f \( ! -path "/proc/*" -a ! -path "/run/*" -a ! -path "/tmp/*" -a ! -path "/logs/*" -a ! -path "/sys/*" \) 2>/dev/null)
+
+#Array to store outdated binary files
+outdated_files_found=()
+
+#Execute find command on the specified search path
+for file in $files; do
+  #Filtering to ignore certain file extensions since they are not updated on regular basis
+  if [[ ! "$file" =~ \.(log|txt|sh|jpeg|jpg|png|config|csv)$ ]]; then
+    #Command lists out the last updated date of file
+    file_date=$(date -r "$file" +"%Y-%m-%d" 2>/dev/null)
+    #If the date is retrieved and less than the build date
+    if [[ -n "$file_date" ]] && [[ "$file_date" < "$image_date" ]]; then
+      #Convert the file_date to the desired format
+      formatted_file_date=$(date -d "$file_date" +"%b %d %Y")
+      echo "File: $file - Last Updated date: $formatted_file_date"
+      outdated_files_found+=($"file")
+    fi
+  fi
+done
+echo "-----------------------------------------------------------------------------------------------------------------"
+#Check if any outdated files are found
+if [ ${#outdated_files_found[@]} -gt 0 ]; then
+  echo "FAILURE: Old binary files are found and listed"
+else
+  echo "SUCCESS: No Old binary files found"
+fi
+echo "-----------------------------------------------------------------------------------------------------------------"
+}
+
+
 #Check if "all" is provided as an argument
 if [ "$1" = "all" ]; then
   #Iterating dynamically through test case number

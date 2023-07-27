@@ -17,32 +17,52 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-#Test Scenario:To validate Status of Plugins before and after reboot
-#Array for getting count of failed plugins
-FAILEDPLUGINS=()
-#logfile where pre and post reboot actions are captured
-logfile="$(find / -name "sanity_test_post_reboot_status.log"| head -n 1)"
+#logfile where post reboot actions are captured
+logfile="$(find / -name "sanity_test_reboot_testcase.log" -type f 2>/dev/null | head -n1 )"
 # Redirecting all output to the log file
 exec >> "$logfile"
 
-# Created an array to store the post-reboot status of plugins
+#Extract the pwd of config file from the log file
+config_file_path=$(grep "config file path" "$logfile" | awk -F ': ' '{print $2}')
+#Read the config file
+config_file="$config_file_path/sanity_check.config"
+if [ ! -f $config_file ];then
+  echo "Please place the config file $config_file in the before reboot Parent script path and re-execute script"
+  exit 1
+fi
+source $config_file
+
+
+testcase1 () {
+#Test Case Name     : Autostart:true Plugins status after reboot
+#Test Objective     : To validate Status of Plugins before and after reboot.
+#Automation_approach: List out the plugins for which autostart:true in /plugin directory and validate Status of Plugins before and after reboot.
+#Expected Output    : SUCCESS if plugin status are same before and after reboot.
+
+echo "*******************************************************"
+echo "Test Case Name : Autostart:true Plugins status after reboot"
+echo "*******************************************************"
+
+#Array for getting count of failed plugins
+FAILEDPLUGINS=()
+#Created an array to store the post-reboot status of plugins
 post_reboot_status=()
 
 echo "*******************************************************"
 echo "Plugins status after reboot"
 echo "*******************************************************"
 
-# Loop through all the JSON files in the directory
+#Loop through all the JSON files in the directory
 for file in /etc/WPEFramework/plugins/*.json
 do
-# Check if the file exists
+#Check if the file exists
 if [ -f "$file" ]; then
-    # Extract the plugin name from the file name
+    #Extract the plugin name from the file name
     plugin=$(basename "$file" .json)
 
-    # Check if the plugin is enabled in autostart
+    #Check if the plugin is enabled in autostart
     autostart=$(grep -q "\"autostart\":\s*true" "$file" && echo "true" || echo "false")
-    # If the plugin is enabled in autostart, execute the curl command
+    #If the plugin is enabled in autostart, execute the curl command
     if [ "$autostart" == "true" ]; then
       #Check the result using curl response
       result=$(curl --silent --header "Content-Type: application/json" --request POST --data "{\"jsonrpc\":\"2.0\",\"id\":
@@ -59,7 +79,7 @@ fi
 done
 
 #After reboot Pre-reboot status array is not fetched so grepping the array from logfile
-read -a pre_reboot_status_array <<< "$(sed -n 's/Pre-reboot status : //p' "$logfile")"
+read -r -a pre_reboot_status_array <<< "$(sed -n 's/Pre-reboot status : //p' "$logfile")"
 
 echo "*******************************************************"
 echo "Post-reboot status : ${post_reboot_status[*]}"
@@ -95,26 +115,31 @@ else
   echo "SUCCESS: Pre-reboot status and post-reboot status are Same"
 fi
 echo "*******************************************************"
+}
 
+testcase2 () {
+#Test Case Name     : Core files check after reboot
+#Test Objective     : To check if any core files are generated after sometime in DUT.
+#Automation_approach: Report if any corefiles are generated.
+#Expected Output    : Display if corefiles are generated within timelimit specified.
 
-#***************************************************************Test-Script-02**************************************************
-#Test Scenario:To validate whether if any corefiles are generated after sometime of reboot
-# Set the time limit for the script to be executed after 2 minutes of reboot
-wait_time=120
-# Getting the current time
-start_time=$(date +%s)
+echo "*******************************************************"
+echo "Test Case Name : Core file check after reboot"
 echo "**********************Checking if any corefiles are generated after sometime of reboot************************************"
 # Find all core dump files in the directory
 core_files=$(find /mnt/memory/corefiles -type f)
 
-# Loop until wait_time is reached or core dump files are found
-until [ -n "$core_files" ] || [ $(($(date +%s)-start_time)) -gt $wait_time ]; do
+#Setting the time limit for the script to be executed after 2 minutes of reboot
+SECONDS=0
+timeout=120
+#Loop until timeout is reached or core dump files are found
+until [ -n "$core_files" ] || [[ SECONDS -gt timeout ]]; do
   echo "No core dump files found. Sleeping for 10 seconds..."
   sleep 10
   core_files=$(find /mnt/memory/corefiles -type f)
 done
 
-# Check if core dump files were found
+#Check if core dump files were found
 if [ -n "$core_files" ]; then
   for core_file in $core_files; do
     pid=$(echo "$core_file" | sed 's/.*\.\([0-9]*\)_core.*/\1/')
@@ -125,9 +150,149 @@ if [ -n "$core_files" ]; then
     echo "  prog: $prog"
     echo "  Signal: $signal"
   done
+  echo "FAILURE: Core dump files found within the time limit of $timeout seconds."
 else
-  echo "No core dump files found within the time limit of $wait_time seconds."
+  echo "SUCCESS: No core dump files found within the time limit of $timeout seconds."
 fi
+}
+testcase3 () {
+#***************************************************************Test-Script-03**************************************************
+# Test Case Name     : Storage fill check after reboot
+# Test Objective     : To Fill the storage of specified path to maximun and check for functionalities of logfile and apps.
+# Automation_approach: Filling a specified path to its maximum storage capacity and test log file and apps functionalities.
+# Expected Output    : Success if app functionalities and log file writing are working properly.
+
+echo "*******************************************************"
+echo "Test Case Name : Storage fill check after reboot"
+echo "*******************************************************"
+#Check if max_usage_percentage,destination_path,download_url,log_file are provided to logfile
+missing_parameters=()
+
+[ -z "$max_usage_percentage" ] && missing_parameters+=("MAX USAGE PERCENTAGE")
+[ -z "$destination_path" ] && missing_parameters+=("DESTINATION PATH")
+[ -z "$download_url" ] && missing_parameters+=("DOWNLOAD URL")
+[ -z "$log_file" ] && missing_parameters+=("LOG FILE")
+
+if [ ${#missing_parameters[@]} -gt 0 ]; then
+  echo "Error: ${missing_parameters[*]} not found in config file.Pls configure and re-run."
+  return 1
+fi
+
+#Extract the filename from the download URL
+filename=$(basename "$download_url")
+#Get the usage percentage of the root filesystem (without percentage sign)
+usage_percentage_after_reboot=$(df -hP / | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+echo "*********************************************************************************************************"
+echo "After Reboot: "$destination_path" | Usage Percentage After Reboot: $usage_percentage_after_reboot"
+echo "*********************************************************************************************************"
+
+#Check if the usage percentage has increased after downloading and copying the file
+if [ "$max_usage_percentage" -eq "$usage_percentage_after_reboot" ]; then
+    echo "Usage percentage increased after downloading and copying the file."
+else
+  echo "FAILURE: Usage percentage did not increase after downloading and copying the file."
+  return 1
+fi
+
+timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+timestamp_for_validation+=("$timestamp")
+
+#Writing random logs to wpeframework.log to validate its functionality after reboot
+echo "$timestamp_for_validation Writing data to wpeframework for validating $log_file after storage fill" >> "$log_file"
+
+echo "*********************************************************************************************************"
+#Check if the written data is present in the log file
+if grep -qi "$timestamp_for_validation Writing data to wpeframework for validating $log_file after storage fill" "$log_file"; then
+  echo "SUCCESS: Logs are writing into $log_file even after the memory is equal to its maximum capacity"
+else
+  echo "FAILURE: Logs are not writing into $log_file after the memory is equal to its maximum capacity"
+fi
+echo "*********************************************************************************************************"
+
+echo "*********************************************************************************************************"
+#Check process of listed apps whether they are running as expected
+failed_processes=()
+excluded_processes='sh <defunct>|sh|sleep|systemd|kworker|ps|grep'
+output_apps=$(ps -e -o comm | grep -v -E "$excluded_processes")
+
+#Check if any of the filtered processes are not running
+failed_processes=""
+for app in "${failed_apps_array[@]}"; do
+  if ! pgrep -f "$app" &> /dev/null; then
+    failed_processes+=" $app"
+  fi
+done
+
+if [ -z "$failed_processes" ]; then
+  echo "SUCCESS: All listed apps processes are running as expected"
+else
+  echo "Failed processes:$failed_processes"
+fi
+echo "*********************************************************************************************************"
+
+
+#Deleting the downloaded file
+if [ -f "$destination_path/$filename" ] || [ -n "$(find "$destination_path" -maxdepth 1 -name "$new_destination_filename.*" -type f)" ]; then
+  rm -f "$destination_path/$filename"
+  rm -f "$destination_path/$new_destination_filename".*
+  echo "Downloaded and copied files removed successfully"
+else
+  echo "Failed to delete the downloaded and copied files"
+fi
+#Get the usage percentage of the destination path (without percentage sign)
+usage_percentage_after_removing_files=$(df -hP "$destination_path" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+echo "*********************************************************************************************************"
+echo "After deleting files: Destination Path: $destination_path | Usage Percentage: $usage_percentage_after_removing_files"
+echo "*********************************************************************************************************"
+
+}
+
+run_test_cases() {
+  if [ -f "$logfile" ]; then
+    #Initialized a flag to determine whether to run all test cases or not
+    run_all_test_cases=false
+
+    #Check if the log file contains "Test case argument: all"
+    if grep -qi "Test case arguments: all" "$logfile"; then
+      run_all_test_cases=true
+    fi
+
+    #Initialize an array to store the provided test case numbers
+    provided_test_cases=()
+
+    #Extract the test case numbers from the log file and add them to the array
+    if [ "$run_all_test_cases" = false ]; then
+      provided_test_cases=($(awk '/Test case arguments:/ {for(i=4; i<=NF; i++) print $i}' "$logfile"))
+    fi
+
+    if [ "$run_all_test_cases" = true ] || [ ${#provided_test_cases[@]} -eq 0 ]; then
+      #Find all test case functions dynamically and execute them
+      for test_case_function in $(compgen -A function | grep "^testcase[0-9]\+$"); do
+        echo " "
+        "$test_case_function"
+        echo " "
+      done
+    else
+      #Loop through each provided test case number and execute the corresponding test case
+      for test_case_number in "${provided_test_cases[@]}"; do
+        test_case_function="testcase$test_case_number"
+        if [ "$(type -t "$test_case_function")" = "function" ]; then
+          echo " "
+          "$test_case_function"
+          echo " "
+        else
+          echo "Test case number: $test_case_number doesn't exist"
+        fi
+      done
+    fi
+  else
+    echo "Log file not found: $logfile"
+  fi
+}
+
+
+run_test_cases
+
 #*********************Removing the script from startup job**********************
 #Navigating to /etc/init.d/ directory -- Below commands should be executed from init.d folder only
 cd /etc/init.d/
@@ -140,3 +305,5 @@ if [ -f "system_sanity_check_after_reboot.sh" ]; then
 else
   echo "Successfully removed the script from init.d folder"
 fi
+
+
