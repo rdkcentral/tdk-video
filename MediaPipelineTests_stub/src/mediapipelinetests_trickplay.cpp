@@ -174,6 +174,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=fa
    gint jump_buffer = 3;
    gint jump_buffer_small_value = 3;
    GstStateChangeReturn state_change;
+   gfloat _startPosition = 0;
 
 
    /* Update data variables */
@@ -243,7 +244,8 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=fa
 	Sleep(1);
         fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
 	_currentPosition = currentPosition;
-        difference = abs((_currentPosition/(GST_SECOND)) - (startPosition/(GST_SECOND)));
+	_startPosition = startPosition;
+        difference = abs((_currentPosition/GST_SECOND) - (_startPosition/GST_SECOND));
         printf("\nCurrent Position : %0.2f , Playing after operation for: %0.2f",(_currentPosition/(GST_SECOND)),difference);
 
 

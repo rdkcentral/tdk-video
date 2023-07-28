@@ -42,7 +42,7 @@ using namespace std;
 #define FRAME_DATA                      "/CheckVideoStatus.sh getFrameData "
 #define PLAYBIN_ELEMENT 		"playbin"
 #define WESTEROS_SINK 			"westerossink"
-#define MIN_FRAMES_DROP                 3
+#define MIN_FRAMES_DROP                 5
 #define TOTAL_RESOLUTIONS_COUNT         7 //All resolutions include 144p, 240p, 360p, 480p, 720p, 1080p, 2160p
 #define BUFFER_SIZE_LONG		1024
 #define BUFFER_SIZE_SHORT		264
@@ -121,6 +121,7 @@ bool ignorePlayJump = false;
 bool buffering_flag = true;
 bool checkAudioSamplingrate = false;
 int sampling_rate = 0;
+guint64 connection_speed;
 
 /*
  * Playbin flags
@@ -227,6 +228,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    GstStructure *audio_structure;
    gfloat _currentPosition = 0;
    gfloat previous_position = 0;
+   gfloat _startPosition = 0;
 
    /* Update data variables */
    data.playbin = playbin;
@@ -358,6 +360,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
              fail_unless(frame_buffer != 0 , "Video frames are not rendered properly");    
 	     
         }
+
 	
 	if (use_audioSink)
         {
@@ -400,7 +403,8 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 
         fail_unless (gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
 	_currentPosition = currentPosition;
-        difference = abs((_currentPosition/GST_SECOND) - previous_position);
+	_startPosition = startPosition;
+        difference = abs((_currentPosition/GST_SECOND) - (_startPosition/GST_SECOND));
         printf("\nCurrent Position : %0.2f , Playing after operation for: %0.2f",(_currentPosition/GST_SECOND),difference);
 
 	_play_jump = (_currentPosition/GST_SECOND) - previous_position;
@@ -503,7 +507,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
             return;
         }
 
-	if(audio_underflow_received && bufferUnderflowTest)
+	if(audio_underflow_received_global && bufferUnderflowTest)
         {
             printf("\nAudio Underflow received breaking from PlaySeconds");
             printf("\nExiting from PlaySeconds, currentPosition is %lld\n",currentPosition/GST_SECOND);
@@ -2416,6 +2420,85 @@ GST_START_TEST(test_only_audio)
 }
 GST_END_TEST;
 
+GST_START_TEST (test_video_bitrate)
+{
+    GstElement *playbin;
+    GstElement *westerosSink;
+    GstElement *videoSink;
+    bool elementsetup = false;
+
+        /*
+    * Create the playbin element
+    */
+    playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
+    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+
+    /*
+    * Set the url received from argument as the 'uri' for playbin
+    */
+    fail_unless (m_play_url != NULL, "Playback url should not be NULL");
+    g_object_set (playbin, "uri", m_play_url, NULL);
+
+    /*
+    * Update the current playbin flags to enable Video and Audio Playback
+    */
+    g_object_get (playbin, "flags", &flags, NULL);
+    setflags();
+    g_object_set (playbin, "flags", flags, NULL);
+
+    /*
+    * Create westerosSink instance
+    */
+    westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
+    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+    g_object_set (playbin, "video-sink", westerosSink, NULL);
+
+
+    g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+    g_signal_connect( playbin, "element-setup", G_CALLBACK(elementSetupCallback), &elementsetup);
+
+
+    /*
+    * Set the firstFrameReceived variable as false before starting play
+    */
+    firstFrameReceived= false;
+
+    fail_unless (connection_speed != 0,"connection speed is not given");
+    g_object_set (playbin, "connection_speed", connection_speed, NULL);
+    printf("\nConnection Speed: %" G_GUINT64_FORMAT, connection_speed);
+    /*
+    * Set playbin to PLAYING
+    */
+    GST_FIXME( "Setting to Playing State\n");
+    fail_unless (gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    GST_FIXME( "Set to Playing State\n");
+    WaitForOperation;
+
+    /*
+     * Check if the first frame received flag is set
+     */
+
+    fail_unless (firstFrameReceived == true, "Failed to receive first video frame signal");
+
+    g_object_get (videoSink, "video-height", &height, NULL);
+    g_object_get (videoSink, "video-width", &width, NULL);
+
+    printf("\nVideo height = %d\nVideo width = %d", height, width);
+
+
+    PlaySeconds(playbin,play_timeout);
+
+
+    if (playbin)
+    {
+        fail_unless (gst_element_set_state (playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
+    }
+
+    gst_object_unref (playbin);
+}
+GST_END_TEST;
+
+
 
 static Suite *
 media_pipeline_suite (void)
@@ -2598,6 +2681,12 @@ media_pipeline_suite (void)
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
+    else if (strcmp ("test_video_bitrate", tcname) == 0)
+    {
+       tcase_add_test (tc_chain, test_video_bitrate);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
     else
     {
        printf("\nNo such testcase is present in app");
@@ -2666,7 +2755,8 @@ int main (int argc, char **argv)
 	    (strcmp ("test_rialto_resolution", tcname) == 0) ||
             (strcmp ("test_EOS", tcname) == 0) ||
 	    (strcmp ("test_audio_sampling_rate", tcname) == 0) ||
-	    (strcmp ("test_only_audio", tcname) == 0))
+	    (strcmp ("test_only_audio", tcname) == 0) ||
+	    (strcmp ("test_video_bitrate", tcname) == 0))
 	{
 	    strcpy(m_play_url,argv[2]);
             arg = 3;
@@ -2701,6 +2791,16 @@ int main (int argc, char **argv)
                 {
                     strtok (argv[arg], "=");
                     audioStart = atoi (strtok (NULL, "="));
+                }
+		if (strstr (argv[arg], "connection_speed=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    connection_speed = atoi (strtok (NULL, "="));
+                }
+		if (strstr (argv[arg], "height=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    height = atoi (strtok (NULL, "="));
                 }
 		if (strcmp ("checkAudioFPS=no", argv[arg]) == 0)
                 {
