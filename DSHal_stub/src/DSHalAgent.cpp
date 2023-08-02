@@ -51,6 +51,7 @@ std::string DSHalAgent::testmodulepre_requisites()
         dsMgr_init();
 #else
 	DEBUG_PRINT(DEBUG_LOG,"\nSeparate Initializations\n");
+	dsHostInit();
 	dsDisplayInit();
 	dsAudioPortInit();
 	dsVideoPortInit();
