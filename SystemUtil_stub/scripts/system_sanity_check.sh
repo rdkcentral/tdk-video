@@ -51,7 +51,7 @@ print_help() {
   exit 0
 }
 
-# Read the config file
+#Read the config file
 config_file="$(dirname "$0")/sanity_check.config"
 if [ ! -f $config_file ];then
 echo "Please place the config file $config_file in the path and re-execute script"
@@ -357,12 +357,16 @@ else
   echo -e "Device does not have Bluetooth Support\n"
 fi
 
+#Array to store Failed and Empty parameters
 FAILEDPARAMETER=()
-
+EMPTYPARAMETER=()
 #Check if box_IP is in expected format
 BOX_IP=$(cat /tmp/.deviceDetails.cache | grep boxIP | cut -d "=" -f2)
-FORMAT=$(ifconfig | grep 'inet addr:' | cut -d ':' -f2 | awk '{ print $1}'| grep -v '[127.0|172.17].0.1')
-if [ "$BOX_IP" == "$FORMAT"  ]; then
+regex='^(([0-9]{1,3}\.){3}[0-9]{1,3})|(([0-9a-fA-F]*[:-])+([0-9a-fA-F])*)$'
+if [[ -z $BOX_IP ]]; then
+  echo -e "box_IP is EMPTY \nValue=${BOX_IP}\n"
+  EMPTYPARAMETER=("box_IP=$BOX_IP")
+elif [[ "$BOX_IP" =~ $regex  ]]; then
   echo -e "Verification of box_IP is SUCCESS \nValue=${BOX_IP}\n"
 else
   echo -e "Verification of box_IP is FAILURE \nValue=${BOX_IP}\n"
@@ -385,8 +389,6 @@ VALIDATE_VALUE()
     else
       regex='^$'
     fi
-  elif [ "$PARAMETER" == "boxip" ]; then
-    regex='^([0-9a-f]*[:-])+([0-9a-f])*$'
   elif [ $PARAMETER == "build_type" ]; then
     regex='(VBN|DEV)'
   elif [ $PARAMETER == "estb_mac" ]; then
@@ -408,7 +410,10 @@ VALIDATE_VALUE()
     fi
   fi
   VALUE=$(cat /tmp/.deviceDetails.cache | grep $PARAMETER  | cut -d "=" -f2)
-  if [[ $VALUE =~ $regex ]]; then
+  if [[ -z $VALUE ]]; then
+    echo -e "$PARAMETER is empty \nValue=${VALUE}\n"
+    EMPTYPARAMETER+=($PARAMETER=$VALUE)
+  elif [[ $VALUE =~ $regex ]]; then
     echo -e "Verification of $PARAMETER is SUCCESS \nValue=${VALUE}\n"
   else
     if [[ $PARAMETER == "wifi_mac" && ! $IS_WIFI_SUPPORTED && ! -z $VALUE  ]]; then
@@ -438,12 +443,17 @@ VALIDATE_VALUE "rf4ce_mac"
 #Check if wifi_mac is in expected format
 VALIDATE_VALUE "wifi_mac"
 
-
 #Printing Summary
 if [ ${#FAILEDPARAMETER[@]} -gt 0 ]; then
     failedParameters=$(IFS=,; echo "${FAILEDPARAMETER[*]}")
     echo "FAILURE: FailedParameters:{${failedParameters}}"
-else
+fi
+if [ ${#EMPTYPARAMETER[@]} -gt 0 ]; then
+    emptyParameters=$(IFS=,; echo "${EMPTYPARAMETER[*]}")
+    echo "FAILURE: EmptyParameters:{${emptyParameters}}"
+fi
+
+if [ ${#FAILEDPARAMETER[@]} -eq 0 ] && [ ${#EMPTYPARAMETER[@]} -eq 0 ]; then
     echo "SUCCESS: All parameters are verified"
 fi
 }
@@ -762,7 +772,7 @@ echo "Image build date: $formatted_date"
 echo "---------------------------------------------"
 
 #Execute find command on search paths
-files=$(find "${search_paths[@]}" -type f \( ! -path "/proc/*" -a ! -path "/run/*" -a ! -path "/tmp/*" -a ! -path "/logs/*" -a ! -path "/sys/*" \) 2>/dev/null)
+files=$(find "${search_paths[@]}" -type f \( ! -path "*/proc/*" -a ! -path "*/run/*" -a ! -path "*/tmp/*" -a ! -path "*/logs/*" -a ! -path "*/sys/*" -a ! -path "*/certs/*" \) 2>/dev/null)
 
 #Array to store outdated binary files
 outdated_files_found=()
