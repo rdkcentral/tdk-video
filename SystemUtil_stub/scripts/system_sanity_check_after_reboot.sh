@@ -18,7 +18,7 @@
 # limitations under the License.
 ##########################################################################
 #logfile where post reboot actions are captured
-logfile="$(find / -name "sanity_test_reboot_testcase.log" -type f 2>/dev/null | head -n1 )"
+logfile="$(find / -name "system_sanity_test_reboot_testcase.log" -type f 2>/dev/null | head -n1 )"
 # Redirecting all output to the log file
 exec >> "$logfile"
 
@@ -252,29 +252,26 @@ run_test_cases() {
     #Initialized a flag to determine whether to run all test cases or not
     run_all_test_cases=false
 
-    #Check if the log file contains "Test case argument: all"
+    test_case_numbers=()
+    #Check if the log file contains "Test case arguments: all"
     if grep -qi "Test case arguments: all" "$logfile"; then
       run_all_test_cases=true
+    else
+      while read -r line; do
+        number=$(echo "$line" | cut -d ' ' -f 4)
+        test_case_numbers+=("$number")
+      done < <(grep -oE 'Test case arguments: [0-9]+' "$logfile")
     fi
-
-    #Initialize an array to store the provided test case numbers
-    provided_test_cases=()
-
-    #Extract the test case numbers from the log file and add them to the array
-    if [ "$run_all_test_cases" = false ]; then
-      provided_test_cases=($(awk '/Test case arguments:/ {for(i=4; i<=NF; i++) print $i}' "$logfile"))
-    fi
-
-    if [ "$run_all_test_cases" = true ] || [ ${#provided_test_cases[@]} -eq 0 ]; then
+    if [ "$run_all_test_cases" = true ]; then
       #Find all test case functions dynamically and execute them
       for test_case_function in $(compgen -A function | grep "^testcase[0-9]\+$"); do
         echo " "
         "$test_case_function"
         echo " "
       done
-    else
-      #Loop through each provided test case number and execute the corresponding test case
-      for test_case_number in "${provided_test_cases[@]}"; do
+    elif [ ${#test_case_numbers[@]} -gt 0 ]; then
+      #Loop through each test case number and execute the corresponding test case
+      for test_case_number in "${test_case_numbers[@]}"; do
         test_case_function="testcase$test_case_number"
         if [ "$(type -t "$test_case_function")" = "function" ]; then
           echo " "
@@ -284,12 +281,13 @@ run_test_cases() {
           echo "Test case number: $test_case_number doesn't exist"
         fi
       done
+    else
+      echo "No test case numbers found in the log file."
     fi
   else
     echo "Log file not found: $logfile"
   fi
 }
-
 
 run_test_cases
 
