@@ -286,7 +286,7 @@ static void generate_cec_header(char *frame)
 {
          DEBUG_PRINT(DEBUG_TRACE, "Generating CEC Header\n");
          int logicalAddress = 0;
-         int ret = HdmiCecGetLogicalAddress(driverHandle,0,&logicalAddress);
+         int ret = HdmiCecGetLogicalAddress(driverHandle,&logicalAddress);
          if (ret != 0){
              cec_header_flag = -1;
              DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetLogicalAddress call failed. Unable to generate Header Frame\n");
@@ -486,7 +486,7 @@ void HdmicecHalAgent::HdmicecHal_GetLogicalAddress(IN const Json::Value& req, OU
 
     int logicalAddress = 0;
     int devType = (int) req["dev_type"].asInt();
-    int ret = HdmiCecGetLogicalAddress(driverHandle,devType,&logicalAddress);
+    int ret = HdmiCecGetLogicalAddress(driverHandle,&logicalAddress);
     if (ret == 0){
         DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetLogicalAddress call success\n");
         DEBUG_PRINT(DEBUG_TRACE, "LogicalAddress : 0x%X (dec: %u)\n",logicalAddress,logicalAddress);

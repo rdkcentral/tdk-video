@@ -82,7 +82,7 @@ class HdmicecHalAgent : public RDKTestStubInterface , public AbstractServer<Hdmi
                 //Constructor
                 HdmicecHalAgent(TcpSocketServer &ptrRpcServer) : AbstractServer <HdmicecHalAgent>(ptrRpcServer)
                 {
-                    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetLogicalAddress", PARAMS_BY_NAME, JSON_STRING, "dev_type", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_GetLogicalAddress);
+                    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetLogicalAddress", PARAMS_BY_NAME, JSON_STRING,  NULL), &HdmicecHalAgent::HdmicecHal_GetLogicalAddress);
                     this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetPhysicalAddress", PARAMS_BY_NAME, JSON_STRING, NULL), &HdmicecHalAgent::HdmicecHal_GetPhysicalAddress);
                     this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_Tx", PARAMS_BY_NAME, JSON_STRING, "header", JSON_STRING, "opcode", JSON_STRING, "receive_frames", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_Tx);
                     this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_TxAsync", PARAMS_BY_NAME, JSON_STRING, "header", JSON_STRING, "opcode", JSON_STRING, "receive_frames", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_TxAsync);
