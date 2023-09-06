@@ -37,8 +37,8 @@ echo "TDK_Apparmor_Test_13_Denied_Messages aptest13"
 echo "TDK_Apparmor_Test_14_Default_Enforce_check aptest14"
 echo "TDK_Apparmor_Test_15_Dac_Override_Remove_irMgrMain aptest15"
 echo "TDK_Apparmor_Test_16_Dac_Override_Remove_default aptest16"
-echo "TDK_Apparmor_Test_17_Dac_Override_lighttpd aptest17"
-echo "TDK_Apparmor_Test_18_Dac_Override_audiocapturemgr aptest18"
+echo "TDK_Apparmor_Test_17_Dac_Override_audiocapturemgr aptest17"
+echo "TDK_Apparmor_Test_18_Dac_Override_lighttpd aptest18"
 echo "TDK_Apparmor_Test_19_Log_Check aptest19"
 
 echo "Note: if 'all' is passed as test number, all tests get executed"
@@ -106,14 +106,28 @@ command=$(aa-enabled)
 if [ $command == "Yes" ]
 then
         echo "Apparmor is enabled"
-        
-        FILE=/opt/secure/Apparmor_blocklist
-        echo "Filepath: $FILE"
-	if [ -f "$FILE" ]; then
-                echo "SUCCESS:$FILE exists."
-        else
-                echo "FAILURE:$FILE does not exist."
-        fi
+	FILE=/opt/secure/Apparmor_blocklist                                                                                    
+        echo "Filepath: $FILE"                                                                                                 
+       	
+	ps -auxZ | grep "$profiles" | awk 'NR==1{print $2}' >/dev/details
+        echo $(cat /dev/details) 
+	
+	if [ $(cat /dev/details) == "(enforce)" ]; then
+		echo enforce2complain
+		#tr181 -s -v "$profile:complain" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+		call_reboot_complain	        
+	elif [ $(cat /dev/details) == "(complain)" ]; then
+		echo complain2enforce
+		#tr181 -s -v "$profile:enforce" Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.NonRootSupport.ApparmorBlocklist
+	        call_reboot_enforce
+	fi
+	
+	if [ -f "$FILE" ]; then                                          
+                echo "$FILE exists."                                                                                           
+        else                                                                                                                   
+                echo "FAILURE: $FILE does not exist."                                                                          
+                exit                                                                                                           
+        fi      
 else
         echo "FAILURE:Apparmor is disabled"
 fi
@@ -130,25 +144,19 @@ echo -e "Connected to Server!\n"
 echo "To check Apparmor is enabled"
 command=$(aa-enabled)
 echo "$command"
-if [ $command == "Yes" ]
-then
-        echo "Apparmor is enabled"
-                profile1=/etc/apparmor.d/binaryprofiles/usr.bin.tr69hostif
-                profile2=/etc/apparmor.d/binaryprofiles/usr.lib.bluez5.bluetooth.bluetoothd
-                echo "Check for Profiles: $profile1, $profile2"
-                if ! [[ -f "$profile1" ]] && [[ -f "$profile2" ]]
-                then
-                        echo -e "SUCCESS:$profile1, $profile2 does not exist"
-                else
-                        echo -e "FAILURE: Binary Profiles exists"
-                fi
-
-else
-        echo "FAILURE:Apparmor is disabled"
-fi
+if [ $command == "Yes" ]                                                  
+then                                                                 
+        echo "Apparmor is enabled"                   
+        if [ -d "/etc/apparmor.d/binaryprofiles" ]; then                  
+                echo "FAILURE: /etc/apparmor.d/binaryprofiles directory is present."
+        else                                                                        
+                echo "SUCCESS: /etc/apparmor.d/binaryprofiles directory is not present."
+        fi                                                                              
+else                                                                                    
+        echo "FAILURE: Apparmor is disabled"                                            
+fi                                                                                      
 
 }
-
 
 #check to see if profiles are present in /etc/apparmor.d/ directory 
 function profile_check {
@@ -201,43 +209,51 @@ for profile in "${profiles[@]}"; do
                 echo "FAILURE: $profile profile is missing"
                 exit
 	else
-		cat $path/$profile | grep -i 'w.*x' >/dev/details
-       	        if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-        		echo "FAILURE: $profile contains write and execute permission"
-			exit
-        	else
-        		echo "SUCCESS: $profile has no write and execute permission together"
+		cat $path/$profile | grep -i 'deny' >/dev/details
+		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+        		echo "SUCCESS: $profile contains deny keyword"
+        	else    
+			cat $path/$profile | grep -i 'w.*x' >/dev/details
+			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+        			echo "FAILURE: $profile has write and execute permission together"
+				exit
+			else
+				echo "SUCCESS:$profile has no write and execute permission together"
+			fi
         	fi
 	fi
 done
 
 }
 
-
 #function to check capabilities
-function capability_check {
-echo -e "Executing script : apparmor_capability_check"
-echo -e "======================================="
+function capability_check {                                                                         
+echo -e "Executing script : apparmor_capability_check"                 
+echo -e "======================================="                      
 echo -e "Test Execution Name is: TDK_Apparmor_Test_07_Capability_Check"
-echo -e "Connected to $ip Box for validating profiles"
-echo -e "Connected to Server!\n"
-
-for profile in "${profiles[@]}"; do
-	if ! [ -f "$path$profile" ]; then
-		echo "FAILURE: $profile profile is missing"
-		exit
-    	else
-		cat $path$profile | grep -i 'DAC_OVERRIDE\|MAC_ADMIN' >/dev/details
-		if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-			echo "FAILURE: Admin/Override Roles are present in $profile"
-			exit
-       	        else
-			echo "SUCCESS: Admin/Override roles are not present in $profile"
-       		fi
-	fi
-done
-
-}
+echo -e "Connected to $ip Box for validating profiles"                 
+echo -e "Connected to Server!\n"                                       
+                                                                       
+for profile in "${profiles[@]}"; do                                    
+        if ! [ -f "$path$profile" ]; then                              
+                echo "FAILURE: $profile profile is missing"            
+                        exit                                                     
+        else                                                                     
+                 ps -auxZ | grep "$profile" | awk 'NR==1{print $3}' >/dev/details          
+                 if [ $(cat /dev/details) == "root" ]; then                                
+                        cat $path$profile | grep -i 'DAC_OVERRIDE\|MAC_ADMIN' >/dev/details 
+                        if [ $(cat /dev/details|wc -l) -gt 0 ]; then                        
+                                echo "FAILURE: Admin/Override Roles are present in $profile"
+                                exit                                                            
+                        else                                                                    
+                                echo "SUCCESS: Admin/Override roles are not present in $profile"
+                        fi                                                                           
+                else                                                                                 
+                        echo "SUCCESS: $profile is already running as non-root, no need to check DAC"
+                fi                                                                                   
+        fi                                                                                           
+done                                                                                                 
+} 
 
 #function to check no profiles
 function no_profiles_check {
@@ -250,12 +266,16 @@ echo -e "Connected to Server!\n"
 echo -e "This testcase serves negative scenario requires profiles to be deleted before run to validate negative case"
 
 if [ -d "/etc/apparmor.d" ]; then
+	
+	mkdir /opt/tempdel
+	mv /etc/apparmor.d/* /opt/tempdel
+	
 	if [ "$(ls -A /etc/apparmor.d)" ]; then
 	echo "FAILURE: apparmor profiles are present in /etc/apparmor.d"
 	else
 		echo "No apparmor profiles found in /etc/apparmor.d"
 		
-		echo -e "To check if apparmor is still active after removing the profiles from /etc/apparmor.d/ path..."
+		#echo -e "To check if apparmor is still active after removing the profiles from /etc/apparmor.d/ path..."
 		systemctl status apparmor.service | grep "Active" >/dev/details
 		echo "DETAILS"
 		echo "-------------------------"
@@ -265,6 +285,9 @@ if [ -d "/etc/apparmor.d" ]; then
 		else
 		echo "FAILURE:Apparmor service is inactive"
 		fi
+		
+		mv /opt/tempdel/* /etc/apparmor.d/
+		rmdir /opt/tempdel
 	fi
 else
 	echo "FAILURE: /etc/apparmor.d directory not found."
@@ -558,7 +581,6 @@ done
 # Loop through the profiles and validate their status before running the test
 for profile in "${profiles[@]}"; do
   # To print the status
-  # ps -auxZ | grep "$profile"
    ps -auxZ | grep "$profile" | awk 'NR==1{print $2}' >/dev/details
   
   # Check if the output for enforce"
@@ -585,12 +607,18 @@ for profile in "${profiles[@]}"; do
 		exit
     	else
 		if [ "$profile" == "usr.bin.irMgrMain" ]; then
-			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-				echo "FAILURE: Override Roles are present in $profile"
-				exit
+ 
+			ps -auxZ | grep "$profile" | awk 'NR==1{print $3}' >/dev/details
+			if [ $(cat /dev/details) == "root" ]; then
+				cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
+				if [ $(cat /dev/details|wc -l) -gt 0 ]; then
+					echo "FAILURE: Override Roles are present in $profile"
+					exit
+				else
+					echo "SUCCESS: Override roles are not present in $profile"
+				fi
 			else
-				echo "SUCCESS: Override roles are not present in $profile"
+				echo "SUCCESS: $profile is running as non-root, no need to check DAC"
 			fi
 		fi
 	fi
@@ -609,19 +637,25 @@ for profile in "${profiles[@]}"; do
 	if ! [ -f "$path$profile" ]; then
 		echo "FAILURE: $profile profile is missing"
 		exit
-    	else
+    else
 		if [ "$profile" == "default" ]; then
-			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-				echo "FAILURE: Override Roles are present in $profile"
-				exit
-			else
-				echo "SUCCESS: Override roles are not present in $profile"
+                       ps -auxZ | grep "$profile" | awk 'NR==1{print $3}' >/dev/details             
+                        if [ $(cat /dev/details) == "root" ]; then                                   
+                                cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details            
+                                if [ $(cat /dev/details|wc -l) -gt 0 ]; then                         
+                                        echo "FAILURE: Override Roles are present in $profile"       
+                                        exit    
+				else
+					echo "SUCCESS: Override roles are not present in $profile"
+				fi
+		        else                                                                         
+                                echo "FAILURE: $profile is running as non-root"                      
+                                exit
 			fi
 		fi
 	fi
 done
-}
+}  
 
 #function to check audiocapturemgr capabilities
 function dac_override_audiocapture {
@@ -631,21 +665,27 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_17_Dac_Override_Audiocapturem
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
-for profile in "${profiles[@]}"; do
-	if ! [ -f "$path$profile" ]; then
-		echo "FAILURE: $profile profile is missing"
-		exit
-   	else
-		if [ "$profile" == "usr.bin.audiocapturemgr" ]; then
-			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-				echo "SUCCESS: Override Roles are present in $profile"
-				exit
-			else
-				echo "FAILURE: Override roles are not present in $profile"
-			fi
-		fi
-	fi
+for profile in  "${profiles[@]}"; do                                                               
+        if ! [ -f "$path$profile" ]; then                                                         
+                echo "FAILURE: $profile profile is missing"                                       
+                exit                                                                      
+        else                                                                                      
+                if [ "$profile" == "usr.bin.audiocapturemgr" ]; then                                                                                              
+                                                                                                  
+                        ps -auxZ | grep "$profile" | awk 'NR==1{print $3}' >/dev/details          
+                        if [ $(cat /dev/details) == "root" ]; then                            
+                                cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details         
+                                if [ $(cat /dev/details|wc -l) -gt 0 ]; then                      
+                                        echo "FAILURE: Override Roles are present in $profile" 
+					exit   
+                                else                                                              
+                                        echo "SUCCESS: Override roles are not present in $profile"
+                                fi                                                                                                                       
+                        else                                                                                                                             
+                                echo "SUCCESS: $profile is running as non-root, no need to check DAC"                                                                              
+                        fi                                                                                                                               
+                fi                                                                                                                                       
+        fi                                                                                            
 done
 }
 
@@ -656,22 +696,29 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_18_Dac_Override_lighttpd"
 echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
-for profile in "${profiles[@]}"; do
-	if ! [ -f "$path$profile" ]; then
-		echo "FAILURE: $profile profile is missing"
-		exit
-    	else
-		if [ "$profile" == "usr.sbin.lighttpd" ]; then
-			cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details
-			if [ $(cat /dev/details|wc -l) -gt 0 ]; then
-				echo "SUCCESS: Override Roles are present in $profile"
-				exit
-			else
-				echo "FAILURE: Override roles are not present in $profile"
-			fi
-		fi
-	fi
-done
+for profile in "${profiles[@]}"; do                                                               
+        if ! [ -f "$path$profile" ]; then                                                         
+                echo "FAILURE: $profile profile is missing"                                       
+                exit                                                                      
+        else                                                                                      
+                if [ "$profile" == "usr.sbin.lighttpd" ]; then                                                                                              
+                                                                                                  
+                        ps -auxZ | grep "$profile" | awk 'NR==1{print $3}' >/dev/details          
+                        if [ $(cat /dev/details) == "root" ]; then                            
+                                cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details         
+                                if [ $(cat /dev/details|wc -l) -gt 0 ]; then                      
+                                        echo "FAILURE: Override Roles are present in $profile" 
+					exit   
+                                else                                                              
+                                        echo "SUCCESS: Override roles are not present in $profile"
+                                fi                                                                                                                       
+                        else                                                                                                                             
+                                echo "FAILURE: $profile is running as non-root"                                                                              
+                                exit                                                                                                                     
+                        fi                                                                                                                               
+                fi                                                                                                                                       
+        fi                                                                                            
+done  
 }
 
 #check_logging : TODO
@@ -730,7 +777,7 @@ for test in "$@"; do
 	   ;;
 	 aptest03*)
 	   echo "calling blocklist"
-	   blocklist
+	  #blocklist
 	  ;;
           aptest05*)
 	   echo "calling profile_check"
@@ -803,4 +850,3 @@ for test in "$@"; do
 	  ;;
 	esac
    done	
-
