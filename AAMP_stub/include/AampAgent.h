@@ -101,6 +101,7 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampEnableVideoRectangle",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampEnableVideoRectangle);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetWesterosSinkConfig",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampSetWesterosSinkConfig);
 		   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampCheckPlaybackRate",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampCheckPlaybackRate);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampPauseAtPosition",PARAMS_BY_NAME,JSON_STRING,"position",JSON_REAL,NULL), &AampAgent::AampPauseAtPosition);
 
                 }
 
@@ -144,6 +145,7 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                 void AampEnableVideoRectangle(IN const Json::Value& req, OUT Json::Value& response);
                 void AampSetWesterosSinkConfig(IN const Json::Value& req, OUT Json::Value& response);
 		void AampCheckPlaybackRate(IN const Json::Value& req, OUT Json::Value& response);
+                void AampPauseAtPosition(IN const Json::Value& req, OUT Json::Value& response);
                 bool cleanup(const char*);
                 std::string testmodulepre_requisites();
                 bool testmodulepost_requisites();

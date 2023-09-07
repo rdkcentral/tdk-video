@@ -682,6 +682,36 @@ void AampAgent::AampSetRateAndSeek (IN const Json::Value& req, OUT Json::Value& 
 }
 
 /*************************************************************************
+Function Name   : AampPauseAtPosition
+
+Arguments       : position - position to pause at
+
+Description     : This function is used to pause the pipeline at
+
+*************************************************************************/
+void AampAgent::AampPauseAtPosition (IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampPauseAtPosition Entry \n");
+        double position = req["position"].asDouble();
+        DEBUG_PRINT (DEBUG_TRACE, "AampPauseAtPosition Seconds is: %f\n",position);
+        //PauseAt call with given position
+        mSingleton->PauseAt(position);
+        /* Sleep for 5 seconds to get AAMP_EVENT_SPEED_CHANGED event*/
+        sleep(5);
+        if (speed_changed_received)
+        {
+            response["details"] = "AAMP PauseAt call is fine, received AAMP_EVENT_SPEED_CHANGED";
+        }
+        else
+        {
+            response["details"] = "AAMP PauseAt call is fine";
+        }
+        response["result"] = "SUCCESS";
+        DEBUG_PRINT (DEBUG_TRACE, "AampPauseAtPosition Exit \n");
+        return;
+}
+
+/*************************************************************************
 Function Name   : AampGetAudioBitrates
 
 Arguments       : None
