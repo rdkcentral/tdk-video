@@ -993,11 +993,10 @@ static gboolean print_value (GQuark field, const GValue * value, gpointer pointe
   printf ("%s  %15s: %s\n", (gchar *) pointer, g_quark_to_string (field), string);
   const char* substr = "bit-depth-luma";
   if (std::strstr(g_quark_to_string (field), substr))
-  //if (strcmp ((g_quark_to_string (field), "bit-depth-luma") == 0)
+  {
       printf("\nValue got is %s\n",string);
       Bit_depth_got = atoi(string);
-
-  //fail_unless(strcmp ((gchar *) string,(gchar *) bit_depth)==0,"Excepted bitdepth is not received");
+  }
 
   g_free (string);
   return TRUE;
