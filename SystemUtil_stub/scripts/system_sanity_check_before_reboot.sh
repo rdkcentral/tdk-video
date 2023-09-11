@@ -24,12 +24,9 @@
 #A2: To execute specific test case(s) in the shell script, need to run the script with the full name followed by the test case number(s).
 #Eg: sh system_sanity_check_before_reboot.sh 1 | system_sanity_check_before_reboot.sh 1 2
 #Objective: To run testcases where reboot is involved as a teststep. 
-#logfile where pre reboot actions are captured
-logfile="$(dirname "$0")/sanity_test_reboot_testcase.log"
-#clear the logfile if any old logs are present
-> "$logfile"
-#Redirecting all output to the log file
-exec >> "$logfile"
+
+#Deleting if any previous logfiles are present
+find / -name "system_sanity_test_reboot_testcase.log" -type f -exec rm -f {} + 2>/dev/null
 
 #Read the config file
 config_file="$(dirname "$0")/sanity_check.config"
@@ -38,6 +35,19 @@ echo "Please place the config file "$config_file" in the path and re-execute scr
 exit 1
 fi
 source "$config_file"
+
+#logfile where pre reboot actions are captured
+#Check if LOGFILE_PATH is configured
+if [ -z "$LOGFILE_PATH" ]; then
+    echo "Error: LOGFILE_PATH not set, Pls configure and re-run"
+    exit 1
+fi
+logfile="/$LOGFILE_PATH/system_sanity_test_reboot_testcase.log"
+#clear the logfile if any old logs are present
+> "$logfile"
+#Redirecting all output to the log file
+exec >> "$logfile"
+
 
 config_file_path=$(cd "$(dirname "$0")" && pwd)
 echo "config file path : $config_file_path"

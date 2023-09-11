@@ -21,8 +21,24 @@
 #Automation_approch : To check status of service before and after lightsleep.If status vary reboot the dut and check the status.
 #ExpectedOutput     : Validating status of services before and after lightsleep.
 
+#Deleting if any previous logfiles are present
+find / -name "system_sanity_lightsleep_service_status.log" -type f -exec rm -f {} + 2>/dev/null
+
+#Read the config file
+config_file="$(dirname "$0")/sanity_check.config"
+if [ ! -f "$config_file" ];then
+echo "Please place the config file "$config_file" in the path and re-execute script"
+exit 1
+fi
+source "$config_file"
+
 #logfile where pre and post lightsleep actions are captured
-logfile="$(dirname "$0")/system_sanity_lightsleep_service_status.log"
+#Check if LOGFILE_PATH is configured
+if [ -z "$LOGFILE_PATH" ]; then
+    echo "Error: LOGFILE_PATH not set, Pls configure and re-run"
+    exit 1
+fi
+logfile="/$LOGFILE_PATH/system_sanity_lightsleep_service_status.log"
 #clear the logfile
 > "$logfile"
 #Redirecting output to the log file
