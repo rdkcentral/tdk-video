@@ -48,10 +48,12 @@ print_help() {
   echo " 12: Display supported resolution modes, aspect ratios and status of the currently connected output"
   echo " 13: Unknown keypress check."
   echo " 14: Binary Files update checker."
+  echo " 15: Continuously Monitor CPU Usage for given time in background."
+  echo " 16: Validate Plugin support in DUT."
   exit 0
 }
 
-# Read the config file
+#Read the config file
 config_file="$(dirname "$0")/sanity_check.config"
 if [ ! -f $config_file ];then
 echo "Please place the config file $config_file in the path and re-execute script"
@@ -357,12 +359,16 @@ else
   echo -e "Device does not have Bluetooth Support\n"
 fi
 
+#Array to store Failed and Empty parameters
 FAILEDPARAMETER=()
-
+EMPTYPARAMETER=()
 #Check if box_IP is in expected format
 BOX_IP=$(cat /tmp/.deviceDetails.cache | grep boxIP | cut -d "=" -f2)
-FORMAT=$(ifconfig | grep 'inet addr:' | cut -d ':' -f2 | awk '{ print $1}'| grep -v '[127.0|172.17].0.1')
-if [ "$BOX_IP" == "$FORMAT"  ]; then
+regex='^(([0-9]{1,3}\.){3}[0-9]{1,3})|(([0-9a-fA-F]*[:-])+([0-9a-fA-F])*)$'
+if [[ -z $BOX_IP ]]; then
+  echo -e "box_IP is EMPTY \nValue=${BOX_IP}\n"
+  EMPTYPARAMETER=("box_IP=$BOX_IP")
+elif [[ "$BOX_IP" =~ $regex  ]]; then
   echo -e "Verification of box_IP is SUCCESS \nValue=${BOX_IP}\n"
 else
   echo -e "Verification of box_IP is FAILURE \nValue=${BOX_IP}\n"
@@ -385,8 +391,6 @@ VALIDATE_VALUE()
     else
       regex='^$'
     fi
-  elif [ "$PARAMETER" == "boxip" ]; then
-    regex='^([0-9a-f]*[:-])+([0-9a-f])*$'
   elif [ $PARAMETER == "build_type" ]; then
     regex='(VBN|DEV)'
   elif [ $PARAMETER == "estb_mac" ]; then
@@ -408,7 +412,10 @@ VALIDATE_VALUE()
     fi
   fi
   VALUE=$(cat /tmp/.deviceDetails.cache | grep $PARAMETER  | cut -d "=" -f2)
-  if [[ $VALUE =~ $regex ]]; then
+  if [[ -z $VALUE ]]; then
+    echo -e "$PARAMETER is empty \nValue=${VALUE}\n"
+    EMPTYPARAMETER+=($PARAMETER=$VALUE)
+  elif [[ $VALUE =~ $regex ]]; then
     echo -e "Verification of $PARAMETER is SUCCESS \nValue=${VALUE}\n"
   else
     if [[ $PARAMETER == "wifi_mac" && ! $IS_WIFI_SUPPORTED && ! -z $VALUE  ]]; then
@@ -438,12 +445,17 @@ VALIDATE_VALUE "rf4ce_mac"
 #Check if wifi_mac is in expected format
 VALIDATE_VALUE "wifi_mac"
 
-
 #Printing Summary
 if [ ${#FAILEDPARAMETER[@]} -gt 0 ]; then
     failedParameters=$(IFS=,; echo "${FAILEDPARAMETER[*]}")
     echo "FAILURE: FailedParameters:{${failedParameters}}"
-else
+fi
+if [ ${#EMPTYPARAMETER[@]} -gt 0 ]; then
+    emptyParameters=$(IFS=,; echo "${EMPTYPARAMETER[*]}")
+    echo "FAILURE: EmptyParameters:{${emptyParameters}}"
+fi
+
+if [ ${#FAILEDPARAMETER[@]} -eq 0 ] && [ ${#EMPTYPARAMETER[@]} -eq 0 ]; then
     echo "SUCCESS: All parameters are verified"
 fi
 }
@@ -629,7 +641,8 @@ missing_parameters=()
 [ -z "$timeout_seconds" ] && missing_parameters+=("TIMEOUT_SECONDS")
 
 if [ ${#missing_parameters[@]} -gt 0 ]; then
-  echo "Error: ${missing_parameters[*]} not found in config file.Pls configure and re-run."
+  missing_params_list=$(IFS=','; echo "${missing_parameters[*]}")
+  echo "Error: ${missing_params_list[*]} not found in config file. Pls configure and re-run."
   return 1
 fi
 
@@ -762,7 +775,7 @@ echo "Image build date: $formatted_date"
 echo "---------------------------------------------"
 
 #Execute find command on search paths
-files=$(find "${search_paths[@]}" -type f \( ! -path "/proc/*" -a ! -path "/run/*" -a ! -path "/tmp/*" -a ! -path "/logs/*" -a ! -path "/sys/*" \) 2>/dev/null)
+files=$(find "${search_paths[@]}" -type f \( ! -path "*/proc/*" -a ! -path "*/run/*" -a ! -path "*/tmp/*" -a ! -path "*/logs/*" -a ! -path "*/sys/*" -a ! -path "*/certs/*" \) 2>/dev/null)
 
 #Array to store outdated binary files
 outdated_files_found=()
@@ -792,8 +805,192 @@ fi
 echo "-----------------------------------------------------------------------------------------------------------------"
 }
 
+#Test Objective     : To monitor CPU usage for given interval of time.
+#Automation_approach: Monitor the cpu usage in the background and list highest 3 cpu usages at the end of the script and kill the script after timeout.
+#Expected Output    : List the 3 processes with highest cpu usage.
+testcase15() {
 
-#Check if "all" is provided as an argument
+#Function to check if a value is an integer
+check_parameter() {
+  [[ "$1" =~ ^[0-9]+$ ]]
+}
+#Setting a flag to track parameter validation errors
+validation_failed=false
+
+#Function to check and validate a parameter
+check_and_validate_parameter() {
+    if [ -z "$2" ]; then
+      echo "Pls configure $1 value and re-run."
+      validation_failed=true
+    elif ! check_parameter "$2"; then
+      echo "Error: $1 must be a number. Pls configure integer value and re-run."
+      validation_failed=true
+    fi
+}
+
+check_and_validate_parameter "Total Duration" "$total_duration"
+check_and_validate_parameter "High CPU Threshold" "$high_cpu_threshold"
+check_and_validate_parameter "Check interval" "$check_interval"
+
+#Check if any parameter validation failed
+if [ "$validation_failed" = true ]; then
+  echo "Validation failed. Exiting."
+  echo " "
+  return 1
+fi
+
+#logfile path to store logs in DUT
+LOGFILE_PATH=opt
+logfile="/$LOGFILE_PATH/cpu_monitor.log"
+#clear the logfile if any old logs are present
+> "$logfile"
+#Redirecting all output to the log file
+exec >> "$logfile" 2>&1
+sleep 10
+echo "---------------------------------------------------------------------------------------------------------------------------------"
+echo "Total duration of the script specified in config file: $total_duration seconds"
+echo "---------------------------------------------------------------------------------------------------------------------------------"
+#Function to check Highest CPU usage
+print_processes() {
+echo "---------------------------------------------------------------------------------------------------------------------------------"
+echo "3 Processes with Highest CPU USAGES"
+echo "PID   USER        CPU %    COMMAND"
+echo "---------------------------------"
+top_processes=$(top -bn1 | tail -n +8 | head -n 4 | grep -v top | awk '{printf "%-6s %-10s %-8s %s\n", $1, $2, $9, $12}')
+echo "$top_processes"
+echo "----------------------------------------------------------------------------------------------------------------------------------"
+}
+
+#Array for storing failure count
+is_high_cpu_usage_detected=()
+#Function to check CPU usage
+check_cpu_usage() {
+    timestamp=$(date +"%d-%m-%Y %H:%M:%S")
+    #Get the current CPU usage percentage
+    cpu_usage=$(top -bn1 | grep "Cpu(s)" | awk '{print $2 + $4}')
+    cpu_usage=${cpu_usage%.*}
+    echo "[$timestamp] CPU usage: ${cpu_usage}%"
+    #Check if CPU usage is greater than the threshold
+    if [ $((cpu_usage)) -ge $((high_cpu_threshold)) ]; then
+        echo "High CPU usage detected"
+        is_high_cpu_usage_detected+=(1)
+    else
+        echo "CPU usage is within given threshold value."
+    fi
+}
+
+SECONDS=0
+while true; do
+    check_cpu_usage
+    print_processes
+    if [ $((SECONDS)) -gt $((total_duration)) ]; then
+      if [ ${#is_high_cpu_usage_detected[@]} -gt 0 ]; then
+        echo "FAILURE: Cpu Usage is greater than Threshold within the given timeout."
+      else
+        echo "SUCCESS: Cpu Usages did not meet Threshold within given time"
+      fi
+      if [ -n "$testcase15_pid" ] && ps -p "$testcase15_pid" > /dev/null; then
+        echo "Killing background process of testcase 15 with PID $testcase15_pid"
+        kill "$testcase15_pid"
+      else
+       echo "testcase 15 background process is completed."
+      fi
+      break
+    else
+      sleep "$check_interval"
+    fi
+done
+}
+
+#Function to start testcase 15 in background
+start_testcase_15() {
+  echo "---------------------------------------------------------------------------------------"
+  echo  "Testcase 15 : Continuously Monitor CPU Usage for given time in background "
+  echo "---------------------------------------------------------------------------------------"
+  echo "testcase 15 is running in background, Pls check the "/opt/cpu_monitor.log""
+  testcase15 &
+  #Storing the PID of the background process
+  testcase15_pid=$!
+  echo "PID: $testcase15_pid"
+}
+
+#Test Objective     : To check the status of plugins and report if it's not supported in DUT.
+#Automation_approach: Check the status of given list of plugins and validate support in the DUT.
+#Expected Output    : List supported and not supported plugins in DUT.
+#Note: To validate multiple directories provide directory names seperated by comma in config file to variable directories_to_test. 
+testcase16 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 16 : Validate Plugin Support in DUT "
+echo "---------------------------------------------------------------------------------------"
+#Checking if DIRECTORIES, API_URL_IP and API_URL_PORT are configured
+missing_parameters=()
+DIRECTORIES=()
+
+[ -z "$directories_to_test" ] && missing_parameters+=("DIRECTORIES")
+[ -z "$api_url_ip" ] && missing_parameters+=("API_URL_IP FOR CURL COMMAND")
+[ -z "$api_url_port" ] && missing_parameters+=("API_URL_PORT FOR CURL COMMAND")
+
+if [ ${#missing_parameters[@]} -gt 0 ]; then
+  missing_params_list=$(IFS=','; echo "${missing_parameters[*]}")
+  echo "Error: ${missing_params_list[*]} not found in config file. Pls configure and re-run."
+  return 1
+fi
+
+IFS=$','
+#directories to be tested
+read -r -a DIRECTORIES <<< "$directories_to_test"
+unset IFS
+#flag to validate final summary
+FINAL_RESULT=true
+#Loop through all directories and check plugin status
+for directory in "${DIRECTORIES[@]}"; do
+  #Arrays for supported and not supported
+  supported_plugins=()
+  not_supported_plugins=()
+  #Loop through all JSON files in the directory and check plugin status
+  for json_file in "$directory"/*.json; do
+      #Extract the plugin name from the JSON file
+      plugin=$(basename "$json_file" .json)
+      #Check the plugin status
+      response=$(curl --silent --header "Content-Type: application/json" --request POST --data "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\": \"Controller.1.status@$plugin\"}" "http://$api_url_ip:$api_url_port/jsonrpc")
+      #Check if the response contains the specific error code and message
+      if [[ "$response" == *'"error":{"code":22,"message":"ERROR_UNKNOWN_KEY"}'* ]]; then
+          not_supported_plugins+=("$plugin")
+          FINAL_RESULT=false
+      else
+          supported_plugins+=("$plugin")
+      fi
+  done
+  echo "                                        |Validation Summary|                              "
+  echo "-----------------------------------------------------------------------------------------------------------------"
+  echo "Validated Directory: $directory"
+  num_validated_plugins=$(( ${#supported_plugins[@]} + ${#not_supported_plugins[@]} ))
+  echo "Number of Validated Plugins: $num_validated_plugins"
+  echo "-----------------------------------------------------------------------------------------------------------------"
+  if [[ -n "$supported_plugins" ]]; then
+    echo "                                        |Supported Plugins|                              "
+    for supported in "${supported_plugins[@]}"; do
+      echo "| $supported |"
+    done
+  fi
+  echo "-----------------------------------------------------------------------------------------------------------------"
+  if [[ -n "$not_supported_plugins" ]]; then
+    echo "                                        |Not Supported Plugins|                              "
+    for not_supported in "${not_supported_plugins[@]}"; do
+      echo "| $not_supported |"
+    done
+  fi
+  echo "-----------------------------------------------------------------------------------------------------------------"
+done
+
+if [[ "$FINAL_RESULT" = true ]]; then
+    echo "SUCCESS: All plugins are supported in DUT."
+else
+    echo "FAILURE: Few Plugins are not supported in DUT"
+fi
+echo "-----------------------------------------------------------------------------------------------------------------"
+}
+
 if [ "$1" = "all" ]; then
   #Iterating dynamically through test case number
   max_test_cases=0
@@ -801,16 +998,32 @@ if [ "$1" = "all" ]; then
   until [ "$(type -t "testcase$i")" != "function" ]; do
     test_case_function="testcase$i"
     max_test_cases=$((i - 1))
-    "$test_case_function"
-     echo " "
+    echo "Running testcase : $i"
+    if [ "$i" = "15" ]; then
+       start_testcase_15
+       disown
+    else
+      #sourcing for every function since for running with all there is error in fetching values
+      source "$config_file"     
+      "$test_case_function"
+    fi
+    echo " "
     i=$((i + 1))
   done
 elif [ $# -gt 0 ]; then
   #Looping through each provided test case number
   for test_case_number in "$@"; do
     test_case_function="testcase$test_case_number"
+    echo "Running testcase : $@"
     if [ "$(type -t "$test_case_function")" = "function" ]; then
-      "$test_case_function"
+      if [ "$test_case_number" = "15" ]; then
+        start_testcase_15
+        disown
+      else
+        #sourcing for every function since for running with multiple arguments there is error in fetching values
+        source "$config_file"   
+        "$test_case_function"
+      fi
       echo " "
     else
       echo "Test case number: $test_case_number doesn't exist"
@@ -820,3 +1033,4 @@ elif [ $# -gt 0 ]; then
 else
   print_help
 fi
+
