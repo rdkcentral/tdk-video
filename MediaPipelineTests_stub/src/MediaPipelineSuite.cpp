@@ -2567,12 +2567,17 @@ GST_START_TEST(test_only_audio)
 
 	g_object_get(playbin,"flags",&flags,NULL);
 	flags = GST_PLAY_FLAG_AUDIO;
+#ifdef NATIVE_AUDIO
+	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+#endif
 	g_object_set(playbin,"flags", flags,NULL);
 
 
 	GST_FIXME( "Setting to Playing State\n");
-        assert_failure (playbin,gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "unable to pause");
+        assert_failure (playbin,gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "unable to set to play");
         GST_FIXME( "Set to Playing State\n");
+
+	WaitForOperation;
 
 	PlaySeconds(playbin,play_timeout);
 
