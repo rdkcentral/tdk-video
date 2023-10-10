@@ -24,6 +24,7 @@ bool AAMP_EVENT_TUNED_received=false;
 bool speed_changed_received=false;
 bool bitrate_changed_received=false;
 bool cc_handle_received=false;
+bool check_rate_value=false;
 char errordescription[ERROR_DESCRIPTION_LENGTH]={0};
 pthread_cond_t cond1;
 pthread_mutex_t aamp_pthread_lock;
@@ -73,7 +74,13 @@ public:
                         }
                         break;
                 case AAMP_EVENT_SPEED_CHANGED:
-                        speed_changed_received = true;
+			DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_SPEED_CHANGED current rate=%f\n", e.data.speedChanged.rate);
+			speed_changed_received = true;
+			if ( (int(e.data.speedChanged.rate) == 1) && (check_rate_value) )
+			{
+		           DEBUG_PRINT(DEBUG_TRACE,"Speed changed event has rate value as 1 , so setting speed_changed_received to false");
+                           speed_changed_received = false;
+			}
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_SPEED_CHANGED\n");
                         break;
                 case AAMP_EVENT_EOS:
@@ -479,7 +486,14 @@ void AampAgent::AampSetRate (IN const Json::Value& req, OUT Json::Value& respons
 
 {
         DEBUG_PRINT (DEBUG_TRACE, "AampSetRate Entry \n");
+	check_rate_value = false;
         float rate = req["rate"].asFloat();
+	char check_rate[10];
+        strcpy(check_rate,req["check_rate_value"].asCString());
+
+        if (!strcmp(check_rate,"true"))
+            check_rate_value = true;
+
         DEBUG_PRINT (DEBUG_TRACE, "AampSetRate Speed is: %f\n",rate);
         //SetRate call with given rate
         mSingleton->SetRate(rate);
@@ -683,11 +697,8 @@ void AampAgent::AampSetRateAndSeek (IN const Json::Value& req, OUT Json::Value& 
 
 /*************************************************************************
 Function Name   : AampPauseAtPosition
-
 Arguments       : position - position to pause at
-
 Description     : This function is used to pause the pipeline at
-
 *************************************************************************/
 void AampAgent::AampPauseAtPosition (IN const Json::Value& req, OUT Json::Value& response)
 {
@@ -1448,6 +1459,42 @@ void AampAgent::AampSetPreferredDRM(IN const Json::Value& req, OUT Json::Value& 
         response["details"] = "AAMP AampSetPreferredDRM call is fine";
         DEBUG_PRINT (DEBUG_TRACE, "AAMP AampSetPreferredDRM call is fine \n");
         DEBUG_PRINT (DEBUG_TRACE, "AampSetPreferredDRM Exit \n");
+        return;
+}
+
+/*************************************************************************
+Function Name   : AampSetLicenseServerURL
+
+Description     : This function is used to Set the License Server URL
+*************************************************************************/
+void AampAgent::AampSetLicenseServerURL(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetLicenseServerURL Entry \n");
+        DRMSystems pref_Drm;
+        if(&req["DRM"] == NULL )
+        {
+           return;
+        }
+        char drm[20] = {'\0'};
+        strcpy(drm,req["DRM"].asCString());
+        if(!strcmp(drm, "PlayReady"))
+            pref_Drm = eDRM_PlayReady;
+        else if(!strcmp(drm,"WideVine"))
+            pref_Drm = eDRM_WideVine;
+        else if(!strcmp(drm,"ClearKey"))
+            pref_Drm = eDRM_ClearKey;
+        else{
+            response["result"] = "FAILURE";
+            response["details"] = "Invalid Drm";
+            return;
+        }
+
+	const char *license_server_url = (char*) req["license_server_url"].asCString();
+        mSingleton->SetLicenseServerURL(license_server_url,pref_Drm);
+        response["result"] = "SUCCESS";
+        response["details"] = "AAMP AampSetLicenseServerURL call is fine";
+        DEBUG_PRINT (DEBUG_TRACE, "AAMP SetLicenseServerURL call is fine \n");
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetLicenseServerURL Exit \n");
         return;
 }
 

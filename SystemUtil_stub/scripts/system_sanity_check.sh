@@ -50,6 +50,7 @@ print_help() {
   echo " 14: Binary Files update checker."
   echo " 15: Continuously Monitor CPU Usage for given time in background."
   echo " 16: Validate Plugin support in DUT."
+  echo " 17: Compare FREE memory responses of both tr181 command and /proc/meminfo."
   exit 0
 }
 
@@ -989,6 +990,49 @@ else
     echo "FAILURE: Few Plugins are not supported in DUT"
 fi
 echo "-----------------------------------------------------------------------------------------------------------------"
+}
+
+#Test Objective       - To compare FREE memory responses of both tr181 command and /proc/meminfo.
+#Automation Approach  - Compare the responses and report if it is exceeding the threshold limit.
+#Expected Output      - If Responses from both tr181 command and /proc/meminfo are same then success or else failure.
+testcase17 () {
+echo "---------------------------------------------------------------------------------------"
+echo  "Testcase 17 : Compare FREE memory responses of both tr181 command and /proc/meminfo "
+echo "---------------------------------------------------------------------------------------"
+#Fetching the responses of FREE memory
+tr181_memory=$(tr181 Device.DeviceInfo.MemoryStatus.Free 2>&1)
+meminfo_memory=$(grep MemFree /proc/meminfo | awk '{print $2}')
+
+#Threshold limit to validate free memory responses
+FREE_MEMORY_THRESHOLD=5
+
+#Check if tr181_memory or meminfo_memory is empty and positive numbers
+if [ -z "$tr181_memory" ] && ! [[ $tr181_memory =~ ^[0-9]+$ ]]; then
+  echo "Error: tr181_memory command returned empty or invalid output."
+  exit 1
+fi
+
+if [ -z "$meminfo_memory" ] && ! [[ $meminfo_memory =~ ^[0-9]+$ ]]; then
+  echo "Error: meminfo_memory command returned empty or invalid output."
+  exit 1
+fi
+
+#Converting tr181_memory and meminfo_memory to MB since they are in KB
+tr181_memory_MB=$((tr181_memory / 1024))
+meminfo_memory_MB=$((meminfo_memory / 1024))
+
+echo "Memory value from tr181 command: $tr181_memory_MB MB"
+echo "Memory value from /proc/meminfo command: $meminfo_memory_MB MB"
+
+#Calculate the difference
+difference=$(awk -v mem1="$tr181_memory_MB" -v mem2="$meminfo_memory_MB" 'BEGIN {print int(mem1 - mem2) < 0 ? mem2 - mem1 : mem1 - mem2}')
+
+#Comparing the difference with the threshold
+if ((difference <= FREE_MEMORY_THRESHOLD)); then
+    echo "SUCCESS: Memory values are within specified threshold limit."
+else
+    echo "FAILURE: Memory values exceeds the expected threshold limit."
+fi
 }
 
 if [ "$1" = "all" ]; then

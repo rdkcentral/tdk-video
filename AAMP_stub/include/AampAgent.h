@@ -66,7 +66,7 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                     this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampTune",PARAMS_BY_NAME,JSON_STRING,"URL",JSON_STRING,NULL), &AampAgent::AampTune);
                     this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampPlayTillEof",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampPlayTillEof);
                     this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampStop",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampStop);
-                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetRate",PARAMS_BY_NAME,JSON_STRING,"rate",JSON_REAL,NULL), &AampAgent::AampSetRate);
+                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetRate",PARAMS_BY_NAME,JSON_STRING,"rate",JSON_REAL,"check_rate_value", JSON_STRING, NULL), &AampAgent::AampSetRate);
 		    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetLanguage",PARAMS_BY_NAME,JSON_STRING,"language",JSON_STRING,NULL), &AampAgent::AampSetLanguage);
                     this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampIsLive",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampIsLive);
                     this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetCurrentAudioLanguage",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetCurrentAudioLanguage);
@@ -102,6 +102,7 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetWesterosSinkConfig",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampSetWesterosSinkConfig);
 		   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampCheckPlaybackRate",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampCheckPlaybackRate);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampPauseAtPosition",PARAMS_BY_NAME,JSON_STRING,"position",JSON_REAL,NULL), &AampAgent::AampPauseAtPosition);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetLicenseServerURL",PARAMS_BY_NAME,JSON_STRING,"DRM",JSON_STRING,"license_server_url",JSON_STRING,NULL), &AampAgent::AampSetLicenseServerURL);
 
                 }
 
@@ -146,6 +147,7 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                 void AampSetWesterosSinkConfig(IN const Json::Value& req, OUT Json::Value& response);
 		void AampCheckPlaybackRate(IN const Json::Value& req, OUT Json::Value& response);
                 void AampPauseAtPosition(IN const Json::Value& req, OUT Json::Value& response);
+		void AampSetLicenseServerURL(IN const Json::Value& req, OUT Json::Value& response);
                 bool cleanup(const char*);
                 std::string testmodulepre_requisites();
                 bool testmodulepost_requisites();
