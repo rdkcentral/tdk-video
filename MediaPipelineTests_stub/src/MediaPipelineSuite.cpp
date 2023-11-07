@@ -26,6 +26,10 @@
 #include <chrono>
 #include <bits/stdc++.h>
 #include <sys/wait.h>
+#include <iostream>
+#include <stdexcept>
+#include <gst/audio/audio.h>
+
 extern "C"
 {
 #include <gst/check/gstcheck.h>
@@ -128,6 +132,9 @@ int bit_depth;
 int Bit_depth_got;
 bool brcm = false;
 bool rtk = false;
+gdouble volume_set = 1000;
+bool volume_stress = false;
+bool avsync_enabled = false;
 
 
 /*
@@ -410,7 +417,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
     		previous_rendered_frames_audio = rendered_frames_audio;
 
 
-		audio_sampling_diff = sampling_rate - (int)audio_sampling_rate;
+		audio_sampling_diff = (int)audio_sampling_rate - sampling_rate;
 		printf(" Sampling rate = %d",sampling_rate);
 		printf(" Audio_sampling_rate_diff = %d",audio_sampling_diff);
 
@@ -559,6 +566,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
         if(use_westerossink_fps)
         {
    	   frame_rate = int(rendered_frames - previous_rendered_frames);
+	   assert_failure (playbin,frame_rate != 0 , "Rendered frames equals to previous rendered frames, Video is not playing");
 	   current_position = round(currentPosition/GST_SECOND);
    	   totalFrames = frame_rate * current_position;
    	   dropped_percentage = (dropped_frames/totalFrames);
@@ -1075,7 +1083,35 @@ std::string executecommand(GstElement *playbin,const std::string& command )
 
 }
 
+/********************************************************************************************************************
+	Purpose: To set and get the audio volume
+*********************************************************************************************************************/
 
+static void play_set_relative_volume (GstElement *playbin)
+{
+  gdouble get_volume, set_volume, volume;
+
+  volume = gst_stream_volume_get_volume (GST_STREAM_VOLUME (playbin),
+      GST_STREAM_VOLUME_FORMAT_CUBIC);
+
+  printf ("Previous volume : %.0f%% \n", volume * 100);
+
+  printf  ("Setting volume to %f \n", volume_set);
+  
+  set_volume = volume_set;
+
+  printf ("Volume setted : %.0f%% \n", set_volume * 100);
+
+  gst_stream_volume_set_volume (GST_STREAM_VOLUME (playbin),
+      GST_STREAM_VOLUME_FORMAT_CUBIC, set_volume);
+
+  get_volume = gst_stream_volume_get_volume (GST_STREAM_VOLUME (playbin),
+      GST_STREAM_VOLUME_FORMAT_CUBIC);
+ 
+  printf ("Volume: %.0f%% \n", get_volume * 100);
+
+  assert_failure (playbin,set_volume == get_volume,"Failed to set the given volume");
+}
 
 
 /********************************************************************************************************************
@@ -2389,6 +2425,10 @@ GST_START_TEST (test_audio_underflow)
     bool seeked = false;
     int Seek_time_threshold = 5;
     GstStateChangeReturn state_change;
+    int runSeconds;
+    guint64 previous_rendered_frames;
+    guint64 rendered_frames;
+    GstStructure *video_structure;
 
     /*
     * Create the playbin element
@@ -2444,11 +2484,34 @@ GST_START_TEST (test_audio_underflow)
     assert_failure (playbin,audioEnd != 0,"audioEnd point is not given");
     if (play_without_audio)
     {
-	 bufferUnderflowTest = false;
-	 ignorePlayJump = true;
-         use_westerossink_fps = true;
-         PlaySeconds(playbin,play_timeout + audioEnd);
+    if (avsync_enabled)
+         {
+              PlaySeconds(playbin,play_timeout + audioEnd);
+              runSeconds = 0;
+              g_object_get (westerosSink,"stats",&video_structure,NULL);
+              gst_structure_get_uint64(video_structure, "rendered", &rendered_frames);
+              previous_rendered_frames = rendered_frames;
+              while ( runSeconds < play_timeout )
+              {
+              Sleep(1);
+              runSeconds++ ;
+              g_object_get (westerosSink,"stats",&video_structure,NULL);
+              gst_structure_get_uint64(video_structure, "rendered", &rendered_frames);
+              printf ("\nvideo frames");
+              printf(" Rendered: % \n" G_GUINT64_FORMAT, rendered_frames);
+              assert_failure(playbin, previous_rendered_frames == rendered_frames,"Video is not stopped as expected");
+              previous_rendered_frames  = rendered_frames;
+              };
+         }
+     else
+     {
+      bufferUnderflowTest = false;
+      ignorePlayJump = true;
+      use_westerossink_fps = true;
+      PlaySeconds(playbin,play_timeout + audioEnd);
+     }
     }
+
     else
     {
          PlaySeconds(playbin,audioEnd);
@@ -2764,6 +2827,102 @@ GST_START_TEST (test_color_depth)
 }
 GST_END_TEST;
 
+/********************************************************************************************************************
+ * Purpose      : Test to do check the volume of the audio playback using playbin element and westeros-sink
+ * Parameters   : Playback URL
+ ********************************************************************************************************************/
+
+GST_START_TEST (test_audio_volume)
+{
+
+    GstElement *playbin, *westerosSink;
+    bool elementsetup = false;
+    gdouble volume_set_array[5] = {1,0.75,0.5,0.25,0};
+
+
+    playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
+    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+
+    g_object_set (playbin, "video-sink",westerosSink, NULL);
+    assert_failure (playbin,m_play_url != NULL, "Playback url should not be NULL");
+    g_object_set (playbin, "uri", m_play_url, NULL);
+
+    /*
+     * Update the current playbin flags to enable Video and Audio Playback
+     */
+    g_object_get (playbin, "flags", &flags, NULL);
+    setflags();
+    g_object_set (playbin, "flags", flags, NULL);
+
+
+    westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
+    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+
+    g_object_set (playbin, "video-sink", westerosSink, NULL);
+
+    /*
+    * Set the first frame recieved callback
+    */
+    g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+
+
+
+    /*
+    * Set the firstFrameReceived variable as false before starting play
+    */
+    firstFrameReceived= false;
+
+    if (!volume_stress)
+	 assert_failure (playbin,volume_set != 1000,"volume set is not given");
+
+    GST_FIXME( "Setting to Playing State\n");
+    assert_failure (playbin,gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    gst_element_set_state (playbin, GST_STATE_PLAYING);
+    GST_FIXME( "Set to Playing State\n");
+
+    WaitForOperation;
+
+    /*
+    * Check if the first frame received flag is set
+    */
+    assert_failure (playbin,firstFrameReceived == true, "Failed to receive first video frame signal");
+
+    if (!volume_stress)
+    {
+    	PlaySeconds(playbin,5);
+
+    	play_set_relative_volume (playbin);
+
+    	PlaySeconds(playbin,10);
+
+    }
+    else
+    {
+	    for (int i=0 ; i < (sizeof(volume_set_array)/sizeof(*volume_set_array)); i++)
+	    {
+		    volume_set = volume_set_array[i];
+		    PlaySeconds(playbin,5);
+
+		    play_set_relative_volume (playbin);
+
+		    PlaySeconds(playbin,10);
+	    }
+    }
+
+    if (playbin)
+    {
+        assert_failure (playbin,gst_element_set_state (playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
+    }
+
+    /*
+     * Cleanup after use
+     */
+    gst_object_unref (playbin);
+
+}
+GST_END_TEST;
+
+
 
 
 
@@ -2939,6 +3098,7 @@ media_pipeline_suite (void)
     else if (strcmp ("test_audio_sampling_rate", tcname) == 0)
     {
        checkAudioSamplingrate = true;
+       use_audioSink = true;
        tcase_add_test (tc_chain, test_play_pause_pipeline);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
@@ -2946,6 +3106,7 @@ media_pipeline_suite (void)
     else if (strcmp ("test_only_audio", tcname) == 0)
     {
        checkAudioSamplingrate = true;
+       use_audioSink = true;
        tcase_add_test (tc_chain, test_only_audio);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
@@ -2959,6 +3120,19 @@ media_pipeline_suite (void)
     else if (strcmp ("test_color_depth", tcname) == 0)
     {
        tcase_add_test (tc_chain, test_color_depth);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_audio_volume", tcname) == 0)
+    {
+       tcase_add_test (tc_chain, test_audio_volume);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_audio_volume_stress", tcname) == 0)
+    {
+       volume_stress = true;
+       tcase_add_test (tc_chain, test_audio_volume);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
@@ -3032,7 +3206,9 @@ int main (int argc, char **argv)
 	    (strcmp ("test_audio_sampling_rate", tcname) == 0) ||
 	    (strcmp ("test_only_audio", tcname) == 0) ||
 	    (strcmp ("test_video_bitrate", tcname) == 0) ||
-	    (strcmp ("test_color_depth", tcname) == 0))
+	    (strcmp ("test_color_depth", tcname) == 0) ||
+	    (strcmp ("test_audio_volume", tcname) == 0) ||
+	    (strcmp ("test_audio_volume_stress", tcname) == 0))
 	{
 	    strcpy(m_play_url,argv[2]);
             arg = 3;
@@ -3083,6 +3259,11 @@ int main (int argc, char **argv)
                     strtok (argv[arg], "=");
                     bit_depth = atoi (strtok (NULL, "="));
                 }
+		if (strstr (argv[arg], "volume_set=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    volume_set = stod (strtok (NULL, "="));
+                }
 		if (strcmp ("checkAudioFPS=no", argv[arg]) == 0)
                 {
                     use_audioSink = false;
@@ -3091,6 +3272,11 @@ int main (int argc, char **argv)
                 {
                     checkAudioSamplingrate = true;
                 }
+		if (strcmp ("avsync_enabled", argv[arg]) == 0)
+        	{
+           	    avsync_enabled = true;
+	        }
+
 		if (strcmp ("checkPTS=no", argv[arg]) == 0)
                 {
 		    checkPTS = false;
