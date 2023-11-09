@@ -143,6 +143,8 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetQuantizationRange", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetQuantizationRange);
 		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetBassEnhancer", PARAMS_BY_NAME, JSON_STRING, "boost", JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetBassEnhancer);
 		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetBassEnhancer", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetBassEnhancer);
+		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetDRCMode", PARAMS_BY_NAME, JSON_STRING, "mode", JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetDRCMode);
+		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetDRCMode", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetDRCMode);
 
                 }
 
@@ -234,6 +236,8 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                 void DSHal_GetVolumeLeveller(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetQuantizationRange(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_SetBassEnhancer(IN const Json::Value& req, OUT Json::Value& response);
-                void DSHal_GetBassEnhancer(IN const Json::Value& req, OUT Json::Value& response);		
+                void DSHal_GetBassEnhancer(IN const Json::Value& req, OUT Json::Value& response);
+		void DSHal_SetDRCMode(IN const Json::Value& req, OUT Json::Value& response);
+		void DSHal_GetDRCMode(IN const Json::Value& req, OUT Json::Value& response);
 }; 
 #endif //__DSHAL_STUB_H__
