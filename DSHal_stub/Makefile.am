@@ -34,5 +34,5 @@ AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
 lib_LTLIBRARIES = libdshalstub.la
 libdshalstub_la_SOURCES = src/DSHalAgent.cpp
 libdshalstub_la_includedir = ${includedir}
-libdshalstub_la_LIBADD = -ldshalsrv -lds-hal -lIARMBus $(DSHALMFR_LIBS)
+libdshalstub_la_LIBADD = -lds-hal $(DSHALMFR_LIBS)
 libdshalstub_la_include_HEADERS = ${top_srcdir}/DSHal_stub/include/DSHalAgent.h

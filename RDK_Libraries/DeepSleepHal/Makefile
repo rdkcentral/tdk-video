@@ -2,7 +2,7 @@
 # If not stated otherwise in this file or this component's Licenses.txt
 # file the following copyright and licenses apply:
 #
-# Copyright 2016 RDK Management
+# Copyright 2024 RDK Management
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-SUBDIRS = $(SUBDIR_DEFAULT) $(SUBDIR_HYBRID) $(SUBDIR_CLIENT) $(PLUGIN_SRC) $(SUBDIR_CLIENT_XI3V2) $(SUBDIR_CLIENT_XID) $(SUBDIR_XG1V3) $(SUBDIR_XI5) \
-$(SUBDIR_CLIENT_XI5)
-DIST_SUBDIRS =
+INC_DIR = ../..//RDK_Source/iarmmgrs_source/hal/include
+CXXFLAGS += -I$(INC_DIR)
+CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall
 
-distcleancheck_listfiles = *-libtool
+# Library name and version
+LIBNAME = iarmmgrs-deepsleep-hal
+LIBVERSION = 0
+
+# Source files
+SRCS = tdk_deepsleep_hal.cpp
+
+# Output library filename
+LIBRARY = lib$(LIBNAME).so
+
+all: $(LIBRARY)
+
+$(LIBRARY): $(SRCS)
+	$(CC) $(CXXFLAGS) -fPIC -Wl,--hash-style=gnu -shared -Wl,-soname,lib$(LIBNAME).so.$(LIBVERSION) -o $(LIBRARY) $(SRCS)
+	ln -sf $(LIBRARY) lib$(LIBNAME).so.$(LIBVERSION)
+
+install: $(LIBRARY)
+	@echo "Installing files in $(DESTDIR) ..."
+	install -d $(DESTDIR)
+	install -m 0755 $< $(DESTDIR)
+
+clean:
+	rm -f *.o
+
+.PHONY: all clean

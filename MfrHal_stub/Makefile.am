@@ -23,6 +23,7 @@ AM_CPPFLAGS = -g -Wall -std=c++0x -DGCC4_XXX \
               -DMFR_DEFAULT_DATA='"$(MFR_DEFAULT_DATA)"'
 
 AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
+	      -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rdk/iarmmgrs-hal \
               -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rdk/iarmmgrs/mfr \
               -I${top_srcdir}/MfrHal_stub/include -I${top_srcdir}/agent/include
 

@@ -31,8 +31,6 @@ libwesteroshalstub_la_includedir = ${includedir}
 libwesteroshalstub_la_LIBADD = -lwesteros_gl $(WESTEROSHAL_LIBS)
 libwesteroshalstub_la_include_HEADERS = ./include/WesterosHalAgent.h
 
-
 bin_PROGRAMS = WesterosHalTDKTestApp
 WesterosHalTDKTestApp_SOURCES = src/WesterosTestAppSource.cpp
-WesterosHalTDKTestApp_LDFLAGS= -lwesteros_gl \
-			       -lwesteros_compositor
+WesterosHalTDKTestApp_LDFLAGS= -lwesteros_gl

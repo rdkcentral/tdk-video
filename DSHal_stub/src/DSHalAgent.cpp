@@ -27,43 +27,47 @@
 std::string DSHalAgent::testmodulepre_requisites()
 {
     DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule pre_requisites --> Entry\n");
-    /*initializing IARMBUS library */
-    IARM_Result_t ret;
-    ret = IARM_Bus_Init("agent");
-    if(ret == 0)
+    DEBUG_PRINT(DEBUG_LOG,"\nSeparate Initializations\n");
+    dsError_t ret = dsERR_NONE;
+    ret = dsHostInit();
+    if (ret != dsERR_NONE)
     {
-        DEBUG_PRINT(DEBUG_LOG,"\n Application Successfully initializes the IARMBUS library\n");
+	DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsHostInit Failed\n");
+        goto EXIT;
     }
-    else
+    ret = dsDisplayInit();
+    if (ret != dsERR_NONE)
     {
-        DEBUG_PRINT(DEBUG_LOG,"\n Application failed to initializes the IARMBUS library\n");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule pre_requisites --> Exit\n");
-        return "FAILURE";
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsDisplayInit Failed\n");
+        goto EXIT;
     }
-    DEBUG_PRINT(DEBUG_LOG,"\n Calling IARM_BUS_Connect\n");
-    /*connecting application with IARM BUS*/
-    ret = IARM_Bus_Connect();
-    if(ret == 0)
+    ret = dsAudioPortInit();
+    if (ret != dsERR_NONE)
     {
-        DEBUG_PRINT(DEBUG_LOG,"\n Application Successfully connected with IARMBUS\n");
-#ifdef DSMGR_INIT
-        DEBUG_PRINT(DEBUG_LOG,"\ndsMgr Init\n");
-        dsMgr_init();
-#else
-	DEBUG_PRINT(DEBUG_LOG,"\nSeparate Initializations\n");
-	dsHostInit();
-	dsDisplayInit();
-	dsAudioPortInit();
-	dsVideoPortInit();
-	dsVideoDeviceInit();
-#endif
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsAudioPortInit Failed\n");
+        goto EXIT;
+    }
+    ret = dsVideoPortInit();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsVideoPortInit Failed\n");
+        goto EXIT;
+    }
+    ret = dsVideoDeviceInit();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsVideoDeviceInit Failed\n");
+        goto EXIT;
+    }
 
+EXIT :
+    if (ret == dsERR_NONE)
+    {
         DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule pre_requisites --> Exit\n");
         return "SUCCESS";
     }
     else
     {
-        DEBUG_PRINT(DEBUG_LOG,"\n Application failed to connect with IARMBUS\n");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule pre_requisites --> Exit\n");
         return "FAILURE";
     }
@@ -77,45 +81,47 @@ std::string DSHalAgent::testmodulepre_requisites()
 bool DSHalAgent::testmodulepost_requisites()
 {
     DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule post_requisites --> Entry\n");
- 
-    IARM_Result_t ret;
-#ifdef DSMGR_TERM
-    DEBUG_PRINT(DEBUG_LOG,"\ndsMgr Term\n");
-    dsMgr_term();
-#else
+
+    dsError_t ret = dsERR_NONE; 
     DEBUG_PRINT(DEBUG_TRACE, "\nSeparate Terminations\n");
-    dsVideoDeviceTerm();
-    dsVideoPortTerm();
-    dsAudioPortTerm();
-    dsDisplayTerm();
-#endif
+
+    ret = dsVideoDeviceTerm();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsVideoDeviceTerm Failed\n");
+        goto EXIT;
+    }
+    ret = dsVideoPortTerm();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsVideoPortTerm Failed\n");
+        goto EXIT;
+    }
+    ret = dsAudioPortTerm();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsAudioPortTerm Failed\n");
+        goto EXIT;
+    }
+    ret = dsDisplayTerm();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsDisplayTerm Failed\n");
+        goto EXIT;
+    }
     vpHandle = 0;
     vdHandle = 0;
     apHandle = 0;
     dispHandle = 0;
     
-    ret = IARM_Bus_Disconnect();
-    if(ret == 0)
+EXIT :
+    if (ret == dsERR_NONE)
     {
-        DEBUG_PRINT(DEBUG_LOG,"\n Application Disconnected from IARMBUS \n");
-    }
-    else
-    {
-        DEBUG_PRINT(DEBUG_ERROR,"\n Application failed to Disconnect from IARMBUS \n");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule post_requisites --> Exit\n");
-        return TEST_FAILURE;
-    }
-
-    ret = IARM_Bus_Term();
-    if(ret == 0)
-    {
-        DEBUG_PRINT(DEBUG_LOG,"\n Application terminated from IARMBUS \n");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule post_requisites --> Exit\n");
         return TEST_SUCCESS;
     }
     else
     {
-        DEBUG_PRINT(DEBUG_ERROR,"\n Application failed to terminate from IARMBUS \n");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal testmodule post_requisites --> Exit\n");
         return TEST_FAILURE;
     }

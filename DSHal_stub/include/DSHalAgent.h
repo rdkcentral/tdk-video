@@ -31,13 +31,8 @@
 #include "dsAudio.h"
 #include "dsDisplay.h"
 #include "dsHost.h"
-#include "dsMgr.h"
 #include "dsFPD.h"
 #include "dsHdmiIn.h"
-
-
-#include "libIBus.h"
-#include "libIBusDaemon.h"
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
 

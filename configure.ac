@@ -75,6 +75,7 @@ TDK_GST_LIBS=" "
 HEADLESS=" "
 SUBDIR_HYBRID=" "
 SUBDIR_CLIENT=" "
+SUBDIR_DEFAULT=" "
 SM_STUB_CFLAG_HYBRID=" "
 BLUETOOTH_LIBS=" "
 MFRHAL_LIBS=" "
@@ -133,6 +134,7 @@ AC_ARG_ENABLE([quemux86mc],
            ],
          [echo "client build is enable"])
 AM_CONDITIONAL([QEMUX86MC], [test x$QEMUX86MC = xtrue])
+
 
 AC_ARG_ENABLE([trm],
          AS_HELP_STRING([--enable-trm],[enable trm (default is no)]),
@@ -242,21 +244,6 @@ AC_ARG_ENABLE([usbctrl],
            [echo "usbctrl component is not enabled"])
 AM_CONDITIONAL([USBCTRL], [test x$USBCTRL = xtrue])
 
-AC_ARG_ENABLE([wifihal],
-         AS_HELP_STRING([--enable-wifihal],[enable wifihal (default is no)]),
-         [
-           case "${enableval}" in
-              yes) WIFIHAL=true
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" WIFIHAL_stub"],
-                          [echo box type not specified]) ;;
-             no) WIFIHAL=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-wifihal ]) ;;
-             esac
-            ],
-           [echo "wifihal component is not enabled"])
-AM_CONDITIONAL([WIFIHAL], [test x$WIFIHAL = xtrue])
-
-
 AC_ARG_ENABLE([dtcp],
          AS_HELP_STRING([--enable-dtcp],[enable dtcp (default is no)]),
          [
@@ -302,39 +289,6 @@ AC_ARG_ENABLE([bluetooth],
            [echo "bluetooth component is not enabled"])
 AM_CONDITIONAL([BLUETOOTH], [test x$BLUETOOTH = xtrue])
 
-AC_ARG_ENABLE([bluetoothhal],
-         AS_HELP_STRING([--enable-bluetoothhal],[enable bluetoothhal (default is no)]),
-         [
-           case "${enableval}" in
-              yes) BLUETOOTHHAL=true
-                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" BluetoothHal_stub "],
-                          [echo BluetoothHal enabled in Hybrid])
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" BluetoothHal_stub "],
-                          [echo BluetoothHal enabled in Client]) ;;
-             no) BLUETOOTHHAL=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-bluetoothhal ]) ;;
-             esac
-            ],
-           [echo "bluetoothhal component is not enabled"])
-AM_CONDITIONAL([BLUETOOTHHAL], [test x$BLUETOOTHHAL = xtrue])
-
-
-AC_ARG_ENABLE([mfrhal],
-         AS_HELP_STRING([--enable-mfrhal],[enable mfrhal (default is no)]),
-         [
-           case "${enableval}" in
-              yes) MFRHAL=true
-                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" MfrHal_stub "],
-                          [echo MfrHal enabled in Hybrid])
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" MfrHal_stub "],
-                          [echo MfrHal enabled in Client]) ;;
-             no) MFRHAL=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-mfrhal ]) ;;
-             esac
-            ],
-           [echo "mfrhal component is not enabled"])
-AM_CONDITIONAL([MFRHAL], [test x$MFRHAL = xtrue])
-
 AC_ARG_ENABLE([fireboltcompliance],
          AS_HELP_STRING([--enable-fireboltcompliance],[enable fireboltcompliance (default is no)]),
          [
@@ -352,6 +306,52 @@ AC_ARG_ENABLE([fireboltcompliance],
            [echo "FireboltCompliance is not enabled"])
 AM_CONDITIONAL([HAVE_EGL], [test x$HAVE_EGL = xtrue])
 AM_CONDITIONAL([FIREBOLTCOMPLIANCE], [test x$FIREBOLTCOMPLIANCE = xtrue])
+
+AC_ARG_ENABLE([xupnp],
+         AS_HELP_STRING([--enable-xupnp],[enable xupnp (default is no)]),
+         [
+           case "${enableval}" in
+              yes) XUPNP=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" XUPNP_stub "],
+                          [echo Xupnp enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" XUPNP_stub "],
+                          [echo Xupnp enabled in Client]) ;;
+             no) XUPNP=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --disable-xupnp ]) ;;
+             esac
+            ],
+           [echo "xupnp component is not enabled"])
+AM_CONDITIONAL([XUPNP], [test x$XUPNP = xtrue])
+
+AC_ARG_ENABLE([defaultComponents],
+         AS_HELP_STRING([--enable-defaultComponents],[enable defaultComponents (default is no)]),
+         [
+           case "${enableval}" in
+              yes) DefaultComponents=true
+		   SUBDIR_DEFAULT=" agent IARMBUS_stub DS_stub RDKLogger_stub AAMP_stub MediaPipelineTests_stub Apparmor_Stub SystemUtil_stub DSHal_stub ";;
+             no) DefaultComponents=false 
+		   SUBDIR_DEFAULT="  agent DSHal_stub MediaPipelineTests_stub SystemUtil_stub "
+		   SUBDIR_HYBRID=" "
+		   SUBDIR_CLIENT=" ";;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-defaultComponents ]) ;;
+             esac
+            ],
+           [echo "defaultComponents component is not enabled"])
+AM_CONDITIONAL([defaultComponents], [test x$defaultComponents = xtrue])
+
+AC_ARG_ENABLE([wifihal],
+         AS_HELP_STRING([--enable-wifihal],[enable wifihal (default is no)]),
+         [
+           case "${enableval}" in
+              yes) WIFIHAL=true
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" WIFIHAL_stub"],
+                          [echo box type not specified]) ;;
+             no) WIFIHAL=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-wifihal ]) ;;
+             esac
+            ],
+           [echo "wifihal component is not enabled"])
+AM_CONDITIONAL([WIFIHAL], [test x$WIFIHAL = xtrue])
 
 AC_ARG_ENABLE([deepsleephal],
          AS_HELP_STRING([--enable-deepsleephal],[enable deepsleephal (default is no)]),
@@ -415,22 +415,39 @@ AC_ARG_ENABLE([westeroshal],
            [echo "westeroshal component is not enabled"])
 AM_CONDITIONAL([WESTEROSHAL], [test x$WESTEROSHAL = xtrue])
 
-
-AC_ARG_ENABLE([xupnp],
-         AS_HELP_STRING([--enable-xupnp],[enable xupnp (default is no)]),
+AC_ARG_ENABLE([bluetoothhal],
+         AS_HELP_STRING([--enable-bluetoothhal],[enable bluetoothhal (default is no)]),
          [
            case "${enableval}" in
-              yes) XUPNP=true
-                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" XUPNP_stub "],
-                          [echo Xupnp enabled in Hybrid])
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" XUPNP_stub "],
-                          [echo Xupnp enabled in Client]) ;;
-             no) XUPNP=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --disable-xupnp ]) ;;
+              yes) BLUETOOTHHAL=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" BluetoothHal_stub "],
+                          [echo BluetoothHal enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" BluetoothHal_stub "],
+                          [echo BluetoothHal enabled in Client]) ;;
+             no) BLUETOOTHHAL=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-bluetoothhal ]) ;;
              esac
             ],
-           [echo "xupnp component is not enabled"])
-AM_CONDITIONAL([XUPNP], [test x$XUPNP = xtrue])
+           [echo "bluetoothhal component is not enabled"])
+AM_CONDITIONAL([BLUETOOTHHAL], [test x$BLUETOOTHHAL = xtrue])
+
+
+AC_ARG_ENABLE([mfrhal],
+         AS_HELP_STRING([--enable-mfrhal],[enable mfrhal (default is no)]),
+         [
+           case "${enableval}" in
+              yes) MFRHAL=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" MfrHal_stub "],
+                          [echo MfrHal enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" MfrHal_stub "],
+                          [echo MfrHal enabled in Client]) ;;
+             no) MFRHAL=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-mfrhal ]) ;;
+             esac
+            ],
+           [echo "mfrhal component is not enabled"])
+AM_CONDITIONAL([MFRHAL], [test x$MFRHAL = xtrue])
+
 
 AC_ARG_ENABLE([trace],
               AS_HELP_STRING([--enable-trace],[enable trace (default is no)]),
@@ -481,6 +498,7 @@ AC_SUBST(SF_LIBS)
 AC_SUBST(TDK_GST_LIBS)
 AC_SUBST(SUBDIR_HYBRID)
 AC_SUBST(SUBDIR_CLIENT)
+AC_SUBST(SUBDIR_DEFAULT)
 AC_SUBST(SM_STUB_CFLAG_HYBRID)
 AC_SUBST(BLUETOOTH_LIBS)
 AC_SUBST(MFRHAL_LIBS)
