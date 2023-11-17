@@ -3115,7 +3115,7 @@ void DSHalAgent::DSHal_SetSurroundVirtualizer(IN const Json::Value& req, OUT Jso
         checkERROR(ret,&error);
         response["result"] = "FAILURE";
         response["details"] = "SetSurroundVirtualizer call failed" + error;
-            DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
+        DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
         DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetSurroundVirtualizer call is FAILURE");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetSurroundVirtualizer -->Exit\n");
         return;
@@ -3154,7 +3154,7 @@ void DSHalAgent::DSHal_GetSurroundVirtualizer(IN const Json::Value& req, OUT Jso
         checkERROR(ret,&error);
         response["result"] = "FAILURE";
         response["details"] = "GetSurroundVirtualizer call failed" + error;
-            DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
+        DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
         DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetSurroundVirtualizer call is FAILURE");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetSurroundVirtualizer -->Exit\n");
         return;
@@ -3191,7 +3191,7 @@ void DSHalAgent::DSHal_SetVolumeLeveller(IN const Json::Value& req, OUT Json::Va
         checkERROR(ret,&error);
         response["result"] = "FAILURE";
         response["details"] = "SetVolumeLeveller call failed" + error;
-            DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
+        DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
         DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetVolumeLeveller call is FAILURE");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetVolumeLeveller -->Exit\n");
         return;
@@ -3229,12 +3229,89 @@ void DSHalAgent::DSHal_GetVolumeLeveller(IN const Json::Value& req, OUT Json::Va
         checkERROR(ret,&error);
         response["result"] = "FAILURE";
         response["details"] = "GetVolumeLeveller call failed" + error;
-            DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
+        DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
         DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetVolumeLeveller call is FAILURE");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetVolumeLeveller -->Exit\n");
         return;
     }
 }
+
+/**************************************************************************************************
+ *Function name : DSHal_SetDRCMode
+ *Description    : This function is to set dynamic range control mode used in a given audio port
+ *************************************************************************************************/
+void DSHalAgent::DSHal_SetDRCMode(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetDRCMode --->Entry\n");
+    if(&req["mode"] == NULL)
+    {
+        return;
+    }
+
+    int mode;
+    mode = req["mode"].asInt();
+    dsError_t ret = dsERR_NONE;
+
+    ret = dsSetDRCMode(apHandle,mode);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "SetDRCMode call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetDRCMode call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetDRCMode -->Exit\n");
+        return;
+    }
+    else
+    {
+        checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetDRCMOde call failed" + error;
+        DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetDRCMode call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetDRCMode -->Exit\n");
+        return;
+    }
+}
+
+/**************************************************************************************************
+ *Function name : DSHal_GetDRCMode
+ *Description    : This function is to get dynamic range control mode used in a given audio port
+ *************************************************************************************************/
+void DSHalAgent::DSHal_GetDRCMode(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetDRCMode --->Entry\n");
+    if(&req["mode"] == NULL)
+    {
+        return;
+    }
+
+    char output[300];
+    int mode;
+    dsError_t ret = dsERR_NONE;
+
+
+    ret = dsGetDRCMode(apHandle,&mode);
+    sprintf(output, "Mode : %d" , mode);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = output;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetDRCMode call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetDRCMode -->Exit\n");
+        return;
+    }
+    else
+    {
+        checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "GetDRCMode call failed" + error;
+        DEBUG_PRINT(DEBUG_TRACE1, "Handle : %d\n",apHandle);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetDRCMode call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetDRCMode -->Exit\n");
+        return;
+    }
+}
+
 
 /***************************************************************************
  *Function name : DSHal_GetQuantizationRange
