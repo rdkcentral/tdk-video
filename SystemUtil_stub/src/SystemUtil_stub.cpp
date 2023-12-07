@@ -337,12 +337,12 @@ void SystemUtilAgent::SystemUtilAgent_ExecuteCmd(IN const Json::Value& req, OUT 
 		return;
 	}
 
+	DEBUG_PRINT(DEBUG_TRACE, "Command Response:\n");
 	/*copy the response to a buffer */
 	while(fgets(readRespBuff,sizeof(readRespBuff),fp) != NULL)
 	{
-		DEBUG_PRINT(DEBUG_TRACE, "Command Response:\n");
 		resultDetails += readRespBuff;
-		cout<<readRespBuff<<endl;
+		cout<<readRespBuff;
 	}
 
 	pclose(fp);	
