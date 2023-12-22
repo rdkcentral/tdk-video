@@ -51,6 +51,7 @@ using namespace std;
                                         }
 #define WaitForOperation                Sleep(5)
 #define PLAYBACK_RATE_TOLERANCE         0.03
+#define ENV_FILE                        "/opt/TDK.env"
 #define DEBUG_PRINT(f_, ...)            if (enable_trace) \
                                             printf((f_), ##__VA_ARGS__)
 
@@ -1100,6 +1101,80 @@ GST_START_TEST (trickplayTest)
 }
 GST_END_TEST;
 
+/********************************************************************************************************************
+ * Purpose      : To check if environmental variable is already set
+ * Parameters   : Environmental Variable
+ ********************************************************************************************************************/
+bool isEnvVarSet(const char* varName) {
+    return getenv(varName) != nullptr;
+}
+
+/********************************************************************************************************************
+ * Purpose      : To set environmental variables
+ * Parameters   : Environmental Variable
+ *                Value for environmental variable
+ ********************************************************************************************************************/
+void setEnvironmentVariable(const char* varName, const char* varValue)
+{
+    if (isEnvVarSet(varName))
+    {
+        printf("Environment variable already set: %s=%s\n", varName, getenv(varName));
+    }
+    else
+    {
+        if (setenv(varName, varValue, 1) != 0)
+	{
+            printf("Error setting environment variable: %s\n", varName);
+        }
+	else
+	{
+            printf("Set environment variable: %s=%s\n", varName, varValue);
+        }
+    }
+}
+
+/********************************************************************************************************************
+ * Purpose      : To read from ENV_FILE and set the corresponding environmental variables
+ ********************************************************************************************************************/
+int setVariables()
+{
+    FILE* inputFile = fopen(ENV_FILE, "r");
+    if (inputFile)
+    {
+        char line[256];
+        while (fgets(line, sizeof(line), inputFile))
+        {
+             line[strcspn(line, "\n")] = '\0';
+             if (strncmp(line, "export ", 7) == 0)
+             {
+		 char* varName = line + 7;
+		 char* equalsPos = strchr(varName, '=');
+		 if (equalsPos != nullptr)
+		 {
+                     *equalsPos = '\0';
+                     setEnvironmentVariable(varName, equalsPos + 1);
+                 }
+             }
+             else
+             {
+                 char* equalsPos = strchr(line, '=');
+                 if (equalsPos != nullptr)
+                 {
+                     *equalsPos = '\0';
+                     setEnvironmentVariable(line, equalsPos + 1);
+                 }
+             }
+         };
+         fclose(inputFile);
+	 return 1;
+     }
+     else
+     {
+         printf ("\nUnable to open %s file for reading\n", ENV_FILE);
+         return 0;
+     }
+}
+
 int main (int argc, char **argv)
 {
     int returnValue = 0;
@@ -1119,10 +1194,18 @@ int main (int argc, char **argv)
     }
     else
     {
-        GST_ERROR ("Environment variable TDK_PATH should be set!!!!");
-        printf ("Environment variable TDK_PATH should be set!!!!");
-        returnValue = 0;
-        goto exit;
+	if (access(ENV_FILE, F_OK) == 0)
+        {
+            if (!(setVariables()))
+                goto exit;
+        }
+        else
+        {
+            GST_ERROR ("Environment variable TDK_PATH should be set!!!!");
+            printf ("Environment variable TDK_PATH is not set!!!!\n");
+            printf ("Environment variables can be set in /opt/TDK.env\n");
+            goto exit;
+        }
     }
 
     if (getenv ("TDK_DEBUG") != NULL)
@@ -1130,7 +1213,14 @@ int main (int argc, char **argv)
         enable_trace = true;
     }
 
+    if (argc < 2)
+    {
+        printf ("FALIURE : Insufficient arguments\n");
+	goto exit;
+    }
+
     strcpy(m_play_url,argv[1]);
+
     for (arg = 2; arg < argc; arg++)
     {
         if (strstr (argv[arg], "operations=") != NULL)
