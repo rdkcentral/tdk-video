@@ -25,7 +25,8 @@ bool speed_changed_received=false;
 bool bitrate_changed_received=false;
 bool cc_handle_received=false;
 bool check_rate_value=false;
-char errordescription[ERROR_DESCRIPTION_LENGTH]={0};
+char error_description[ERROR_DESCRIPTION_LENGTH]={0};
+char bitrate_details[RESULT_DETAILS_LENGTH]={0};
 pthread_cond_t cond1;
 pthread_mutex_t aamp_pthread_lock;
 
@@ -59,7 +60,7 @@ public:
                 case AAMP_EVENT_TUNE_FAILED:
                         sleep(1);//To make sure the tune_api is executed before any failure
                         pthread_mutex_lock(&aamp_pthread_lock);
-                        strncpy(errordescription,e.data.mediaError.description,ERROR_DESCRIPTION_LENGTH);
+                        strncpy(error_description,e.data.mediaError.description,ERROR_DESCRIPTION_LENGTH);
                         pthread_cond_signal(&cond1);
                         pthread_mutex_unlock(&aamp_pthread_lock);
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_TUNE_FAILED\n");
@@ -102,7 +103,9 @@ public:
                 case AAMP_EVENT_BITRATE_CHANGED:
                         bitrate_changed_received=true;
                         DEBUG_PRINT(DEBUG_TRACE,"AAMP_EVENT_BITRATE_CHANGED\n");
-                        break;
+                        DEBUG_PRINT(DEBUG_TRACE,"Bitrate: %ld, Width: %d, Height: %d, Framerate: %f, Position: %f, Display Width: %d, Display Height: %d, Video Scan Type: %d, Aspect Ratio Width: %d, Aspect Ratio Height: %d\n", e.data.bitrateChanged.bitrate, e.data.bitrateChanged.width, e.data.bitrateChanged.height, e.data.bitrateChanged.framerate, e.data.bitrateChanged.position, e.data.bitrateChanged.displayWidth, e.data.bitrateChanged.displayHeight, e.data.bitrateChanged.videoScanType, e.data.bitrateChanged.aspectRatioWidth, e.data.bitrateChanged.aspectRatioHeight);
+                        sprintf(bitrate_details,"Bitrate: %ld, Width: %d, Height: %d, Framerate: %f, Position: %f, Display Width: %d, Display Height: %d, Video Scan Type: %d, Aspect Ratio Width: %d, Aspect Ratio Height: %d\n", e.data.bitrateChanged.bitrate, e.data.bitrateChanged.width, e.data.bitrateChanged.height, e.data.bitrateChanged.framerate, e.data.bitrateChanged.position, e.data.bitrateChanged.displayWidth, e.data.bitrateChanged.displayHeight, e.data.bitrateChanged.videoScanType, e.data.bitrateChanged.aspectRatioWidth, e.data.bitrateChanged.aspectRatioHeight);
+ 			break;
                }
        }
 };
@@ -121,7 +124,7 @@ static void create_player_instance_regevents()
     //starting gmain loop
     AAMPGstPlayerMainLoop_test = g_main_loop_new(NULL, FALSE);
     aampMainLoopThread_test = g_thread_new("AAMPGstPlayerLoop_test", &test_StreamThread, NULL );
-    memset(errordescription,'\0',ERROR_DESCRIPTION_LENGTH);
+    memset(error_description,'\0',ERROR_DESCRIPTION_LENGTH);
     //starting event listener
     mSingleton= new PlayerInstanceAAMP();
     myEventListener = new testAAMPEventListener();
@@ -342,7 +345,7 @@ void AampAgent::AampTune (IN const Json::Value& req, OUT Json::Value& response)
         response["details"] = "AAMP TUNE call is success";
     }
 
-        if (strlen(errordescription)==0)
+        if (strlen(error_description)==0)
         {
                 response["result"] = "SUCCESS";
                 DEBUG_PRINT (DEBUG_TRACE, "AAMP TUNE call is success\n");
@@ -350,11 +353,11 @@ void AampAgent::AampTune (IN const Json::Value& req, OUT Json::Value& response)
         else
         {
                 response["result"] = "FAILURE";
-                response["details"] = errordescription;
+                response["details"] = error_description;
                 DEBUG_PRINT (DEBUG_TRACE, "Deleting player instance since current player instance is in ERROR state\n");
                 delete_player_instance();
-                DEBUG_PRINT (DEBUG_TRACE, "AAMP TUNE call is failed with error: %s\n",errordescription);
-                memset(errordescription,'\0',ERROR_DESCRIPTION_LENGTH);
+                DEBUG_PRINT (DEBUG_TRACE, "AAMP TUNE call is failed with error: %s\n",error_description);
+                memset(error_description,'\0',ERROR_DESCRIPTION_LENGTH);
         }
 	DEBUG_PRINT (DEBUG_TRACE, "AampTune Exit \n");
 	return;
@@ -393,11 +396,11 @@ void AampAgent::AampPlayTillEof(IN const Json::Value& req, OUT Json::Value& resp
 {
         DEBUG_PRINT (DEBUG_TRACE, "AampPlayTillEof Tune \n");
         pthread_mutex_lock(&aamp_pthread_lock);
-        memset(errordescription,'\0',ERROR_DESCRIPTION_LENGTH);
+        memset(error_description,'\0',ERROR_DESCRIPTION_LENGTH);
         pthread_cond_wait(&cond1, &aamp_pthread_lock);
         pthread_mutex_unlock(&aamp_pthread_lock);
         response["result"] = "SUCCESS";
-        response["details"] = errordescription;
+        response["details"] = error_description;
         DEBUG_PRINT (DEBUG_TRACE, "AampPlayTillEof Exit \n");
 }
 
@@ -1498,6 +1501,34 @@ void AampAgent::AampSetLicenseServerURL(IN const Json::Value& req, OUT Json::Val
         return;
 }
 
+/*************************************************************************
+Function Name   : AampSetDisable4K
+
+Description     : This function is used to Set Disable 4K
+*************************************************************************/
+void AampAgent::AampSetDisable4K(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetDisable4K Entry \n");
+	char disable4K[10];
+        strcpy(disable4K,req["disable4K"].asCString());
+        bool disable;
+        if (!strcmp(disable4K,"true"))
+            disable = true;
+        else if (!strcmp(disable4K,"false"))
+            disable = false;
+        else{
+            response["result"] = "FAILURE";
+            response["details"] = "Invalid Disable param";
+            return;
+        }
+	mSingleton->SetDisable4K(disable);
+        response["result"] = "SUCCESS";
+        response["details"] = "AampSetDisable4K call is fine";
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetDisable4K call is fine \n");
+        DEBUG_PRINT (DEBUG_TRACE, "AampSetDisable4K Exit \n");
+        return;
+}
+
 /***********************************************************************************************************
 Function Name   : AampEnableVideoRectangle
 
@@ -1633,6 +1664,20 @@ void AampAgent::AampCheckPlaybackRate(IN const Json::Value& req, OUT Json::Value
         response["details"] = details;
         DEBUG_PRINT (DEBUG_TRACE, "AampCheckPlaybackRate Exit \n");
         return;
+}
+
+/*********************************************************************************************************
+Function Name   : AampGetBitrateDetails
+
+Description     : This function is to return the video details obtained through AAMP_EVENT_BITRATE_CHANGED
+*********************************************************************************************************/
+void AampAgent::AampGetBitrateDetails(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampGetBitrateDetails Entry \n");
+	response["result"] = "SUCCESS";
+	response["details"] = bitrate_details;
+	DEBUG_PRINT (DEBUG_TRACE, "AampGetBitrateDetails Exit \n");
+	return;
 }
 
 /*************************************************************************
