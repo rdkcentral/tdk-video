@@ -2862,7 +2862,19 @@ void DSHalAgent::DSHal_HdmiInSelectPort(IN const Json::Value& req, OUT Json::Val
     dsHdmiInPort_t port = (dsHdmiInPort_t) req["port"].asInt();
     dsError_t ret = dsERR_NONE;
 
-    ret = dsHdmiInSelectPort(port);
+    /*
+     * dsHdmiInSelectPort declaration changed in RDK-42825
+     * Commenting the existing API call to avoid build failure
+     * TODO:Implement dsHdmiInSelectPort according to below declaration
+     * dsHdmiInSelectPort (dsHdmiInPort_t Port, bool audioMix, dsVideoPlaneType_t evideoPlaneType,bool topMost);
+     */
+
+    //ret = dsHdmiInSelectPort(port);
+    response["result"] = "FAILURE";
+    response["details"] = "HdmiInSelectPort test not implemented";
+    DEBUG_PRINT(DEBUG_ERROR, "DSHal_HdmiInSelectPort call is not implemented");
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_HdmiInSelectPort -->Exit\n");
+    return;
 
     if (ret == dsERR_NONE)
     {
