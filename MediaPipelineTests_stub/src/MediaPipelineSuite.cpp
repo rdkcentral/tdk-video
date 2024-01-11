@@ -23,10 +23,12 @@
 #include <vector>
 #include <cmath>
 #include <ctime>
+#include <curl/curl.h>
 #include <sstream>
 #include <chrono>
 #include <bits/stdc++.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <iostream>
 #include <stdexcept>
 #include <gst/audio/audio.h>
@@ -72,6 +74,9 @@ using namespace std;
 #define RESOLUTION_OFFSET               5
 #define BUFF_LENGTH 			512
 #define ENV_FILE                        "/opt/TDK.env"
+#define PROGRESS_BAR_WIDTH              50
+#define CHUNK_SIZE                      4096
+#define PROGRESS_BAR_DISPLAY_INTERVAL   5 //seconds 
 
 char m_play_url[BUFFER_SIZE_LONG] = {'\0'};
 char tcname[BUFFER_SIZE_SHORT] = {'\0'};
@@ -149,6 +154,11 @@ bool ignoreError = false;
 bool checkNewPlay = false;
 bool only_audio = false;
 bool checkEachSecondPlayback = false;
+bool use_appsrc = false;
+int ReadSize = 0;
+guint64 total_bytes_fed = 0;
+guint64 BYTES_THRESHOLD = 0;
+float previous_progress_percentage = 0.0;
 
 /*
  * Playbin flags
@@ -194,8 +204,23 @@ typedef struct SinkData {
     gboolean UnderflowReceived;
 } SinkElementData;
 
+typedef struct _App App;
+
+struct _App
+{
+  GstElement *appsrc;
+  guint sourceid;
+  GMappedFile *file;
+  gchar *data;
+  gsize length;
+  guint64 offset;
+};
+
+App s_app;
+
 typedef struct CustomData {
     GstElement *playbin;                /* Playbin element handle */
+    App app;
     SinkElementData westerosSink;       /* westerossink element handle */
     SinkElementData audioSink;          /* audioSink element handle */
     gboolean pipelineInitiation;        /* Variable to indicate whether pipeline playback validation is just started */
@@ -295,6 +320,12 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    data.terminate = FALSE;
    data.eosDetected = FALSE;
 
+   if (only_audio)
+   {
+        checkPTS=false;
+        use_westerossink_fps=false;
+   }
+
    if (ResolutionSwitchTest || ResolutionTest)
 	   use_audioSink = false;
    
@@ -324,6 +355,9 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    g_object_get (playbin,"video-sink",&videoSink,NULL);
 
    g_object_get (playbin,"audio-sink",&audioSink,NULL);
+   string audiosink_name;
+   g_object_get (audioSink,"name",&audiosink_name,NULL);
+   printf("\nAudioSink used for this pipeline is %s\n",audiosink_name.c_str());
 
    if (checkPTS)
    {
@@ -628,6 +662,12 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 
 void PlaybackValidation(MessageHandlerData *data, int seconds)
 {
+    if (only_audio)
+    {
+	 checkPTS=false;
+	 use_westerossink_fps=false;
+    }
+  
     //thresholds for pts and frames valdiation	
     if (play_without_audio || play_without_video)
     {
@@ -667,9 +707,15 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     if (data->pipelineInitiation)
     {
         assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position");
-	if (use_audioSink)
-	    g_object_get (data->playbin,"audio-sink",&(data->audioSink.sink),NULL);
 	data->pipelineInitiation = false;
+    }
+
+    if (use_audioSink)
+    {
+        g_object_get (data->playbin,"audio-sink",&(data->audioSink.sink),NULL);
+        string audiosink_name;
+        g_object_get (data->audioSink.sink,"name",&audiosink_name,NULL);
+        printf("\nAudioSink used for this pipeline is %s\n",audiosink_name.c_str());
     }
 
     // Get pipeline state
@@ -905,7 +951,7 @@ void setflags()
 #ifdef NATIVE_AUDIO
 	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
 #endif
-#ifndef NO_NATIVE_VIDEO
+#ifdef NATIVE_VIDEO
     	flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
 #endif
 }
@@ -944,6 +990,16 @@ bool getstreamingstatus(char* script)
     }
 }
 
+/******************************************************************************************************************
+ * Purpose:                Callback function to initialize appsrc with corresponding callbacks
+ *****************************************************************************************************************/
+static void found_source(GstElement* playbin, GstElement* source, gpointer data)
+{
+   MessageHandlerData *newData = (MessageHandlerData *)data;
+   printf("\nGot source setup callback\n");
+   g_object_get(playbin,"source",&(newData->app.appsrc), NULL);
+   g_object_set(newData->app.appsrc, "size", (gint64)newData->app.length, NULL);
+}
 
 /******************************************************************************************************************
  * Purpose:                Callback function to capture underflow signal from audiosink
@@ -982,6 +1038,10 @@ static void AudioPTSErrorCallback(GstElement *sink, guint size, void *context, g
  *****************************************************************************************************************/
 static void elementSetupCallback (GstElement* playbin, GstElement* element, MessageHandlerData  *data)
 {
+    if (g_str_has_prefix(GST_ELEMENT_NAME(element), "appsrc")) {
+	printf ("\nGot appsrc\n");
+	data->app.appsrc = element;
+    }
     if (g_str_has_prefix(GST_ELEMENT_NAME(element), "brcmaudiodecoder")) {
         printf("\nGot brcmaudiodecoder\n");
 	brcm = true;
@@ -990,11 +1050,14 @@ static void elementSetupCallback (GstElement* playbin, GstElement* element, Mess
         g_signal_connect( element, "first-audio-frame-callback", G_CALLBACK(FirstFrameAudioCallback), &audio_started);
         g_signal_connect( element, "pts-error-callback", G_CALLBACK(AudioPTSErrorCallback), &audio_pts_error);
     }
-    else if (g_str_has_prefix(GST_ELEMENT_NAME(element), "amlhalasink")) {
+    if (g_str_has_prefix(GST_ELEMENT_NAME(element), "brcmaudiosink")) {
+	printf ("\nGot brcmaudiosink\n");
+    }
+    if (g_str_has_prefix(GST_ELEMENT_NAME(element), "amlhalasink")) {
         printf("\nGot amlhalasink\n");
         g_signal_connect( element, "underrun-callback", G_CALLBACK(AudioUndeflowCallback), &audio_underflow_received);
     }
-    else if (g_str_has_prefix(GST_ELEMENT_NAME(element), "rtkaudiosink")) {
+    if (g_str_has_prefix(GST_ELEMENT_NAME(element), "rtkaudiosink")) {
         printf("\nGot rtkaudiosink\n");
 	rtk = true;
         g_signal_connect( element, "buffer-underflow-callback", G_CALLBACK(AudioUndeflowCallback), &audio_underflow_received);
@@ -1021,6 +1084,21 @@ static void printTag (const GstTagList *tags, const gchar *tag, gpointer user_da
         fprintf(filePointer,"%*s%s: %s\n", 2 * depth, " ", gst_tag_get_nick (tag), Data);
     g_free (Data);
     g_value_unset (&value);
+}
+
+/******************************************************************************************************************
+ * Purpose:                String compare: check whether the string ends with the corresponding suffix
+ *****************************************************************************************************************/
+bool suffixCompare(const char *str, const char *suffix) {
+    size_t strLength = strlen(str);
+    size_t suffixLength = strlen(suffix);
+
+    if (strLength < suffixLength) {
+        return false;
+    }
+
+    const char *found = strstr(str + (strLength - suffixLength), suffix);
+    return found != nullptr && found == str + (strLength - suffixLength); // Check if found at the end of the string
 }
 
 /*
@@ -1130,6 +1208,16 @@ int readFramesFromFile()
     printf("\nFrames Rendered = %s",result);
     rendered_frames = atoi(result);
     return rendered_frames;
+}
+
+/********************************************************************************************************************
+Purpose:               To obtain the file size
+*********************************************************************************************************************/
+long GetFileSize(std::string filename)
+{
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
 }
 
 /********************************************************************************************************************
@@ -1372,31 +1460,389 @@ static void play_set_relative_volume (GstElement *playbin)
   assert_failure (playbin,set_volume == get_volume,"Failed to set the given volume");
 }
 
+/*************************************************** Appsrc reading start *******************************************/
+
+/********************************************************************************************************************
+Purpose:               Read from file and save to Data
+*********************************************************************************************************************/
+int readFromFile(MessageHandlerData *data, const char *ReadFile, size_t maxBytes)
+{
+    FILE *file;
+    gchar *Data;
+    size_t bytesRead;
+    size_t totalBytesRead = 0;
+    const size_t chunkSize = 4096;
+
+    file = fopen(ReadFile, "rb");
+    fail_unless(file != NULL, "failed to open file: %s\n", strerror(errno));
+
+    printf("\nReading from file %s", ReadFile);
+
+    // Allocate initial memory
+    Data = (gchar *)malloc(chunkSize);
+    if (Data == NULL) {
+        fclose(file);
+	fail_unless(Data != NULL, "failed to allocate memory\n");
+    }
+
+    // Read in chunks
+    while (1)
+    {
+	// if maxbytes is not given , read full file
+	if ((maxBytes > 0) && (totalBytesRead < maxBytes))
+	    break;
+	
+        bytesRead = fread(Data + totalBytesRead, 1, chunkSize, file);
+        if (bytesRead <= 0) {
+            break; // Exit the loop if no more data to read
+        }
+
+        totalBytesRead += bytesRead;
+
+        // Resize the buffer if necessary
+        Data = (gchar *)realloc(Data, totalBytesRead + chunkSize);
+        if (Data == NULL) {
+            fclose(file);
+	    fail_unless(Data != NULL, "failed to reallocate memory\n");
+        }
+    }
+
+    fclose(file);
+
+    // Trim the buffer to the actual amount read (up to maxBytes)
+    Data = (gchar *)realloc(Data, totalBytesRead);
+    fail_unless(Data != NULL, "failed to trim buffer\n");
+
+    data->app.data = Data;
+    data->app.length = totalBytesRead;
+
+    return 0;
+}
+
+/********************************************************************************************************************
+Purpose:               Read from curl and save to Data
+*********************************************************************************************************************/
+
+// Memory structure for curl
+struct MemoryStruct {
+  char *memory;
+  size_t size;
+};
+
+struct MemoryStruct chunk;
+
+// Write memory callback used to get the data from the url
+static size_t
+WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+  size_t realsize = size * nmemb;
+  struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+
+  char *ptr =  (char *)realloc(mem->memory, mem->size + realsize + 1);
+  if(!ptr) {
+    /* out of memory! */
+    printf("not enough memory (realloc returned NULL)\n");
+    return 0;
+  }
+
+  mem->memory = ptr;
+  memcpy(&(mem->memory[mem->size]), contents, realsize);
+  mem->size += realsize;
+  mem->memory[mem->size] = 0;
+
+  return realsize;
+}
+
+// Displaying progress bar while download of data
+auto lastDisplayTime = std::chrono::time_point<std::chrono::steady_clock>::min();
+void displayProgressBar(const char* Process, float progress_percentage)
+{
+  int loop_iterator;
+  int num_blocks = (int)(progress_percentage / (100.0 / PROGRESS_BAR_WIDTH));
+  auto currentTime = std::chrono::steady_clock::now();
+  auto elapsedTime = std::chrono::duration_cast<std::chrono::seconds>(currentTime - lastDisplayTime).count();
+  //if ((abs(progress_percentage - previous_progress_percentage) > 10) || progress_percentage == 100.0)
+  if ((elapsedTime >= PROGRESS_BAR_DISPLAY_INTERVAL) || progress_percentage == 100.0 ||(lastDisplayTime == std::chrono::time_point<std::chrono::steady_clock>::min()))
+  {
+        printf("\r%s Progress: [",Process);
+        for (loop_iterator = 0; loop_iterator < num_blocks; ++loop_iterator)
+        {
+           printf("*");
+        }
+        for (; loop_iterator < PROGRESS_BAR_WIDTH; ++loop_iterator)
+        {
+           printf(" ");
+        }
+        printf("] %.2f%% \n", progress_percentage);
+        fflush(stdout);
+        previous_progress_percentage = progress_percentage;
+        lastDisplayTime = std::chrono::steady_clock::now();
+  }
+}
+
+// Progress of curl download
+long filesize;
+static int ProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
+{
+
+  float progress_percentage = ((float)chunk.size / filesize) * 100;
+  displayProgressBar("Download",progress_percentage);
+  return 0;
+}
+
+//Struct to define curl Header Data
+struct HeaderData {
+    long contentLength;
+};
+
+//callback is called to process curl header data
+size_t parseHeaderCallback(void* contents, size_t size, size_t nmemb, void* userp) 
+{
+    // Parse Content-Length from the headers
+    const char* headerPrefix = "Content-Length:";
+    size_t headerLength = strlen(headerPrefix);
+
+    // Convert the header data to a string for easier parsing
+    std::string header((const char*)contents, size * nmemb);
+
+    // Find the position of the Content-Length header
+    size_t pos = header.find(headerPrefix);
+
+    if (pos != std::string::npos) {
+        // Extract the value of Content-Length
+        long contentLength = std::stol(header.substr(pos + headerLength));
+
+        // Store the content length in userp
+        ((HeaderData*)userp)->contentLength = contentLength;
+    }
+
+    return size * nmemb;
+}
+
+// Get remote file size using Curl APIs
+long curlFileSize(const char* url) {
+    CURL* curl_handle;
+    CURLcode res;
+    HeaderData headerData;
+    headerData.contentLength = -1L;
+
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl_handle = curl_easy_init();
+
+    if (curl_handle)
+    {
+        curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+        curl_easy_setopt(curl_handle, CURLOPT_NOBODY, 1L);
+        curl_easy_setopt(curl_handle, CURLOPT_HEADERFUNCTION, parseHeaderCallback);
+        curl_easy_setopt(curl_handle, CURLOPT_HEADERDATA, &headerData); // Pass the address of headerData
+        curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
+        curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, 3L);
+        curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 10L);
+	curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+
+        res = curl_easy_perform(curl_handle);
+
+        if (res == CURLE_OK)
+	{
+	    printf ("\nFile size: %ld bytes\n",headerData.contentLength);
+        }
+	else
+	{
+            printf ("\nError during CURL request: %s\n",curl_easy_strerror(res));
+        }
+
+        curl_easy_cleanup(curl_handle);
+    }
+    else
+    {
+	printf ("\nError initializing CURL handle\n");
+    }
+
+    return headerData.contentLength;
+}
+
+// Initialize curl methods and start download
+bool curlRead(gpointer Data)
+{
+  MessageHandlerData *data = (MessageHandlerData *)Data;
+  CURL *curl_handle;
+  CURLcode res;
+
+  printf ("\nDownloading from %s",m_play_url);
+
+  chunk.memory =  (char *)malloc(1);
+  chunk.size = 0;
+
+  filesize = curlFileSize(m_play_url);
+
+  curl_global_init(CURL_GLOBAL_ALL);
+
+  previous_progress_percentage = 0;
+  curl_handle = curl_easy_init();
+
+  curl_easy_setopt(curl_handle, CURLOPT_URL, m_play_url);
+
+  curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+
+  curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
+
+  curl_easy_setopt(curl_handle, CURLOPT_PROGRESSFUNCTION, ProgressCallback);
+  curl_easy_setopt(curl_handle, CURLOPT_NOPROGRESS, 0);
+
+  if (ReadSize)
+      curl_easy_setopt(curl_handle, CURLOPT_MAXFILESIZE, ReadSize * 1024 * 1024);
+
+  curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+
+  res = curl_easy_perform(curl_handle);
+
+  if(res != CURLE_OK) 
+  {
+    fprintf(stderr, "curl_easy_perform() failed: %s\n",curl_easy_strerror(res));
+    return false;
+  }
+  else 
+  {
+    printf("%lu bytes retrieved\n", (unsigned long)chunk.size);
+  }
+
+  data->app.length = chunk.size;
+  data->app.data = chunk.memory;
+  data->app.offset = 0;
+
+  curl_easy_cleanup(curl_handle);
+  curl_global_cleanup();
+  return true;
+}
+
+
+//Below section is where appsrc feeding is done
+static gboolean read_data (MessageHandlerData * data)
+{
+  GstBuffer *buffer;
+  guint len;
+  GstFlowReturn ret;
+
+  if (data == NULL || data->app.appsrc == NULL) {
+    // Handle the NULL pointer case
+    printf("\nReceived NULL pointer");
+    return FALSE;
+  }
+  if ((bufferUnderflowTest) && (total_bytes_fed >= BYTES_THRESHOLD))
+  {
+     printf("\n reached BYTES_THRESHOLD %lld \n",BYTES_THRESHOLD);
+     return FALSE;
+  }
+
+  if ((data->app.offset >= data->app.length)) {
+    /* we are EOS, send end-of-stream and remove the source */
+    g_signal_emit_by_name (data->app.appsrc, "end-of-stream", &ret);
+    displayProgressBar("Appsrc Data Push ",(((float)data->app.offset / data->app.length) * 100));
+    return FALSE;
+  }
+
+  /* read the next chunk */
+  buffer = gst_buffer_new ();
+
+  len = CHUNK_SIZE;
+  if (data->app.offset + len > data->app.length)
+    len = data->app.length - data->app.offset;
+
+  gst_buffer_append_memory (buffer,
+      gst_memory_new_wrapped (GST_MEMORY_FLAG_READONLY,
+          data->app.data, data->app.length, data->app.offset, len, NULL, NULL));
+
+  float progress_percentage = ((float)data->app.offset / data->app.length) * 100;
+  if (abs(progress_percentage - previous_progress_percentage) > 10)
+  {
+    displayProgressBar("Appsrc Data Push ",progress_percentage);
+  }
+  g_signal_emit_by_name (data->app.appsrc, "push-buffer", buffer, &ret);
+  gst_buffer_unref (buffer);
+  if (ret != GST_FLOW_OK) {
+    /* some error, stop sending data */
+    return FALSE;
+  }
+
+  data->app.offset += len;
+  total_bytes_fed += len;
+  return TRUE;
+}
+
+/*************************************************** Appsrc reading end *********************************************/
 /********************************************************************************************************************
 Purpose:               Setup pipeline with playbin and westerossink
 *********************************************************************************************************************/
-static void SetupPipeline (MessageHandlerData *data, bool audio_only = false)
+static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = true)
 {
-    GstElement *playbin, *playsink;
-    GstElement *westerosSink;
-    GstElement *audioSink;
+    GstElement *playsink;
     GstStateChangeReturn state_change;
+    std::string readFile;
 
     /*
      * Create the playbin element
      */
-    playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
-    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+    data->playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
+    fail_unless (data->playbin != NULL, "Failed to create 'playbin' element");
     /*
      * Set the url received from argument as the 'uri' for playbin
      */
-    assert_failure (playbin, m_play_url != NULL, "Playback url should not be NULL");
-    g_object_set (playbin, "uri", m_play_url, NULL);
+    assert_failure (data->playbin, m_play_url != NULL, "Playback url should not be NULL");
+    
+    // Appsrc implementation skipped for ABR streams
+    if (use_appsrc)
+    {
+        const char *suffix1 = ".m3u8";
+        const char *suffix2 = ".mpd";
+	if (suffixCompare(m_play_url, suffix1) || suffixCompare(m_play_url, suffix2)) 
+	{
+            printf("\nAppsrc implementation not supported for ABR streams");
+	    printf("\nSwitching to conventional playbin technique\n");
+	    use_appsrc = false;
+	}
+    }
+    
+    if (use_appsrc)
+    {
+	const char* filePrefix = "file:";
+	size_t maxBytesToRead = ReadSize * 1024 * 1024;
+	if (strncmp(m_play_url, filePrefix, strlen(filePrefix)) == 0) 
+	{
+            const char* file_path = m_play_url + strlen(filePrefix);
+	    long file_size = GetFileSize(file_path);
+            printf ("\nFile Size is %ld bytes",file_size);
+            if (file_size > 104857600)
+            {
+                printf("\nFile size is greater than 100 MB, switching to conventionial approach\n");
+                g_object_set (data->playbin, "uri", m_play_url, NULL);
+                use_appsrc = false;
+            }
+            else
+            {
+                readFromFile(data,file_path,maxBytesToRead);
+            }
+	}
+	else
+	{ 
+	    fail_unless(curlRead(data),"Failed to read from curl API");;
+	}
+	if (use_appsrc)
+	{
+            g_object_set (data->playbin, "uri", "appsrc://", NULL);
+            g_signal_connect (data->playbin, "source-setup", (GCallback) found_source, data);
+            data->app.offset = 0;
+            lastDisplayTime = std::chrono::time_point<std::chrono::steady_clock>::min();
+	}
+    }
+    else
+    {	    
+        g_object_set (data->playbin, "uri", m_play_url, NULL);
+    }
     /*
      * Update the current playbin flags to enable Video and Audio Playback
      */
-    g_object_get (playbin, "flags", &flags, NULL);
-    if (audio_only)
+    g_object_get (data->playbin, "flags", &flags, NULL);
+    if (only_audio)
     {
         flags = GST_PLAY_FLAG_AUDIO;
 #ifdef NATIVE_AUDIO
@@ -1407,82 +1853,92 @@ static void SetupPipeline (MessageHandlerData *data, bool audio_only = false)
     {	    
         setflags();
     }
-    g_object_set (playbin, "flags", flags, NULL);
+    g_object_set (data->playbin, "flags", flags, NULL);
     if (forward_events)
     {
          /* Forward all events to all sinks */
-         playsink = gst_bin_get_by_name(GST_BIN(playbin), "playsink");
+         playsink = gst_bin_get_by_name(GST_BIN(data->playbin), "playsink");
          g_object_set(playsink, "send-event-mode", 0, NULL);
     }
     /*
-     * Set westros-sink
+     * Set westeros-sink
      */
-    westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
-    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+    data->westerosSink.sink = gst_element_factory_make(WESTEROS_SINK, NULL);
+    fail_unless (data->westerosSink.sink != NULL, "Failed to create 'westerossink' element");
     if (!audiosink.empty())
     {
 	 printf("\nAudioSink is provided as %s",audiosink.c_str());
-         audioSink = gst_element_factory_make(audiosink.c_str(), NULL);
-	 if (audioSink == NULL)
+         data->audioSink.sink = gst_element_factory_make(audiosink.c_str(), NULL);
+	 if (data->audioSink.sink == NULL)
 	 {
 	     printf("\nUnable to create %s element\nPlaybin will take autoaudiosink\n",audiosink.c_str());
 	 }
 	 else
 	 {
-	     g_object_set (playbin, "audio-sink", audioSink, NULL);
+	     g_object_set (data->playbin, "audio-sink", data->audioSink.sink, NULL);
 	 }
     }
     /*
      * Link the westeros-sink to playbin
      */
-    g_object_set (playbin, "video-sink", westerosSink, NULL);
-    g_object_set (playbin, "async-handling", true, NULL);
+    g_object_set (data->playbin, "video-sink", data->westerosSink.sink, NULL);
+    g_object_set (data->playbin, "async-handling", true, NULL);
 
-    g_signal_connect( playbin, "element-setup", G_CALLBACK(elementSetupCallback), &data);
+    g_signal_connect(data->playbin, "element-setup", G_CALLBACK(elementSetupCallback), &data);
     /*
      * Set the first frame received callback
      */
-    g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+    g_signal_connect(data->westerosSink.sink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
     /*
      * Set the firstFrameReceived variable as false before starting play
      */
     firstFrameReceived= false;
 
-    g_signal_connect(westerosSink, "buffer-underflow-callback", G_CALLBACK(bufferUnderflowCallback), &videoUnderflowReceived);
+    g_signal_connect(data->westerosSink.sink, "buffer-underflow-callback", G_CALLBACK(bufferUnderflowCallback), &videoUnderflowReceived);
 
-    data->playbin = playbin;
     data->pipelineInitiation = true;
-    data->westerosSink.sink = westerosSink;
     data->westerosSink.previous_rendered_frames = 0;
     data->audioSink.previous_rendered_frames = 0;
 
     /*
      * Set playbin to PLAYING
      */
+    if (!play_after_setup)
+	return;
+
     GST_FIXME( "Setting to Playing State\n");
-    assert_failure (playbin, gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    assert_failure (data->playbin, gst_element_set_state (data->playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
     GST_FIXME( "Set to Playing State\n");
 
-    do{
-        state_change = gst_element_get_state (data->playbin, &(data->cur_state), NULL, 10000000);
-    } while (state_change == GST_STATE_CHANGE_ASYNC);
-    printf ("\n\n\nPipeline set to : %s  state \n\n\n", gst_element_state_get_name(data->cur_state));
 
-    //Sleep(1);
-
-    WaitForOperation;
-    assert_failure (playbin, data->cur_state == GST_STATE_PLAYING, "Pipeline is not set to playing state");
+    if (use_appsrc)
+    {
+	assert_failure (data->playbin, gst_element_set_state (data->playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE);
+	printf("\nPushing buffers into appsrc -- Calling read_data\n");
+        while(read_data(data));
+	assert_failure (data->playbin, gst_element_set_state (data->playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+	WaitForOperation;
+    }
+    else
+    {
+	do{
+            state_change = gst_element_get_state (data->playbin, &(data->cur_state), NULL, 10000000);
+        } while (state_change == GST_STATE_CHANGE_ASYNC);
+        printf ("\n\n\nPipeline set to : %s  state \n\n\n", gst_element_state_get_name(data->cur_state));
+        WaitForOperation;
+	assert_failure (data->playbin, data->cur_state == GST_STATE_PLAYING, "Pipeline is not set to playing state");
+    }	
     /*
      * Check if the first frame received flag is set
      */
-    assert_failure (playbin, (audio_only) || (firstFrameReceived == true), "Failed to receive first video frame signal");
+    assert_failure (data->playbin, (only_audio) || (firstFrameReceived == true), "Failed to receive first video frame signal");
     audio_underflow_received =  false;
     videoUnderflowReceived =  false;
 
     if (checkNewPlay)
         PlaybackValidation(data,5);
     else
-	PlaySeconds(playbin,5);
+	PlaySeconds(data->playbin,5);
 }
 
 /********************************************************************************************************************
@@ -1818,10 +2274,13 @@ GST_START_TEST (test_play_pause_pipeline)
 
     SetupPipeline(&data);
     
-    g_object_get (data.westerosSink.sink, "video-height", &height, NULL);
-    g_object_get (data.westerosSink.sink, "video-width", &width, NULL);
+    if (!only_audio)
+    {
+         g_object_get (data.westerosSink.sink, "video-height", &height, NULL);
+         g_object_get (data.westerosSink.sink, "video-width", &width, NULL);
     
-    printf("\nVideo height = %d\nVideo width = %d", height, width);
+         printf("\nVideo height = %d\nVideo width = %d", height, width);
+    }
 
     if (checkNewPlay)
         PlaybackValidation(&data,play_timeout);
@@ -1835,7 +2294,7 @@ GST_START_TEST (test_play_pause_pipeline)
         is_av_playing = check_for_AV_status();
         assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
     }
-    printf ("\nDETAILS: SUCCESS, Video playing successfully\n");
+    printf ("\nDETAILS: SUCCESS, Playback is successfull\n");
 
     auto latency_start = std::chrono::high_resolution_clock::now();
     auto latency_stop =  std::chrono::high_resolution_clock::now();
@@ -1899,12 +2358,9 @@ GST_START_TEST (test_playback_duration)
     {
 	checkPTS = false;
 	use_westerossink_fps = false;
-        SetupPipeline(&data,true);
     }
-    else
-    {
-        SetupPipeline(&data);
-    }
+
+    SetupPipeline(&data);
 
     gint64 duration = -1;
     gst_element_query_duration(data.playbin, GST_FORMAT_TIME, &duration);
@@ -1917,10 +2373,11 @@ GST_START_TEST (test_playback_duration)
     }
     gst_object_unref (data.playbin);
 
-    g_print("Duration: %" G_GINT64_FORMAT ":%02" G_GINT64_FORMAT ".%03" G_GINT64_FORMAT "",
+    g_print("Duration: %" G_GINT64_FORMAT ":%02" G_GINT64_FORMAT ".%03" G_GINT64_FORMAT "\n",
         GST_TIME_AS_SECONDS(duration) / 60,  // Minutes
         GST_TIME_AS_SECONDS(duration) % 60,  // Seconds
         GST_TIME_AS_MSECONDS(duration) % 1000);  // Milliseconds
+    
 
 }
 GST_END_TEST;
@@ -1941,6 +2398,11 @@ GST_START_TEST (test_buffer_underflow)
     GstStateChangeReturn state_change;
     MessageHandlerData data;
 
+    if (use_appsrc)
+    {
+        printf("\nUnderflow stream test - switching to conventionial approach\n");
+        use_appsrc = false;
+    }
     SetupPipeline(&data);
 
     bufferUnderflowTest = true;
@@ -2174,6 +2636,9 @@ GST_START_TEST (test_frameDrop)
     pipeline = gst_element_factory_make ("playbin", "source");
     fail_unless (pipeline != NULL, "Failed to create 'pipeline' element");
 
+    g_object_get (pipeline, "flags", &flags, NULL);
+    setflags();
+    g_object_set (pipeline, "flags", flags, NULL); 
 
     westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
     fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
@@ -2369,6 +2834,12 @@ GST_START_TEST (test_audio_change)
     filePointer = fopen(audio_change_test, "w");
     assert_failure (data.playbin,filePointer != NULL,"Unable to open filePointer for writing");
 
+    if (use_appsrc)
+    {
+        printf("\nMultiple Codecs available in stream, so skipping appsrc approach and going with conventional approach\n");
+        use_appsrc = false;
+    }
+
     SetupPipeline(&data);
 
     if (AudioPTSCheckAvailable)
@@ -2494,6 +2965,12 @@ GST_START_TEST (test_audio_underflow)
     GstStateChangeReturn state_change;
     int runSeconds;
     MessageHandlerData data;
+
+    if (use_appsrc)
+    {
+        printf("\nUnderflow stream test - switching to conventionial approach\n");
+        use_appsrc = false;
+    }
 
     SetupPipeline(&data);
     
@@ -2665,8 +3142,9 @@ GST_START_TEST(test_only_audio)
 	MessageHandlerData data;
 	checkPTS = false;
 	use_westerossink_fps = false;
+	only_audio = true;
 
-   	SetupPipeline(&data,true);
+   	SetupPipeline(&data);
 
 	if (checkNewPlay)
             PlaybackValidation(&data,play_timeout);
@@ -2952,6 +3430,11 @@ media_pipeline_suite (void)
     else if (strcmp ("test_resolution_up", tcname) == 0)
     {
        ResolutionSwitchTest = true;
+       if (use_appsrc)
+       {
+           printf ("\nMultiple resolutions present in video, caps can't be set to appsrc\nSwitching to conventionial approach\n");
+           use_appsrc =false;
+       }
        tcase_add_test (tc_chain, test_generic_playback);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
@@ -2959,6 +3442,11 @@ media_pipeline_suite (void)
     else if (strcmp ("test_resolution_down", tcname) == 0)
     {
        ResolutionSwitchTest = true;
+       if (use_appsrc)
+       {
+           printf ("\nMultiple resolutions present in video, caps can't be set to appsrc\nSwitching to conventionial approach\n");
+           use_appsrc =false;
+       }
        resolution_test_up = false;
        tcase_add_test (tc_chain, test_generic_playback);
        GST_INFO ("tc %s run successfull\n", tcname);
@@ -2974,8 +3462,6 @@ media_pipeline_suite (void)
     }
     else if (strcmp ("test_only_audio", tcname) == 0)
     {
-       checkAudioSamplingrate = true;
-       use_audioSink = true;
        tcase_add_test (tc_chain, test_only_audio);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
@@ -3112,6 +3598,7 @@ int main (int argc, char **argv)
     /*
      * Get TDK path
      */
+    setVariables();
     if (getenv ("TDK_PATH") != NULL)
     {
     	strcpy (TDK_PATH, getenv ("TDK_PATH"));
@@ -3354,6 +3841,24 @@ int main (int argc, char **argv)
                         play_timeout = TimeoutList[0];
                     }
 	        }
+		if (strstr (argv[arg], "readSize=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    ReadSize = atoi (strtok (NULL, "="));
+                }
+		if (strstr (argv[arg], "bytesThreshold=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    BYTES_THRESHOLD = atoi (strtok (NULL, "="));
+                }
+		if (strcmp ("use_appsrc", argv[arg]) == 0)
+                {
+                    use_appsrc = true;
+                }
+		if (strcmp ("only_audio", argv[arg]) == 0)
+                {
+                    only_audio = true;
+                }
             }
 
             printf ("\nArg : TestCase Name: %s \n", tcname);

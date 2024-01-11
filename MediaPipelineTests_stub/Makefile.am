@@ -31,7 +31,7 @@ AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
 bin_PROGRAMS = tdk_mediapipelinetests
 
 tdk_mediapipelinetests_SOURCES = src/MediaPipelineSuite.cpp
-tdk_mediapipelinetests_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0 -lgstaudio-1.0
+tdk_mediapipelinetests_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0 -lgstaudio-1.0 -lcurl
 
 bin_PROGRAMS += tdk_mediapipelinetests_trickplay
 
