@@ -22,24 +22,48 @@ DISPLAY=$3
 TEST_OPTION=$4
 if [ "$1" == "--help" ];then
    printf '#%.0s' {1..100}
-   printf "\nThis Test Script executes Essos_TDKTestApp and Westeros_TDKTestApp along with all the pre-requisites\n"
-   printf "\nBelow options available for testing\n* Run Essos as Direct EGL application\n* Run Essos as Wayland Client application\n* Run Westeros Test\n* Run Essos Manual validation\n"
+   printf "\nThis Test Script executes Essos_TDKTestApp, Westeros_TDKTestApp and waymetric along with all the pre-requisites\n"
+   printf "\nBelow options available for testing\n* Run Essos as Direct EGL application\n* Run Essos as Wayland Client application\n* Run Westeros Test\n* Run Essos Manual validation\n* Run Waymetric no multi test\n"
    printf "\n* Test script receives 4 command line arguments namely \n   TEST(Test to be executed) \n   TIMEOUT(timeout for the application to be executed) \
    \n   DISPLAY(display name to start westeros renderer)\n   TEST_OPTION(Additional options for TEST application)\n"
    printf "\n* Example Test Scenarios validated using test script"
    printf "\n   sh RunGraphicsTDKTest.sh Essos 30                       //Essos using Direct EGL application, runs for 10 seconds"
    printf "\n   sh RunGraphicsTDKTest.sh Essos 30 wayland-0 USE_WAYLAND //Essos test app runs as wayland client"
    printf "\n   sh RunGraphicsTDKTest.sh Westeros 30 wayland-0          //executes Westeros Test for 30 seconds"
-   printf "\n   sh RunGraphicsTDKTest.sh Essos MANUAL                   //MANUAL Essos test application execution\n"
+   printf "\n   sh RunGraphicsTDKTest.sh Essos MANUAL                   //MANUAL Essos test application execution"
+   printf "\n   sh RunGraphicsTDKTest.sh Waymetric                      //waymetric --no-multi test\n"
    printf '#%.0s' {1..100}
    printf "\n"
+   exit
 fi
 if [ "$2" == "MANUAL" ];then
    TEST_OPTION="MANUAL"
 fi
 
+#Check if waymetric is installed in DUT
+if [ "$TEST" == "Waymetric" ];
+then
+    printf "Check if waymetric is installed in DUT\n"
+    if command -v waymetric >/dev/null 2>&1; then
+         echo "Waymetric Package is installed."
+    else
+         echo "Waymetric Package is not installed."
+         exit
+    fi
+fi
+
 #Stop wpeframework to get EGL Display
 systemctl stop wpeframework
+
+#Run waymetric --no-multi test
+if [ "$TEST" == "Waymetric" ];
+then
+    printf "Starting waymetric test"
+    waymetric --no-multi
+     #Reset wpeframework to original state
+    systemctl start wpeframework
+    exit
+fi
 
 #Export westeros library
 export XDG_RUNTIME_DIR=/tmp
