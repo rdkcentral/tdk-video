@@ -1531,6 +1531,10 @@ struct MemoryStruct {
 
 struct MemoryStruct chunk;
 
+/*
+ * Copyright (C) Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Licensed under the curl License
+ */
 // Write memory callback used to get the data from the url
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
