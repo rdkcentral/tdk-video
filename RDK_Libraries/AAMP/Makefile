@@ -16,16 +16,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-INC_DIR = ../../RDK_Source/westeros_source/drm/westeros-gl
-CXXFLAGS += -I$(INC_DIR)
+INC_DIR1 = ../../RDK_Source/aamp_source/
+CXXFLAGS += -I$(INC_DIR1)
+INC_DIR2 = ../../RDK_Source/aamp_source/subtitle/
+CXXFLAGS += -I$(INC_DIR2)
+INC_DIR3 = ../../RDK_Source/aampabr_source/
+CXXFLAGS += -I$(INC_DIR3)
+INC_DIR4 = ../../RDK_Source/aamp_source/drm/helper/
+CXXFLAGS += -I$(INC_DIR4)
+INC_DIR5 = ../../RDK_Source/aamp_source/drm/
+CXXFLAGS += -I$(INC_DIR5)
+INC_DIR6 = ../../RDK_Source/aampmetrics_source/
+CXXFLAGS += -I$(INC_DIR6)
+INC_DIR7 = ../../RDK_Source/aamp_source/downloader/
+CXXFLAGS += -I$(INC_DIR7)
+INC_DIR8 = ../../RDK_Source/aamp_source/closedcaptions/
+CXXFLAGS += -I$(INC_DIR8)
+CXXFLAGS += -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)
+CXXFLAGS += -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/glib-2.0/
+CXXFLAGS += -I${PKG_CONFIG_SYSROOT_DIR}/usr/lib/glib-2.0/include/
 CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall 
 
 # Library name and version
-LIBNAME = westeros_gl
-LIBVERSION ?=  $(WESTEROS_LIB_VERSION)
+LIBNAME = aamp
+LIBVERSION ?=  $(AAMP_LIB_VERSION)
 
 # Source files
-SRCS = ../WesterosHal/tdk_westeros_hal.cpp
+SRCS = tdk_aamp.cpp
 
 # Output library filename
 LIBRARY = lib$(LIBNAME).so

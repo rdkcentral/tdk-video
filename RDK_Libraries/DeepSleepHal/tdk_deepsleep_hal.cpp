@@ -39,6 +39,12 @@ int PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout)
     return 1;
 }
 
+int PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool coldStandby)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return 1;
+}
+
 void PLAT_DS_DeepSleepWakeup(void)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);

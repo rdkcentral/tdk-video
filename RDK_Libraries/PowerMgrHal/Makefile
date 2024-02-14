@@ -22,7 +22,7 @@ CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall
 
 # Library name and version
 LIBNAME = iarmmgrs-power-hal
-LIBVERSION = 0
+LIBVERSION ?=  $(PWRMGR_HAL_LIB_VERSION)
 
 # Source files
 SRCS = tdk_power_hal.cpp
@@ -33,8 +33,12 @@ LIBRARY = lib$(LIBNAME).so
 all: $(LIBRARY)
 
 $(LIBRARY): $(SRCS)
-	$(CC) $(CXXFLAGS) -fPIC -Wl,--hash-style=gnu -shared -Wl,-soname,lib$(LIBNAME).so.$(LIBVERSION) -o $(LIBRARY) $(SRCS)
+ifneq ($(LIBVERSION),)
+	$(CC) $(CXXFLAGS) -Wl,--hash-style=gnu -shared -Wl,-soname,lib$(LIBNAME).so.$(LIBVERSION) -o $(LIBRARY) $(SRCS)
 	ln -sf $(LIBRARY) lib$(LIBNAME).so.$(LIBVERSION)
+else
+	$(CC) $(CXXFLAGS) -Wl,--hash-style=gnu -shared -Wl,-soname,$(LIBRARY) -o $(LIBRARY) $(SRCS)
+endif
 
 install: $(LIBRARY)
 	@echo "Installing files in $(DESTDIR) ..."

@@ -22,7 +22,7 @@ CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall
 
 # Library name and version
 LIBNAME = essos
-LIBVERSION = 0
+LIBVERSION ?=  $(ESSOS_LIB_VERSION)
 
 # Source files
 SRCS = tdk_essos.cpp
@@ -39,8 +39,12 @@ LDFLAGS = -lEGL -ldl -lpthread
 all: $(LIBRARY)
 
 $(LIBRARY): $(SRCS)
+ifeq ($(LIBVERSION),)
+	$(CC) $(CXXFLAGS) $(LDFLAGS) -O1 -Wl,--hash-style=gnu -shared -Wl,-soname,$(LIBRARY) -o $(LIBRARY) $(SRCS)
+else
 	$(CC) $(CXXFLAGS) $(LDFLAGS) -O1 -Wl,--hash-style=gnu -shared -Wl,-soname,lib$(LIBNAME).so.$(LIBVERSION) -o $(LIBRARY) $(SRCS)
 	ln -sf $(LIBRARY) lib$(LIBNAME).so.$(LIBVERSION)
+endif
 
 install: $(LIBRARY)
 	@echo "Installing files in $(DESTDIR) ..."

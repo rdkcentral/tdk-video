@@ -36,6 +36,6 @@ AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
 lib_LTLIBRARIES = libaampstub.la
 libaampstub_la_SOURCES = src/AampAgent.cpp
 libaampstub_la_includedir = ${includedir}
-libaampstub_la_LIBADD = -laamp -ldshalcli -lds -lIARMBus
+libaampstub_la_LIBADD = -laamp -lds -lIARMBus
 
 libaampstub_la_include_HEADERS = ${top_srcdir}/AAMP_stub/include/AampAgent.h

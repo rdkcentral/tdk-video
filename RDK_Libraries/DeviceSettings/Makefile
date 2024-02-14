@@ -16,16 +16,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-INC_DIR = ../../RDK_Source/westeros_source/drm/westeros-gl
+INC_DIR = ../../RDK_Source/devicesettings_source/ds/include/
 CXXFLAGS += -I$(INC_DIR)
 CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall 
 
 # Library name and version
-LIBNAME = westeros_gl
-LIBVERSION ?=  $(WESTEROS_LIB_VERSION)
+LIBNAME = ds
+LIBVERSION ?=  $(DS_LIB_VERSION)
 
 # Source files
-SRCS = ../WesterosHal/tdk_westeros_hal.cpp
+SRCS = tdk_ds.cpp
 
 # Output library filename
 LIBRARY = lib$(LIBNAME).so

@@ -17,41 +17,28 @@
  * limitations under the License.
 */
 
-#include <stdio.h>
-#include "plat_power.h"
+#include "manager.hpp"
+#include <iostream>
 
-/* Power Manager HAL DUMMY APIs */
-int PLAT_INIT()
-{
-	printf( "DUMMY PLAT_INIT\n");
-	return 1;
+using namespace std;
+
+namespace device {
+
+Manager::Manager() {
 }
 
-int PLAT_API_SetPowerState(IARM_Bus_PWRMgr_PowerState_t newState)
-{
-	printf( "DUMMY PLAT_API_SetPowerState\n");
-        return 1;
+Manager::~Manager() {
 }
 
-int PLAT_INIT(int cec_enable)
+void Manager::Initialize()
 {
-        printf( "DUMMY PLAT_INIT\n");
-        return 1;
+        printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-int PLAT_API_GetPowerState(IARM_Bus_PWRMgr_PowerState_t *curState)
+void Manager::DeInitialize()
 {
-	printf( "DUMMY PLAT_API_GetPowerState\n");
-        return 1;
+	printf("\nDUMMY %s\n", __FUNCTION__);
+
 }
 
-int PLAT_API_GetTemperature(IARM_Bus_PWRMgr_ThermalState_t *curState, float *curTemperature, float *wifiTemperature)
-{
-	printf( "DUMMY PLAT_API_GetTemperature\n");
-        return 1;
-}
-
-void PLAT_TERM()
-{
-	printf( "DUMMY PLAT_TERM\n");
 }
