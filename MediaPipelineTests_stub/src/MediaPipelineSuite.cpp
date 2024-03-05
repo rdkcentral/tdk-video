@@ -153,12 +153,17 @@ string audiosink;
 bool ignoreError = false;
 bool checkNewPlay = false;
 bool only_audio = false;
+bool only_video = false;
 bool checkEachSecondPlayback = false;
 bool use_appsrc = false;
 int ReadSize = 0;
 guint64 total_bytes_fed = 0;
 guint64 BYTES_THRESHOLD = 0;
 float previous_progress_percentage = 0.0;
+bool force_appsrc = false;
+bool finish_feed = false;
+bool video_underflow_test = false;
+bool audio_underflow_test = false;
 
 /*
  * Playbin flags
@@ -354,10 +359,13 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
    }
    g_object_get (playbin,"video-sink",&videoSink,NULL);
 
-   g_object_get (playbin,"audio-sink",&audioSink,NULL);
-   string audiosink_name;
-   g_object_get (audioSink,"name",&audiosink_name,NULL);
-   printf("\nAudioSink used for this pipeline is %s\n",audiosink_name.c_str());
+   if (use_audioSink)
+   {	   
+       g_object_get (playbin,"audio-sink",&audioSink,NULL);
+       string audiosink_name;
+       g_object_get (audioSink,"name",&audiosink_name,NULL);
+       printf("\nAudioSink used for this pipeline is %s\n",audiosink_name.c_str());
+   }
 
    if (checkPTS)
    {
@@ -431,6 +439,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 	Sleep(1);
 	//g_object_get (videoSink,"queued-frames",&queued_frames,NULL);
         //printf("\nQueued Frames = %d",queued_frames);
+	
 	if (audio_underflow_received)
             audio_underflow_received_global = true;
         audio_underflow_received = false;
@@ -574,6 +583,8 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
         {
             handleMessage (&data, message);
         }
+	if (data.eosDetected == TRUE)
+             break;
 
 	if (checkPTS)
 	{
@@ -682,6 +693,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     data->westerosSink.pts_buffer = 20;
     int audio_sampling_rate_buffer = 3;
     int rate_diff_threshold = -3;
+    GstMessage *message;
 
     // Resolution Switch Test Initializations
     vector<int> resList;
@@ -720,6 +732,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 
     // Get pipeline state
     assert_failure (data->playbin, gst_element_get_state (data->playbin, &(data->cur_state), NULL, 0) == GST_STATE_CHANGE_SUCCESS);
+    GstBus *bus;
+    bus = gst_element_get_bus (data->playbin);
 
     // seconds paramters for loop monitoring
     int milliSeconds = 0;
@@ -740,11 +754,21 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	 // Second Counter
 	 second_count = milliSeconds/1000;
 
+	 message = gst_bus_pop_filtered(bus,(GstMessageType)((GstMessageType) GST_MESSAGE_ERROR | (GstMessageType) GST_MESSAGE_EOS ));
+         if (NULL != message)
+         {
+             handleMessage (data, message);
+         }
+
+	 if (data->eosDetected == TRUE)
+	     break;
+
+
 	 /* Playback Position Validation
 	  * By default Playback Position Validation is for each 100 milliseconds
 	  * If user wants to override and make it for each second once checkEachSecondPlayback must be set to true
 	  */
-	 if (((checkEachSecondPlayback) && (second_count > previous_seconds)) || (!checkEachSecondPlayback))
+	 if (((checkEachSecondPlayback) && ((second_count > previous_seconds) || (milliSeconds == 0))) || (!checkEachSecondPlayback))
          {
        
               assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->currentPosition)), "Failed to query the current playback position");
@@ -778,7 +802,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
           * If needed for each second validation instead of 100 milliseconds, use the below format in if condition
           * if ((checkPTS) && (second_count > previous_seconds))
           */
-         if (checkPTS)
+	 if ((((checkEachSecondPlayback) && (second_count > previous_seconds)) || (!checkEachSecondPlayback)) && (checkPTS))
          {
              g_object_get (data->westerosSink.sink,"video-pts",&(data->westerosSink.pts),NULL);
              printf("  PTS : %lld ",data->westerosSink.pts);
@@ -1735,6 +1759,11 @@ static gboolean read_data (MessageHandlerData * data)
   if ((bufferUnderflowTest) && (total_bytes_fed >= BYTES_THRESHOLD))
   {
      printf("\n reached BYTES_THRESHOLD %lld \n",BYTES_THRESHOLD);
+     if (data->terminate)
+     {
+	 printf ("\nEmitting EOS");
+	 g_signal_emit_by_name (data->app.appsrc, "end-of-stream", &ret);
+     }
      return FALSE;
   }
 
@@ -1792,7 +1821,10 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
      * Set the url received from argument as the 'uri' for playbin
      */
     assert_failure (data->playbin, m_play_url != NULL, "Playback url should not be NULL");
-    
+   
+    if (force_appsrc)
+	use_appsrc = true;
+
     // Appsrc implementation skipped for ABR streams
     if (use_appsrc)
     {
@@ -1811,25 +1843,26 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
 	const char* filePrefix = "file:";
 	size_t maxBytesToRead = ReadSize * 1024 * 1024;
 	if (strncmp(m_play_url, filePrefix, strlen(filePrefix)) == 0) 
-	{
-            const char* file_path = m_play_url + strlen(filePrefix);
-	    long file_size = GetFileSize(file_path);
-            printf ("\nFile Size is %ld bytes",file_size);
-            if (file_size > 104857600)
-            {
-                printf("\nFile size is greater than 100 MB, switching to conventionial approach\n");
-                g_object_set (data->playbin, "uri", m_play_url, NULL);
-                use_appsrc = false;
-            }
-            else
-            {
-                readFromFile(data,file_path,maxBytesToRead);
-            }
-	}
-	else
-	{ 
-	    fail_unless(curlRead(data),"Failed to read from curl API");;
-	}
+        {
+             const char* file_path = m_play_url + strlen(filePrefix);
+             long file_size = GetFileSize(file_path);
+             printf ("\nFile Size is %ld bytes",file_size);
+             if ((file_size > 104857600) && (!force_appsrc))
+             {
+                 printf("\nFile size is greater than 100 MB, switching to conventionial approach\n");
+                 g_object_set (data->playbin, "uri", m_play_url, NULL);
+                 use_appsrc = false;
+             }
+             else
+             {
+                 readFromFile(data,file_path,maxBytesToRead);
+	         data->app.length = file_size;
+             }
+        }
+        else
+        { 
+             fail_unless(curlRead(data),"Failed to read from curl API");;
+        }
 	if (use_appsrc)
 	{
             g_object_set (data->playbin, "uri", "appsrc://", NULL);
@@ -1851,6 +1884,13 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
         flags = GST_PLAY_FLAG_AUDIO;
 #ifdef NATIVE_AUDIO
 	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+#endif
+    }
+    else if (only_video)
+    {
+	flags = GST_PLAY_FLAG_VIDEO;
+#ifdef NATIVE_VIDEO
+        flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
 #endif
     }
     else
@@ -3195,11 +3235,61 @@ GST_START_TEST (test_video_bitrate)
 GST_END_TEST;
 
 /********************************************************************************************************************
+ * Purpose      : Test to do check the underflow handling capability via appsrc
+ * Parameters   : Playback URL
+ ********************************************************************************************************************/
+GST_START_TEST (test_appsrc_underflow)
+{
+
+    MessageHandlerData data;
+    bufferUnderflowTest = true;
+    play_timeout = 35;
+    force_appsrc = true;
+    SetupPipeline(&data,false);
+
+    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+
+    data.app.offset = 0;
+    while(read_data(&data));
+    WaitForOperation;
+
+    if (checkNewPlay)
+        PlaybackValidation(&data,play_timeout);
+    else
+        PlaySeconds(data.playbin,play_timeout);
+
+    if (checkSignalTest)
+	 goto EXIT;
+    if (video_underflow_test)
+	 assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive buffer underflow signal");
+
+    BYTES_THRESHOLD *= 2;
+    printf ("\nUpdating bytestThreshold to %lld",BYTES_THRESHOLD);
+    printf ("\nPushing buffers with updated bytesThreshold\n");
+    videoUnderflowReceived = false;
+    data.terminate = true;
+    while(read_data(&data));
+
+    if (checkNewPlay)
+        PlaybackValidation(&data,play_timeout);
+    else
+        PlaySeconds(data.playbin,play_timeout);
+
+EXIT:
+    if (data.playbin)
+    {
+        assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
+    }
+
+    gst_object_unref (data.playbin);
+
+}
+GST_END_TEST;
+
+/********************************************************************************************************************
  * Purpose      : Test to do check the Color depth of video using playbin element and Caps
  * Parameters   : Playback URL
  ********************************************************************************************************************/
-
-
 GST_START_TEST (test_color_depth)
 {
 
@@ -3508,6 +3598,26 @@ media_pipeline_suite (void)
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
+    else if (strcmp ("test_appsrc_video_underflow_signal", tcname) == 0)
+    {
+       video_underflow_test = true;
+       only_video = true;
+       use_audioSink = false;
+       checkSignalTest = true;
+       tcase_add_test (tc_chain, test_appsrc_underflow);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_appsrc_video_underflow", tcname) == 0)
+    {
+       video_underflow_test = true;
+       only_video = true;
+       use_audioSink = false;
+       checkSignalTest = false;
+       tcase_add_test (tc_chain, test_appsrc_underflow);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
     else
     {
        printf("\nNo such testcase is present in app");
@@ -3661,10 +3771,8 @@ int main (int argc, char **argv)
 	    (strcmp ("test_resolution_down", tcname) == 0) ||
 	    (strcmp ("test_resolution_up", tcname) == 0) ||
 	    (strcmp ("test_playback_fps", tcname) == 0) ||
-	    (strcmp ("test_rialto_playback", tcname) == 0) ||
-	    (strcmp ("test_rialto_play_pause", tcname) == 0) ||
-	    (strcmp ("test_rialto_EOS", tcname) == 0) ||
-	    (strcmp ("test_rialto_resolution", tcname) == 0) ||
+	    (strcmp ("test_appsrc_video_underflow", tcname) == 0) ||
+	    (strcmp ("test_appsrc_video_underflow_signal", tcname) == 0) ||
             (strcmp ("test_EOS", tcname) == 0) ||
 	    (strcmp ("test_audio_sampling_rate", tcname) == 0) ||
 	    (strcmp ("test_only_audio", tcname) == 0) ||
@@ -3850,7 +3958,7 @@ int main (int argc, char **argv)
                     strtok (argv[arg], "=");
                     ReadSize = atoi (strtok (NULL, "="));
                 }
-		if (strstr (argv[arg], "bytesThreshold=") != NULL)
+		if (strstr (argv[arg], "underflow_threshold=") != NULL)
                 {
                     strtok (argv[arg], "=");
                     BYTES_THRESHOLD = atoi (strtok (NULL, "="));
