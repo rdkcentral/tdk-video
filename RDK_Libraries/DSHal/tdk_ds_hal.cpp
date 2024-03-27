@@ -603,7 +603,7 @@ dsError_t dsGetEDID(intptr_t handle, dsDisplayEDID_t *edid)
         return dsERR_GENERAL;
 
 }
-dsError_t dsGetEDIDBytes(intptr_t handle, unsigned char **edid, int *length)
+dsError_t dsGetEDIDBytes(intptr_t handle, unsigned char *edid, int *length)
 {
         printf("\nDUMMY %s\n", __FUNCTION__);
         return dsERR_GENERAL;
@@ -1142,7 +1142,7 @@ dsError_t  dsEnableVideoPort(intptr_t handle, bool enabled)
         return dsERR_GENERAL;
 
 }
-dsError_t  dsSetResolution(intptr_t handle, dsVideoPortResolution_t *resolution, bool persist)
+dsError_t  dsSetResolution(intptr_t handle, dsVideoPortResolution_t *resolution)
 {
         printf("\nDUMMY %s\n", __FUNCTION__);
         return dsERR_GENERAL;
