@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <stdexcept>
+#include <sys/stat.h>
 #include <gst/audio/audio.h>
 
 extern "C"
@@ -164,6 +165,7 @@ bool force_appsrc = false;
 bool finish_feed = false;
 bool video_underflow_test = false;
 bool audio_underflow_test = false;
+bool forceAudioSink = false;
 
 /*
  * Playbin flags
@@ -1013,6 +1015,45 @@ bool getstreamingstatus(char* script)
         return false;
     }
 }
+
+bool directoryExists(const std::string& path) 
+{
+    struct stat info;
+    if (stat(path.c_str(), &info) != 0)
+        return false;
+    else if (info.st_mode & S_IFDIR)
+        return true;
+    else
+        return false;
+}
+
+static string getAudioSink()
+{
+   FILE *fp = NULL;
+   char readRespBuff[10] = { '\0' };
+   printf ("\nObtaining the SOC of the DUT\n");
+   fp = popen("cat /etc/device.properties | grep SOC | cut -d '=' -f2 ","r");
+   if(fp == NULL)
+   {
+       printf("\npopen failed\n");
+       return "";
+   }
+   while(fgets(readRespBuff,sizeof(readRespBuff),fp) != NULL);
+   readRespBuff[strcspn(readRespBuff, "\n")] = '\0';
+   pclose(fp);
+   printf ("SOC obtained from DUT : %s\n",readRespBuff);
+   if (strcmp(readRespBuff,"AMLOGIC") == 0)
+       return "amlhalasink";
+   else if (strcmp(readRespBuff,"RTK") == 0)
+       return "rtkaudiosink";
+   else if (directoryExists("/proc/brcm"))
+       return "brcmaudiosink";
+   else
+       printf("\nPlatform audio-sink is not configured for this DUT\n");
+   return "";
+}
+
+
 
 /******************************************************************************************************************
  * Purpose:                Callback function to initialize appsrc with corresponding callbacks
@@ -1909,6 +1950,12 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
      */
     data->westerosSink.sink = gst_element_factory_make(WESTEROS_SINK, NULL);
     fail_unless (data->westerosSink.sink != NULL, "Failed to create 'westerossink' element");
+
+    if (forceAudioSink)
+    {
+	 audiosink = getAudioSink();
+    }
+
     if (!audiosink.empty())
     {
 	 printf("\nAudioSink is provided as %s",audiosink.c_str());
@@ -3253,27 +3300,24 @@ GST_START_TEST (test_appsrc_underflow)
     while(read_data(&data));
     WaitForOperation;
 
-    if (checkNewPlay)
-        PlaybackValidation(&data,play_timeout);
-    else
-        PlaySeconds(data.playbin,play_timeout);
+    PlaybackValidation(&data,play_timeout);
 
     if (checkSignalTest)
 	 goto EXIT;
     if (video_underflow_test)
 	 assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive buffer underflow signal");
+    if (audio_underflow_test)
+	 assert_failure (data.playbin,audio_underflow_received_global == true, "Failed to receive buffer underflow signal");
 
     BYTES_THRESHOLD *= 2;
     printf ("\nUpdating bytestThreshold to %lld",BYTES_THRESHOLD);
     printf ("\nPushing buffers with updated bytesThreshold\n");
     videoUnderflowReceived = false;
+    audio_underflow_received_global = false;
     data.terminate = true;
     while(read_data(&data));
 
-    if (checkNewPlay)
-        PlaybackValidation(&data,play_timeout);
-    else
-        PlaySeconds(data.playbin,play_timeout);
+    PlaybackValidation(&data,play_timeout);
 
 EXIT:
     if (data.playbin)
@@ -3608,11 +3652,34 @@ media_pipeline_suite (void)
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
+    else if (strcmp ("test_appsrc_audio_underflow_signal", tcname) == 0)
+    {
+       audio_underflow_test = true;
+       only_audio = true;
+       use_westerossink_fps = false;
+       checkPTS = false;
+       checkSignalTest = true;
+       tcase_add_test (tc_chain, test_appsrc_underflow);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
     else if (strcmp ("test_appsrc_video_underflow", tcname) == 0)
     {
        video_underflow_test = true;
        only_video = true;
        use_audioSink = false;
+       checkSignalTest = false;
+       tcase_add_test (tc_chain, test_appsrc_underflow);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_appsrc_audio_underflow", tcname) == 0)
+    {
+       audio_underflow_test = true;
+       only_audio = true;
+       use_westerossink_fps = false;
+       checkPTS = false;
+       checkNewPlay = true;
        checkSignalTest = false;
        tcase_add_test (tc_chain, test_appsrc_underflow);
        GST_INFO ("tc %s run successfull\n", tcname);
@@ -3772,7 +3839,9 @@ int main (int argc, char **argv)
 	    (strcmp ("test_resolution_up", tcname) == 0) ||
 	    (strcmp ("test_playback_fps", tcname) == 0) ||
 	    (strcmp ("test_appsrc_video_underflow", tcname) == 0) ||
+	    (strcmp ("test_appsrc_audio_underflow", tcname) == 0) ||
 	    (strcmp ("test_appsrc_video_underflow_signal", tcname) == 0) ||
+	    (strcmp ("test_appsrc_audio_underflow_signal", tcname) == 0) ||
             (strcmp ("test_EOS", tcname) == 0) ||
 	    (strcmp ("test_audio_sampling_rate", tcname) == 0) ||
 	    (strcmp ("test_only_audio", tcname) == 0) ||
@@ -3937,6 +4006,10 @@ int main (int argc, char **argv)
 		{
 		    checkEachSecondPlayback = true;
 		}
+		if (strcmp ("forceAudioSink", argv[arg]) == 0)
+                {
+                    forceAudioSink = true;
+                }
 		if (strcmp ("test_channel_change_playback", tcname) == 0)
 		{
 		    if (strstr (argv[arg], "timeout=") != NULL)
