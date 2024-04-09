@@ -47,7 +47,7 @@ class DeepSleepHalAgent : public RDKTestStubInterface , public AbstractServer<De
                 //Constructor
                 DeepSleepHalAgent(TcpSocketServer &ptrRpcServer) : AbstractServer <DeepSleepHalAgent>(ptrRpcServer)
                 {
-                    this->bindAndAddMethod(Procedure("TestMgr_DeepSleepHal_SetDeepSleep", PARAMS_BY_NAME, JSON_STRING, "timeout", JSON_INTEGER, NULL), &DeepSleepHalAgent::DeepSleepHal_SetDeepSleep);
+                    this->bindAndAddMethod(Procedure("TestMgr_DeepSleepHal_SetDeepSleep", PARAMS_BY_NAME, JSON_STRING, "timeout", JSON_INTEGER, "networkStandby", JSON_BOOLEAN, NULL), &DeepSleepHalAgent::DeepSleepHal_SetDeepSleep);
                 }
 
 

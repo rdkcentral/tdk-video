@@ -21,38 +21,40 @@
 #include <cstdint>
 #include "deepSleepMgr.h"
 
-int PLAT_DS_INIT(void)
+DeepSleep_Return_Status_t PLAT_DS_INIT(void)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return 1;
+    return DEEPSLEEPMGR_INIT_FAILURE;
 }
 
-int PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup)
+DeepSleep_Return_Status_t PLAT_DS_SetiDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool networkStandby)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return 1;
+    return DEEPSLEEPMGR_INVALID_ARGUMENT;
 }
 
-int PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout)
+DeepSleep_Return_Status_t PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return 1;
+    return DEEPSLEEPMGR_INVALID_ARGUMENT;
 }
 
-int PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool coldStandby)
+DeepSleep_Return_Status_t PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool coldStandby)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return 1;
+    return DEEPSLEEPMGR_INVALID_ARGUMENT;
 }
 
-void PLAT_DS_DeepSleepWakeup(void)
+DeepSleep_Return_Status_t PLAT_DS_DeepSleepWakeup(void)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
+    return DEEPSLEEPMGR_INVALID_ARGUMENT;
 }
 
-void PLAT_DS_TERM(void)
+DeepSleep_Return_Status_t PLAT_DS_TERM(void)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
+    return DEEPSLEEPMGR_TERM_FAILURE;
 }
 
 

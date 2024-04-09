@@ -21,37 +21,38 @@
 #include "plat_power.h"
 
 /* Power Manager HAL DUMMY APIs */
-int PLAT_INIT()
+pmStatus_t PLAT_INIT()
 {
 	printf( "DUMMY PLAT_INIT\n");
-	return 1;
+	return PWRMGR_INIT_FAILURE;
 }
 
-int PLAT_API_SetPowerState(IARM_Bus_PWRMgr_PowerState_t newState)
+pmStatus_t PLAT_API_SetPowerState(PWRMgr_PowerState_t newState)
 {
 	printf( "DUMMY PLAT_API_SetPowerState\n");
-        return 1;
+        return PWRMGR_INVALID_ARGUMENT;
 }
 
-int PLAT_INIT(int cec_enable)
+pmStatus_t PLAT_INIT(pmStatus_t cec_enable)
 {
         printf( "DUMMY PLAT_INIT\n");
-        return 1;
+        return PWRMGR_INVALID_ARGUMENT;
 }
 
-int PLAT_API_GetPowerState(IARM_Bus_PWRMgr_PowerState_t *curState)
+pmStatus_t PLAT_API_GetPowerState(PWRMgr_PowerState_t *curState)
 {
 	printf( "DUMMY PLAT_API_GetPowerState\n");
-        return 1;
+        return PWRMGR_INVALID_ARGUMENT;
 }
 
-int PLAT_API_GetTemperature(IARM_Bus_PWRMgr_ThermalState_t *curState, float *curTemperature, float *wifiTemperature)
+int PLAT_API_GetTemperature(PWRMgr_ThermalState_t *curState, float *curTemperature, float *wifiTemperature)
 {
 	printf( "DUMMY PLAT_API_GetTemperature\n");
         return 1;
 }
 
-void PLAT_TERM()
+pmStatus_t PLAT_TERM()
 {
 	printf( "DUMMY PLAT_TERM\n");
+	return PWRMGR_TERM_FAILURE;
 }

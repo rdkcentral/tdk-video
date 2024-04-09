@@ -20,6 +20,26 @@
 #include "DeepSleepHalAgent.h"
 std::chrono::time_point<std::chrono::high_resolution_clock> start;
 std::chrono::time_point<std::chrono::high_resolution_clock> stop;
+
+/*************************************************************************************
+ *Function name : DeepSleep_Return_Status_toString
+ *Description   : This function is to check the ERROR return code of DeepSleep HAL API
+ *
+ *************************************************************************************/
+std::string DeepSleep_Return_Status_toString(DeepSleep_Return_Status_t status) {
+    switch (status) {
+	    case DEEPSLEEPMGR_INVALID_ARGUMENT: return " Error : DEEPSLEEPMGR_INVALID_ARGUMENT";
+	    case DEEPSLEEPMGR_ALREADY_INITIALIZED: return " Error : DEEPSLEEPMGR_ALREADY_INITIALIZED";
+	    case DEEPSLEEPMGR_NOT_INITIALIZED: return " Error : DEEPSLEEPMGR_NOT_INITIALIZED";
+	    case DEEPSLEEPMGR_INIT_FAILURE: return " Error : DEEPSLEEPMGR_INIT_FAILURE";
+	    case DEEPSLEEPMGR_SET_FAILURE: return " Error : DEEPSLEEPMGR_SET_FAILURE";
+	    case DEEPSLEEPMGR_WAKEUP_FAILURE: return " Error : DEEPSLEEPMGR_WAKEUP_FAILURE";
+	    case DEEPSLEEPMGR_TERM_FAILURE: return " Error :DEEPSLEEPMGR_TERM_FAILURE";
+	    case DEEPSLEEPMGR_MAX: return " Error : DEEPSLEEPMGR_MAX";
+	    default: return " Error : Unknown DeepSleep_Return_Status_t";
+    }
+}
+
 /***************************************************************************
  *Function name : testmodulepre_requisites
  *Description   : testmodulepre_requisites will be used for setting the
@@ -31,14 +51,14 @@ std::string DeepSleepHalAgent::testmodulepre_requisites()
     DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule pre_requisites --> Entry\n");
 #ifdef ENABLE_DEEP_SLEEP
     DEBUG_PRINT(DEBUG_TRACE, "DeepSleep init ....\n");
-    int init = PLAT_DS_INIT();
-    if (init == 0){
+    DeepSleep_Return_Status_t init = PLAT_DS_INIT();
+    if (init == DEEPSLEEPMGR_SUCCESS){
         DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_INIT call success\n");
         DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule pre_requisites --> Exit\n");
         return "SUCCESS";
     }
     else{
-        DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_INIT call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_INIT call failed %s\n",DeepSleep_Return_Status_toString(init));
         DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule pre_requisites --> Exit\n");
         return "FAILURE";
     }
@@ -62,9 +82,17 @@ bool DeepSleepHalAgent::testmodulepost_requisites()
     DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule post_requisites --> Entry\n");
 #ifdef ENABLE_DEEP_SLEEP
     DEBUG_PRINT(DEBUG_TRACE, "DeepSleep term ...\n");
-    PLAT_DS_TERM();
-    DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule post_requisites --> Exit\n");
-    return TEST_SUCCESS;
+    DeepSleep_Return_Status_t term = PLAT_DS_TERM();
+    if (term == DEEPSLEEPMGR_SUCCESS){
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_TERM call success\n");
+        DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule post_requisites --> Exit\n");
+        return TEST_SUCCESS;
+    }
+    else{
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_TERM call failed %s\n",DeepSleep_Return_Status_toString(term));
+        DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule post_requisites --> Exit\n");
+        return TEST_FAILURE;
+    }
 #else
     DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal Not Supported\n");
     DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal testmodule post_requisites --> Exit\n");
@@ -111,6 +139,8 @@ void DeepSleepHalAgent::DeepSleepHal_SetDeepSleep(IN const Json::Value& req, OUT
         response["details"] = "Invalid Timeout Value";
         return;
     }
+
+    bool networkStandby = req["networkStandby"].asBool();
 #ifdef ENABLE_DEEP_SLEEP
 #ifdef ENABLE_DEEPSLEEP_WAKEUP_EVT
     bool isGPIOWakeup = 0;
@@ -120,17 +150,17 @@ void DeepSleepHalAgent::DeepSleepHal_SetDeepSleep(IN const Json::Value& req, OUT
 
     start = std::chrono::high_resolution_clock::now();
 #ifdef ENABLE_DEEPSLEEP_WAKEUP_EVT
-    int ret = PLAT_DS_SetDeepSleep(deep_sleep_timeout, &isGPIOWakeup);
+    DeepSleep_Return_Status_t ret = PLAT_DS_SetDeepSleep(deep_sleep_timeout, &isGPIOWakeup, networkStandby);
 #else
-    int ret = PLAT_DS_SetDeepSleep(deep_sleep_timeout);
+    DeepSleep_Return_Status_t ret = PLAT_DS_SetDeepSleep(deep_sleep_timeout);
 #endif //ENABLE_DEEPSLEEP_WAKEUP_EVT
     stop = std::chrono::high_resolution_clock::now();
 
     int freezeDuration = std::chrono::duration_cast<std::chrono::seconds>(stop - start).count();
-    if (ret == 0){
+    if (ret == DEEPSLEEPMGR_SUCCESS){
         DEBUG_PRINT(DEBUG_TRACE, "Resumed from DeepSleep\n");
 #ifdef ENABLE_DEEPSLEEP_WAKEUP_EVT
-        DEBUG_PRINT(DEBUG_TRACE, "CPU freeze duration : %d, isGPIOWakeup : %d\n",freezeDuration,isGPIOWakeup);
+        DEBUG_PRINT(DEBUG_TRACE, "CPU freeze duration : %d, isGPIOWakeup : %d networkStandby : %d\n",freezeDuration,isGPIOWakeup,networkStandby);
         sprintf(details,"CPU freeze duration : %d;isGPIOWakeup : %d;PLAT_DS_SetDeepSleep call is SUCCESS",freezeDuration,isGPIOWakeup);
 #else
         DEBUG_PRINT(DEBUG_TRACE, "CPU freeze duration : %d\n",freezeDuration);
@@ -143,8 +173,8 @@ void DeepSleepHalAgent::DeepSleepHal_SetDeepSleep(IN const Json::Value& req, OUT
     }
     else{
         response["result"]="FAILURE";
-        response["details"]="PLAT_DS_SetDeepSleep call failed";
-        DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_SetDeepSleep call failed\n");
+	response["details"]="PLAT_DS_SetDeepSleep call failed" + DeepSleep_Return_Status_toString(ret);
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_DS_SetDeepSleep call failed %s\n",DeepSleep_Return_Status_toString(ret));
         DEBUG_PRINT(DEBUG_TRACE, "DeepSleepHal_SetDeepSleep --> Exit\n");
     }
 #else

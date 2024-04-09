@@ -20,69 +20,68 @@
 #include "hdmi_cec_driver.h"
 #include <stdio.h>
 
-HDMI_CEC_STATUS HdmiCecOpen(int *handle)
+int HdmiCecOpen(int *handle)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecClose(int handle)
+int HdmiCecClose(int handle)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecSetLogicalAddress(int handle, int *logicalAddresses, int num)
+int HdmiCecSetLogicalAddress(int handle, int *logicalAddresses, int num)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecAddLogicalAddress(int handle, int logicalAddresses)
+int HdmiCecAddLogicalAddress(int handle, int logicalAddresses)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecRemoveLogicalAddress(int handle, int logicalAddresses)
+int HdmiCecRemoveLogicalAddress(int handle, int logicalAddresses)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecGetLogicalAddress(int handle, int devType,  int *logicalAddress)
+int HdmiCecGetLogicalAddress(int handle, int *logicalAddress)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecGetPhysicalAddress(int handle,unsigned int *physicalAddress)
+void HdmiCecGetPhysicalAddress(int handle,unsigned int *physicalAddress)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
 }
 
-HDMI_CEC_STATUS HdmiCecSetRxCallback(int handle, HdmiCecRxCallback_t cbfunc, void *data)
+int HdmiCecSetRxCallback(int handle, HdmiCecRxCallback_t cbfunc, void *data)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecSetTxCallback(int handle, HdmiCecTxCallback_t cbfunc, void *data)
+int HdmiCecSetTxCallback(int handle, HdmiCecTxCallback_t cbfunc, void *data)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecTx(int handle, const unsigned char *buf, int len, int *result)
+int HdmiCecTx(int handle, const unsigned char *buf, int len, int *result)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 
-HDMI_CEC_STATUS HdmiCecTxAsync(int handle, const unsigned char *buf, int len)
+int HdmiCecTxAsync(int handle, const unsigned char *buf, int len)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
-    return HDMI_CEC_IO_SENT_FAILED;
+    return 1;
 }
 

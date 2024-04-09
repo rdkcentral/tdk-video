@@ -18,7 +18,7 @@
 ##########################################################################
 INC_DIR = ../../RDK_Source/iarmmgrs_source/hal/include
 CXXFLAGS += -I$(INC_DIR)
-CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall
+CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall -DENABLE_THERMAL_PROTECTION
 
 # Library name and version
 LIBNAME = iarmmgrs-power-hal

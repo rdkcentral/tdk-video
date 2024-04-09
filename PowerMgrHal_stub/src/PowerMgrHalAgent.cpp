@@ -20,6 +20,27 @@
 #include "PowerMgrHalAgent.h"
 std::chrono::time_point<std::chrono::high_resolution_clock> start;
 std::chrono::time_point<std::chrono::high_resolution_clock> stop;
+
+/*************************************************************************************
+ *Function name : pmStatusToString
+ *Description   : This function is to check the ERROR return code of PowerMgrHAL API
+ *
+ *************************************************************************************/
+std::string pmStatusToString(pmStatus_t status) {
+    switch (status) {
+        case PWRMGR_INVALID_ARGUMENT: return " Error : PWRMGR_INVALID_ARGUMENT";
+        case PWRMGR_ALREADY_INITIALIZED: return " Error : PWRMGR_ALREADY_INITIALIZED";
+        case PWRMGR_NOT_INITIALIZED: return " Error : PWRMGR_NOT_INITIALIZED";
+        case PWRMGR_INIT_FAILURE: return " Error : PWRMGR_INIT_FAILURE";
+        case PWRMGR_SET_FAILURE: return " Error : PWRMGR_SET_FAILURE";
+        case PWRMGR_GET_FAILURE: return " Error : PWRMGR_GET_FAILURE";
+        case PWRMGR_OPERATION_NOT_SUPPORTED: return " Error : PWRMGR_OPERATION_NOT_SUPPORTED";
+        case PWRMGR_TERM_FAILURE: return " Error : PWRMGR_TERM_FAILURE";
+        case PWRMGR_MAX: return " Error : PWRMGR_MAX";
+	default: return " Error : Unknown pmStatus_t";
+    }
+}
+
 /***************************************************************************
  *Function name : testmodulepre_requisites
  *Description   : testmodulepre_requisites will be used for setting the
@@ -30,14 +51,14 @@ std::string PowerMgrHalAgent::testmodulepre_requisites()
 {
     DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule pre_requisites --> Entry\n");
     DEBUG_PRINT(DEBUG_TRACE, "PowerMgr init ....\n");
-    int init = PLAT_INIT();
-    if (init == 0){
+    pmStatus_t init = PLAT_INIT();
+    if (init == PWRMGR_SUCCESS){
         DEBUG_PRINT(DEBUG_TRACE, "PLAT_INIT call success\n");
         DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule pre_requisites --> Exit\n");
         return "SUCCESS";
     }
     else{
-        DEBUG_PRINT(DEBUG_TRACE, "PLAT_INIT call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_INIT call failed %s\n",pmStatusToString(init));
         DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule pre_requisites --> Exit\n");
         return "FAILURE";
     }
@@ -53,9 +74,17 @@ bool PowerMgrHalAgent::testmodulepost_requisites()
 {
     DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule post_requisites --> Entry\n");
     DEBUG_PRINT(DEBUG_TRACE, "PowerMgr term ...\n");
-    PLAT_TERM();
-    DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule post_requisites --> Exit\n");
-    return TEST_SUCCESS;
+    pmStatus_t term = PLAT_TERM();
+    if (term == PWRMGR_SUCCESS){
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_TERM call success\n");
+        DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule post_requisites --> Exit\n");
+        return TEST_SUCCESS;
+    }
+    else{
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_TERM call failed %s\n",pmStatusToString(term));
+        DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal testmodule post_requisites --> Exit\n");
+        return TEST_FAILURE;
+    }
 }
 
 /**************************************************************************
@@ -91,19 +120,19 @@ void PowerMgrHalAgent::PowerMgrHal_GetPowerState(IN const Json::Value& req, OUT 
     char details[50];
     string pwr_state;
 
-    IARM_Bus_PWRMgr_PowerState_t state;
-    int ret = PLAT_API_GetPowerState(&state);
-    if (ret == 0){
+    PWRMgr_PowerState_t state;
+    pmStatus_t ret = PLAT_API_GetPowerState(&state);
+    if (ret == PWRMGR_SUCCESS){
         DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetPowerState call success\n");
-        if (state == IARM_BUS_PWRMGR_POWERSTATE_OFF)
+        if (state == PWRMGR_POWERSTATE_OFF)
             pwr_state = "OFF";
-        else if (state == IARM_BUS_PWRMGR_POWERSTATE_STANDBY)
+        else if (state == PWRMGR_POWERSTATE_STANDBY)
             pwr_state = "STANDBY";
-        else if (state == IARM_BUS_PWRMGR_POWERSTATE_ON)
+        else if (state == PWRMGR_POWERSTATE_ON)
             pwr_state = "ON";
-        else if (state == IARM_BUS_PWRMGR_POWERSTATE_STANDBY_LIGHT_SLEEP)
+        else if (state == PWRMGR_POWERSTATE_STANDBY_LIGHT_SLEEP)
             pwr_state = "LIGHT_SLEEP";
-        else if (state == IARM_BUS_PWRMGR_POWERSTATE_STANDBY_DEEP_SLEEP)
+        else if (state == PWRMGR_POWERSTATE_STANDBY_DEEP_SLEEP)
             pwr_state = "DEEP_SLEEP";
         else
             pwr_state = "NONE";
@@ -117,8 +146,8 @@ void PowerMgrHalAgent::PowerMgrHal_GetPowerState(IN const Json::Value& req, OUT 
     }
     else{
         response["result"]="FAILURE";
-        response["details"]="PLAT_API_GetPowerState call failed";
-        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetPowerState call failed\n");
+        response["details"]="PLAT_API_GetPowerState call failed" + pmStatusToString(ret);
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetPowerState call failed %s\n",pmStatusToString(ret));
         DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_GetPowerState --> Exit\n");
     }
     return;
@@ -143,17 +172,17 @@ void PowerMgrHalAgent::PowerMgrHal_SetPowerState(IN const Json::Value& req, OUT 
     char pwr_state[20];
     strcpy(pwr_state,req["state"].asCString());
 
-    IARM_Bus_PWRMgr_PowerState_t state;
+    PWRMgr_PowerState_t  state;
     if (!strcmp(pwr_state,"OFF"))
-        state = IARM_BUS_PWRMGR_POWERSTATE_OFF;
+        state = PWRMGR_POWERSTATE_OFF;
     else if (!strcmp(pwr_state,"STANDBY"))
-        state = IARM_BUS_PWRMGR_POWERSTATE_STANDBY;
+        state = PWRMGR_POWERSTATE_STANDBY;
     else if (!strcmp(pwr_state,"ON"))
-        state = IARM_BUS_PWRMGR_POWERSTATE_ON;
+        state = PWRMGR_POWERSTATE_ON;
     else if (!strcmp(pwr_state,"LIGHT_SLEEP"))
-        state = IARM_BUS_PWRMGR_POWERSTATE_STANDBY_LIGHT_SLEEP;
+        state = PWRMGR_POWERSTATE_STANDBY_LIGHT_SLEEP;
     else if (!strcmp(pwr_state,"DEEP_SLEEP"))
-        state = IARM_BUS_PWRMGR_POWERSTATE_STANDBY_DEEP_SLEEP;
+        state = PWRMGR_POWERSTATE_STANDBY_DEEP_SLEEP;
     else{
         response["result"] = "FAILURE";
         response["details"] = "Invalid Power State";
@@ -161,17 +190,17 @@ void PowerMgrHalAgent::PowerMgrHal_SetPowerState(IN const Json::Value& req, OUT 
     }
     DEBUG_PRINT(DEBUG_TRACE, "Power State to be set:%s\n",pwr_state);
 
-    int ret = PLAT_API_SetPowerState(state);
-    if (ret == 0){
+    pmStatus_t ret = PLAT_API_SetPowerState(state);
+    if (ret == PWRMGR_SUCCESS){
         DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_SetPowerState call success\n");
         response["result"]="SUCCESS";
         response["details"]="PLAT_API_SetPowerState call success";
         DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_SetPowerState --> Exit\n");
     }
     else{
-        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_SetPowerState call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_SetPowerState call failed %s\n",pmStatusToString(ret));
         response["result"]="FAILURE";
-        response["details"]="PLAT_API_SetPowerState call failed";
+        response["details"]="PLAT_API_SetPowerState call failed" + pmStatusToString(ret);
         DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_SetPowerState --> Exit\n");
     }
     return;
@@ -188,17 +217,17 @@ void PowerMgrHalAgent::PowerMgrHal_GetTemperature(IN const Json::Value& req, OUT
     char details[100];
     string temp_state;
 
-    IARM_Bus_PWRMgr_ThermalState_t state;
+    PWRMgr_ThermalState_t state;
     float current_Temp = 0;
     float current_WifiTemp = 0;
     int ret = PLAT_API_GetTemperature(&state, &current_Temp, &current_WifiTemp);
     if (ret == 1){
         DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetTemperature call success\n");
-        if ( state == IARM_BUS_PWRMGR_TEMPERATURE_NORMAL )
+        if ( state == PWRMGR_TEMPERATURE_NORMAL )
             temp_state = "NORMAL";
-        else if (state == IARM_BUS_PWRMGR_TEMPERATURE_HIGH)
+        else if (state == PWRMGR_TEMPERATURE_HIGH)
             temp_state = "HIGH";
-        else if (state == IARM_BUS_PWRMGR_TEMPERATURE_CRITICAL )
+        else if (state == PWRMGR_TEMPERATURE_CRITICAL )
             temp_state = "CRITICAL";
         else
             temp_state = "NONE";
@@ -461,11 +490,19 @@ void PowerMgrHalAgent::PowerMgrHal_Reset(IN const Json::Value& req, OUT Json::Va
 {
     DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_Reset --->Entry\n");
     //input paramter is not in use
-    IARM_Bus_PWRMgr_PowerState_t state = IARM_BUS_PWRMGR_POWERSTATE_ON;
+    PWRMgr_PowerState_t state = PWRMGR_POWERSTATE_ON;
     DEBUG_PRINT(DEBUG_TRACE, "Calling PLAT_Reset : going to reboot the device\n");
-    PLAT_Reset(state);
-    response["result"]="SUCCESS";
-    response["details"]="PLAT_Reset call success";
+    pmStatus_t ret = PLAT_Reset(state);
+    if (ret == PWRMGR_SUCCESS){
+	DEBUG_PRINT(DEBUG_TRACE, "PLAT_Reset call success\n");
+	response["result"]="SUCCESS";
+	response["details"]="PLAT_Reset call success";
+    }
+    else{
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_Reset call failed %s\n", pmStatusToString(ret));
+	response["result"]="FAILURE";
+	response["details"]="PLAT_Reset call failed" + pmStatusToString(ret);
+    }
     DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_Reset ---> Exit\n");
     return;
 }
