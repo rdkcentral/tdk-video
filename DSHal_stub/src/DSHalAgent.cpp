@@ -177,9 +177,6 @@ void checkERROR(dsError_t ret,string *error)
      case dsERR_OPERATION_NOT_SUPPORTED : DEBUG_PRINT(DEBUG_ERROR, "ERROR : dsERR_OPERATION_NOT_SUPPORTED\n");
 					  *error=" ERROR:dsERR_OPERATION_NOT_SUPPORTED";
                                           break;
-     case dsERR_UNKNOWN : DEBUG_PRINT(DEBUG_ERROR, "ERROR : dsERR_UNKNOWN\n");
-			  *error=" ERROR:dsERR_UNKNOWN";
-                          break;
      default :DEBUG_PRINT(DEBUG_ERROR, "UNEXPECTED ERROR OBSERVED\n");
 	      *error="ERROR:UNEXPECTED ERROR";
     }
@@ -1481,68 +1478,6 @@ void DSHalAgent::DSHal_GetCPUTemperature(IN const Json::Value& req, OUT Json::Va
     }
 }
 /***************************************************************************
- *Function name  : DSHal_GetVersion
- *Description    : This function is to get the 4 byte version number
- *****************************************************************************/
-void DSHalAgent::DSHal_GetVersion(IN const Json::Value& req, OUT Json::Value& response)
-{
-    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetVersion --->Entry\n");
-    unsigned int  version = 0;
-    dsError_t ret = dsERR_NONE;
-    ret = dsGetVersion(&version);
-    if (ret == dsERR_NONE)
-    {
-        response["result"] = "SUCCESS";
-        response["details"] = version;
-        DEBUG_PRINT(DEBUG_LOG, "dsGetVersion call is SUCCESS");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetVersion -->Exit\n");
-        return;
-    }
-    else
-    {
-	checkERROR(ret,&error);
-        response["result"] = "FAILURE";
-        response["details"] = "DSHAL version number not retrieved"+error;
-	DEBUG_PRINT(DEBUG_TRACE1, "Version :%d",version);
-        DEBUG_PRINT(DEBUG_ERROR, "dsGetVersion call is FAILURE");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetVersion -->Exit\n");
-        return;
-    }
-}
-/***************************************************************************
- *Function name  : DSHal_SetVersion
- *Description    : This function is to set the 4 byte runtime dshal version
- *****************************************************************************/
-void DSHalAgent::DSHal_SetVersion(IN const Json::Value& req, OUT Json::Value& response)
-{
-    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetVersion --->Entry\n");
-    if(&req["version"] == NULL)
-    {
-        return;
-    }
-
-    unsigned int  version = req["version"].asUInt();
-    dsError_t ret = dsERR_NONE;
-    ret = dsSetVersion(version);
-    if (ret == dsERR_NONE)
-    {
-        response["result"] = "SUCCESS";
-        response["details"] = "dsSetVersion call is success";
-        DEBUG_PRINT(DEBUG_LOG, "dsSetVersion call is SUCCESS");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetVersion -->Exit\n");
-        return;
-    }
-    else
-    {
-	checkERROR(ret,&error);
-        response["result"] = "FAILURE";
-        response["details"] = "DSHAL version number not set"+error;
-        DEBUG_PRINT(DEBUG_ERROR, "dsSetVersion call is FAILURE");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetVersion -->Exit\n");
-        return;
-    }
-}
-/***************************************************************************
  *Function name  : DSHal_GetHDRCapabilities
  *Description    : This function is to get the STB HDR capabilities
  *****************************************************************************/
@@ -1883,7 +1818,7 @@ void DSHalAgent::DSHal_SetFPTime(IN const Json::Value& req, OUT Json::Value& res
     else if(!strcmp(format,"24_HOUR"))
         timeFormat = dsFPD_TIME_24_HOUR;
     else if(!strcmp(format,"STRING"))
-        timeFormat = dsFPD_TIME_STRING;
+        timeFormat = dsFPD_TIME_MAX;
     else{
         response["result"] = "FAILURE";
         response["details"] = "Invalid Time format";
@@ -2376,10 +2311,9 @@ void DSHalAgent::DSHal_SetResolution(IN const Json::Value& req, OUT Json::Value&
     resolution.frameRate = (dsVideoFrameRate_t) req["frameRate"].asInt();
     resolution.interlaced = req["interlaced"].asInt();
     strcpy(resolution.name,resolutionName.c_str());
-    bool persist = req["persist"].asInt();
     dsError_t ret = dsERR_NONE;
 
-    ret = dsSetResolution(vpHandle, &resolution, persist);
+    ret = dsSetResolution(vpHandle, &resolution);
 
     if (ret == dsERR_NONE)
     {
@@ -2761,7 +2695,7 @@ void DSHalAgent::DSHal_GetEDIDBytes(IN const Json::Value& req, OUT Json::Value& 
         }
         unsigned char *edidBytes;
     } memguard;
-    ret = dsGetEDIDBytes(dispHandle, &memguard.edidBytes, &length);
+    ret = dsGetEDIDBytes(dispHandle, memguard.edidBytes, &length);
     if (ret == dsERR_NONE)
     {
         if(EDID_Verify(memguard.edidBytes, length)==true)

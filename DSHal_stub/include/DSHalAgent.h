@@ -93,8 +93,6 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
 		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetFPBrightness", PARAMS_BY_NAME, JSON_STRING,"indicator",JSON_INTEGER,"brightness",JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetFPBrightness);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetFPBrightness", PARAMS_BY_NAME, JSON_STRING,"indicator",JSON_INTEGER,NULL), &DSHalAgent::DSHal_GetFPBrightness);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetCPUTemperature", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetCPUTemperature);
-                    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetVersion", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetVersion);
-                    this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetVersion", PARAMS_BY_NAME, JSON_STRING, "version", JSON_INTEGER, NULL), &DSHalAgent::DSHal_SetVersion);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetHDRCapabilities", PARAMS_BY_NAME, JSON_STRING, NULL), &DSHalAgent::DSHal_GetHDRCapabilities);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetSupportedVideoCodingFormats", PARAMS_BY_NAME, JSON_STRING, NULL),&DSHalAgent::DSHal_GetSupportedVideoCodingFormats);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetVideoCodecInfo", PARAMS_BY_NAME, JSON_STRING, "format", JSON_STRING, NULL),&DSHalAgent::DSHal_GetVideoCodecInfo);
@@ -187,8 +185,6 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
 		void DSHal_SetFPBrightness(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetFPBrightness(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetCPUTemperature(IN const Json::Value& req, OUT Json::Value& response);
-                void DSHal_GetVersion(IN const Json::Value& req, OUT Json::Value& response);
-                void DSHal_SetVersion(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetHDRCapabilities(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetSupportedVideoCodingFormats(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetVideoCodecInfo(IN const Json::Value& req, OUT Json::Value& response);
