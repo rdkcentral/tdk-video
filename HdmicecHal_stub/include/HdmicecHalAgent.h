@@ -32,7 +32,7 @@
 
 #include "libIBus.h"
 #include "libIBusDaemon.h"
-#include "ccec/drivers/hdmi_cec_driver.h"
+#include "ccec/include/ccec/driver/hdmi_cec_driver.h"
 #include "ccec/drivers/CecIARMBusMgr.h"
 
 #include <json/json.h>

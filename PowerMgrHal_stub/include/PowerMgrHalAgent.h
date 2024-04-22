@@ -29,6 +29,7 @@
 #include "rdkteststubintf.h"
 #include "rdktestagentintf.h"
 #include "plat_power.h"
+#include "therm_mon.h"
 #include "pwrMgr.h"
 #include "libIBusDaemon.h"
 
