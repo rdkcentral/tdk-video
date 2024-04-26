@@ -148,8 +148,8 @@ static void disp_cec_frame(unsigned char *frame, int size)
 // Function to check tx send status
 static void checkTxStatus(int sendStatus)
 {
-        if (sendStatus == HDMI_CEC_IO_INVALID_STATE)
-            sprintf(txStatus,"HDMI_CEC_IO_INVALID_STATE");
+        if (sendStatus == HDMI_CEC_IO_INVALID_HANDLE)
+            sprintf(txStatus,"HDMI_CEC_IO_INVALID_HANDLE");
         else if (sendStatus == HDMI_CEC_IO_INVALID_ARGUMENT)
             sprintf(txStatus,"HDMI_CEC_IO_INVALID_ARGUMENT");
         else if (sendStatus == HDMI_CEC_IO_LOGICALADDRESS_UNAVAILABLE)
