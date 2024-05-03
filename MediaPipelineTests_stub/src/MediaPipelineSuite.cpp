@@ -166,6 +166,7 @@ bool finish_feed = false;
 bool video_underflow_test = false;
 bool audio_underflow_test = false;
 bool forceAudioSink = false;
+bool seek_with_pause = false;
 
 /*
  * Playbin flags
@@ -3228,6 +3229,10 @@ EXIT :
 }
 GST_END_TEST;
 
+/********************************************************************************************************************
+ * Purpose      : Test to do verify playback of only audio streams
+ * Parameters   : Playback URL
+ ********************************************************************************************************************/
 GST_START_TEST(test_only_audio)
 {
 	MessageHandlerData data;
@@ -3251,6 +3256,10 @@ GST_START_TEST(test_only_audio)
 }
 GST_END_TEST;
 
+/********************************************************************************************************************************
+ * Purpose      : Test to do restrict the connection speed and verify if playbin is able to adapt and play at expected resolution
+ * Parameters   : Playback URL
+ ********************************************************************************************************************************/
 GST_START_TEST (test_video_bitrate)
 {
     MessageHandlerData data;
@@ -3277,6 +3286,126 @@ GST_START_TEST (test_video_bitrate)
         assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
     }
 
+    gst_object_unref (data.playbin);
+}
+GST_END_TEST;
+
+/********************************************************************************************************************
+ * Purpose      : Test to do check whether EOS message is received immediately when seeked to EOS
+ * Parameters   : Playback URL
+ ********************************************************************************************************************/
+GST_START_TEST (test_seek_EOS)
+{
+    GstMessage *message;
+    use_westerossink_fps = false;
+    bool seeked = false;
+    GstBus *bus;
+    bool received_EOS = false;
+    MessageHandlerData data;
+    int operation_timeout = 5;
+    GstState cur_state;
+    GstStateChangeReturn state_change;
+
+
+    SetupPipeline(&data);
+
+    if (seek_with_pause)
+    {
+	gst_element_set_state (data.playbin, GST_STATE_PAUSED);
+        do{
+             //Waiting for state change
+             state_change = gst_element_get_state (data.playbin, &cur_state, NULL, 10000000);
+        } while (state_change == GST_STATE_CHANGE_ASYNC);
+        assert_failure (data.playbin, gst_element_get_state (data.playbin, &cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
+        assert_failure (data.playbin, cur_state == GST_STATE_PAUSED);
+        printf("\nSTATE CHANGED FROM PLAYING TO PAUSED\n");
+    }
+
+    gst_element_get_state (data.playbin, &cur_state, NULL, (GST_SECOND));
+    bus = gst_element_get_bus (data.playbin);
+    assert_failure (data.playbin,bus != NULL,"Failed to get bus");
+
+    gint64 duration = -1;
+
+    gst_element_query_duration(data.playbin, GST_FORMAT_TIME, &duration);
+
+    assert_failure(data.playbin, (duration != -1), "Failed to query pipeline duration");
+
+    g_print("Duration: %" G_GINT64_FORMAT ":%02" G_GINT64_FORMAT ".%03" G_GINT64_FORMAT "\n",
+        GST_TIME_AS_SECONDS(duration) / 60,  // Minutes
+        GST_TIME_AS_SECONDS(duration) % 60,  // Seconds
+        GST_TIME_AS_MSECONDS(duration) % 1000);  // Milliseconds
+
+    /*
+     * Set seekPosition 1 nanosecond less for seek call
+     */
+    data.seekPosition = duration - 1;
+
+    printf ("\n\nDURATION OF STREAM :  %" G_GINT64_FORMAT, duration);
+    printf ("\nSeeking towards end of stream");
+    printf ("\nSEEK POSITION is set as %" G_GINT64_FORMAT, data.seekPosition);
+
+    //Seek call
+    assert_failure (data.playbin,gst_element_seek (data.playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
+                                   GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, data.seekPosition,
+                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
+
+    start = std::chrono::steady_clock::now();
+    while((!received_EOS) || (!seeked))
+    {
+       //Check if seek happened
+       assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),
+                                         "Failed to query the current playback position");
+       //Added GST_SECOND buffer time between currentPosition and seekPosition
+       if (abs( data.currentPosition - data.seekPosition) <= (GST_SECOND))
+       {
+           seeked = TRUE;
+	   //Reset to playing state
+	   if (seek_with_pause)
+           {
+	       gst_element_set_state (data.playbin, GST_STATE_PLAYING);
+               do{
+                   //Waiting for state change
+                   state_change = gst_element_get_state (data.playbin, &cur_state, NULL, 10000000);
+               } while (state_change == GST_STATE_CHANGE_ASYNC);
+               assert_failure (data.playbin, gst_element_get_state (data.playbin, &cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
+               assert_failure (data.playbin, cur_state == GST_STATE_PLAYING);
+               printf("\nSTATE CHANGED FROM PAUSED TO PLAYING\n");
+	       seek_with_pause = false;
+	   }
+
+       }
+
+       message = gst_bus_pop_filtered (bus,(GstMessageType)GST_MESSAGE_EOS);
+       if (message != NULL)
+       {
+           if (GST_MESSAGE_EOS == GST_MESSAGE_TYPE(message))
+               received_EOS = true;
+       }
+       if (std::chrono::steady_clock::now() - start > std::chrono::seconds(operation_timeout))
+           break;
+    }
+    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n");
+    printf ("\nSEEK SUCCESSFULL : Current Position : %" G_GINT64_FORMAT " SEEK POSITION : %" G_GINT64_FORMAT "\n",data.currentPosition, data.seekPosition);
+
+    gst_object_unref(bus);
+
+    if (received_EOS == false)
+    {
+	char eos_error_string[150];
+	sprintf(eos_error_string,"Failed to recieve EOS message within %d seconds of reaching EOS",operation_timeout);
+        assert_failure (data.playbin,received_EOS == true, eos_error_string);
+    }
+
+    printf ("\nEOS Received with pipeline in %s state\n",gst_element_state_get_name(cur_state));
+
+    if (data.playbin)
+    {
+       gst_element_set_state(data.playbin, GST_STATE_NULL);
+    }
+    /*
+     * Cleanup after use
+     */
     gst_object_unref (data.playbin);
 }
 GST_END_TEST;
@@ -3685,6 +3814,19 @@ media_pipeline_suite (void)
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
+    else if (strcmp ("test_seek_EOS", tcname) == 0)
+    {
+       tcase_add_test (tc_chain, test_seek_EOS);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_seek_EOS_with_pause", tcname) == 0)
+    {
+       seek_with_pause = true;
+       tcase_add_test (tc_chain, test_seek_EOS);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
     else
     {
        printf("\nNo such testcase is present in app");
@@ -3842,6 +3984,8 @@ int main (int argc, char **argv)
 	    (strcmp ("test_appsrc_audio_underflow", tcname) == 0) ||
 	    (strcmp ("test_appsrc_video_underflow_signal", tcname) == 0) ||
 	    (strcmp ("test_appsrc_audio_underflow_signal", tcname) == 0) ||
+	    (strcmp ("test_seek_EOS", tcname) == 0) ||
+	    (strcmp ("test_seek_EOS_with_pause", tcname) == 0) ||
             (strcmp ("test_EOS", tcname) == 0) ||
 	    (strcmp ("test_audio_sampling_rate", tcname) == 0) ||
 	    (strcmp ("test_only_audio", tcname) == 0) ||
