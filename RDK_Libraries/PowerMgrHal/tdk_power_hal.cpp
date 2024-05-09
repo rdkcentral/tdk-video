@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include "plat_power.h"
+#include "therm_mon.h"
 
 /* Power Manager HAL DUMMY APIs */
 pmStatus_t PLAT_INIT()

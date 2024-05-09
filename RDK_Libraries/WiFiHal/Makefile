@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-INC_DIR = ../../RDK_Source/wifi_source/include
+INC_DIR = ${PKG_CONFIG_SYSROOT_DIR}$(includedir)
 CXXFLAGS += -I$(INC_DIR)
 CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall 
 

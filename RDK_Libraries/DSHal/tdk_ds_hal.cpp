@@ -930,18 +930,6 @@ dsError_t dsHostTerm()
         return dsERR_GENERAL;
 
 }
-dsError_t dsGetPreferredSleepMode(dsSleepMode_t *pMode)
-{
-        printf("\nDUMMY %s\n", __FUNCTION__);
-        return dsERR_GENERAL;
-
-}
-dsError_t dsSetPreferredSleepMode(dsSleepMode_t mode)
-{
-        printf("\nDUMMY %s\n", __FUNCTION__);
-        return dsERR_GENERAL;
-
-}
 dsError_t dsGetCPUTemperature(float *cpuTemperature)
 {
         printf("\nDUMMY %s\n", __FUNCTION__);

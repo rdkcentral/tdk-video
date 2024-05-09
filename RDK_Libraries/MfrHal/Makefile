@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-INC_DIR = ../../RDK_Source/iarmmgrs_source/mfr/include
+INC_DIR = ${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rdk/iarmmgrs-hal
 CXXFLAGS += -I$(INC_DIR)
 CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall
 

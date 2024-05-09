@@ -16,8 +16,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-INC_DIR = ../../RDK_Source/iarmmgrs_source/hal/include
-CXXFLAGS += -I$(INC_DIR)
+INC_DIR = ${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rdk/iarmmgrs-hal
+INC_DIR2 = ../../RDK_Source/iarmmgrs_source/hal/include
+CXXFLAGS += -I$(INC_DIR) -I$(INC_DIR2)
 CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall -DENABLE_THERMAL_PROTECTION
 
 # Library name and version
