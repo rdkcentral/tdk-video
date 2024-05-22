@@ -74,7 +74,7 @@ using namespace std;
 #define AUDIO_PTS_ERROR_FILE            "/audio_pts_error"
 #define RESOLUTION_OFFSET               5
 #define BUFF_LENGTH 			512
-#define ENV_FILE                        "/opt/TDK.env"
+#define ENV_FILE                        "/opt/TDK/TDK.env"
 #define PROGRESS_BAR_WIDTH              50
 #define CHUNK_SIZE                      4096
 #define PROGRESS_BAR_DISPLAY_INTERVAL   5 //seconds 
@@ -3937,7 +3937,7 @@ int main (int argc, char **argv)
 	{
 	    GST_ERROR ("Environment variable TDK_PATH should be set!!!!");
 	    printf ("Environment variable TDK_PATH is not set!!!!\n");
-	    printf ("Environment variables can be set in /opt/TDK.env\n");
+	    printf ("Environment variables can be set in /opt/TDK/TDK.env\n");
 	    goto exit;
 	}
     }

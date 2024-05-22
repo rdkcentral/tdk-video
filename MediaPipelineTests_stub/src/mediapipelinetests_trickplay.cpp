@@ -58,7 +58,7 @@ using namespace std;
                                         }
 #define WaitForOperation                Sleep(5)
 #define PLAYBACK_RATE_TOLERANCE         0.03
-#define ENV_FILE                        "/opt/TDK.env"
+#define ENV_FILE                        "/opt/TDK/TDK.env"
 #define DEBUG_PRINT(f_, ...)            if (enable_trace) \
                                             printf((f_), ##__VA_ARGS__)
 
@@ -1458,7 +1458,7 @@ int main (int argc, char **argv)
         {
             GST_ERROR ("Environment variable TDK_PATH should be set!!!!");
             printf ("Environment variable TDK_PATH is not set!!!!\n");
-            printf ("Environment variables can be set in /opt/TDK.env\n");
+            printf ("Environment variables can be set in /opt/TDK/TDK.env\n");
             goto exit;
         }
     }
