@@ -339,6 +339,22 @@ AC_ARG_ENABLE([defaultComponents],
            [echo "defaultComponents component is not enabled"])
 AM_CONDITIONAL([defaultComponents], [test x$defaultComponents = xtrue])
 
+
+AC_ARG_ENABLE([storagemanager],
+         AS_HELP_STRING([--enable-storagemanager],[enable storagemanager (default is no)]),
+         [
+           case "${enableval}" in
+              yes) STORAGEMGR=true
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" StorageMgr_stub"],
+                          [echo box type not specified]) ;;
+             no) STORAGEMGR=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-storagemanager ]) ;;
+             esac
+            ],
+           [echo "storagemanager component is not enabled"])
+AM_CONDITIONAL([STORAGEMGR], [test x$STORAGEMGR = xtrue])
+
+
 AC_ARG_ENABLE([wifihal],
          AS_HELP_STRING([--enable-wifihal],[enable wifihal (default is no)]),
          [
@@ -533,5 +549,6 @@ AC_CONFIG_FILES([Makefile
          PowerMgrHal_stub/Makefile
          HdmicecHal_stub/Makefile
 	 WIFIHAL_stub/Makefile
+	 StorageMgr_stub/Makefile
 	 WesterosHal_stub/Makefile])
 AC_OUTPUT
