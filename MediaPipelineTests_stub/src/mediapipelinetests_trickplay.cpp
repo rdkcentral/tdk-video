@@ -973,12 +973,16 @@ void setflags()
 	{
 	    flags |= GST_PLAY_FLAG_BUFFERING;
 	}
-#ifdef NATIVE_AUDIO
-	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
-#endif
-#ifndef NO_NATIVE_VIDEO
-    	flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
-#endif
+	if (getenv ("TDK_NATIVE_AUDIO") != NULL)
+        {
+            flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+            printf("\nEnabled NATIVE_AUDIO flag for playbin\n");
+        }
+        if (getenv ("TDK_NATIVE_VIDEO") != NULL)
+        {
+            flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+            printf("\nEnabled NATIVE_VIDEO flag for playbin\n");
+        }
 }
 
 /********************************************************************************************************************
