@@ -82,8 +82,10 @@ class HdmicecHalAgent : public RDKTestStubInterface , public AbstractServer<Hdmi
                 //Constructor
                 HdmicecHalAgent(TcpSocketServer &ptrRpcServer) : AbstractServer <HdmicecHalAgent>(ptrRpcServer)
                 {
-                    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetLogicalAddress", PARAMS_BY_NAME, JSON_STRING,  NULL), &HdmicecHalAgent::HdmicecHal_GetLogicalAddress);
-                    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetPhysicalAddress", PARAMS_BY_NAME, JSON_STRING, NULL), &HdmicecHalAgent::HdmicecHal_GetPhysicalAddress);
+                    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetLogicalAddress", PARAMS_BY_NAME, JSON_STRING, "Is_handle_invalid", JSON_INTEGER, "logical_addr", JSON_INTEGER, "handle", JSON_INTEGER, "Is_null_param_check", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_GetLogicalAddress);
+                    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_AddLogicalAddress", PARAMS_BY_NAME, JSON_STRING, "logical_addr", JSON_INTEGER, "Is_handle_invalid", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_AddLogicalAddress);
+		    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_RemoveLogicalAddress", PARAMS_BY_NAME, JSON_STRING, "handle", JSON_INTEGER, "logical_addr", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_RemoveLogicalAddress);
+		    this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_GetPhysicalAddress", PARAMS_BY_NAME, JSON_STRING, NULL), &HdmicecHalAgent::HdmicecHal_GetPhysicalAddress);
                     this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_Tx", PARAMS_BY_NAME, JSON_STRING, "header", JSON_STRING, "opcode", JSON_STRING, "receive_frames", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_Tx);
                     this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_TxAsync", PARAMS_BY_NAME, JSON_STRING, "header", JSON_STRING, "opcode", JSON_STRING, "receive_frames", JSON_INTEGER, NULL), &HdmicecHalAgent::HdmicecHal_TxAsync);
                     this->bindAndAddMethod(Procedure("TestMgr_HdmicecHal_SetTxCallback", PARAMS_BY_NAME, JSON_STRING, NULL), &HdmicecHalAgent::HdmicecHal_SetTxCallback);
@@ -103,6 +105,8 @@ class HdmicecHalAgent : public RDKTestStubInterface , public AbstractServer<Hdmi
                 void HdmicecHal_TxAsync(IN const Json::Value& req, OUT Json::Value& response);
                 void HdmicecHal_SetTxCallback(IN const Json::Value& req, OUT Json::Value& response);
                 void HdmicecHal_SetRxCallback(IN const Json::Value& req, OUT Json::Value& response);
+		void HdmicecHal_AddLogicalAddress(IN const Json::Value& req, OUT Json::Value& response);
+		void HdmicecHal_RemoveLogicalAddress(IN const Json::Value& req, OUT Json::Value& response);
 
 };
 #endif //__HDMICECHAL_STUB_H__
