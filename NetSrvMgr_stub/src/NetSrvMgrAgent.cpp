@@ -228,6 +228,12 @@ bool getParameterDetails (Json::Value& response,
             response["details"] = "IARM_BUS_WIFI_MGR_API_connect successful";
 	    retVal = TEST_SUCCESS;
     }	   
+    else if ((IARM_BUS_WIFI_MGR_API_cancelWPSPairing == methodName) && (((IARM_Bus_WiFiSrvMgr_Param_t*)param)->status)){
+
+            response["result"] = "SUCCESS";
+            response["details"] = "IARM_BUS_WIFI_MGR_API_cancelWPSPairing successful";
+            retVal = TEST_SUCCESS;
+    }
     else if ((IARM_BUS_WIFI_MGR_API_initiateWPSPairing == methodName) && (((IARM_Bus_WiFiSrvMgr_Param_t*)param)->status)) {
 
         response["result"] = "SUCCESS";
