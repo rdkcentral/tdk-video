@@ -28,12 +28,12 @@
         <parser_section>
             <log_file_path>&APP_LOG_PATH;&APP_LOG_FILE;</log_file_path>
             <parser_info>
-                <tag>standard memcpy</tag>
-                <cmd>awk '/standard memcpy/{print}' &APP_LOG_PATH;&APP_LOG_FILE; | tr -s ' ' | cut -d ':' -f 2 | sed 's/^ //'</cmd>
+                <tag>Standard memcpy in MB/s</tag>
+                <cmd>awk '/standard memcpy/ {print $4}' &APP_LOG_PATH;&APP_LOG_FILE;</cmd>
             </parser_info>
             <parser_info>
-                <tag>standard memset</tag>
-                <cmd>awk '/standard memset/{print}' &APP_LOG_PATH;&APP_LOG_FILE; | tr -s ' ' | cut -d ':' -f 2 | sed 's/^ //'</cmd>
+                <tag>Standard memset in MB/s</tag>
+                <cmd>awk '/standard memset/ {print $4}' &APP_LOG_PATH;&APP_LOG_FILE;</cmd>
             </parser_info>
         </parser_section>
     </tdkTestUtility>
@@ -550,13 +550,9 @@
         <parser_section>
             <log_file_path>&STRESSNG_REPORT;</log_file_path>
             <parser_info>
-		<tag>CPU Thermal Stress</tag>
-                <cmd>cat &STRESSNG_REPORT; | grep  -A1 "matrix:" | tail -1  | tr -s " " | awk '{print $2,$3,$4,$5,$6}'</cmd>
+                <tag>CPU Thermal Stress in Celsius (C)</tag>
+                <cmd>cat &STRESSNG_REPORT; | grep  -A1 "matrix:" | tail -1  | tr -s " " | awk '{print $2}'</cmd>
             </parser_info>
-	    <parser_info>
-		<tag>SOC Thermal Stress</tag>
-		<cmd>cat &STRESSNG_REPORT; | grep  -A2 "matrix:" | tail -1  | tr -s " " | awk '{print $2,$3,$4,$5,$6}'</cmd>
-	    </parser_info>
         </parser_section>
     </tdkTestUtility>
 
@@ -672,6 +668,5 @@
                 <cmd>cat &STRESSNG_REPORT;| tr -s " " | awk '/info: \[.+\] zombie/' | awk  '{print $9}'</cmd>
             </parser_info>
         </parser_section>
-    </tdkTestUtility>    
-
+    </tdkTestUtility>
 </parserConfig>
