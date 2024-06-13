@@ -2685,22 +2685,13 @@ void DSHalAgent::DSHal_GetEDIDBytes(IN const Json::Value& req, OUT Json::Value& 
 
     std::vector<unsigned char> edid;
     int length = 0;
-    struct MemGuard {
-        MemGuard() : edidBytes(NULL) {}
-        ~MemGuard() {
-            if (edidBytes) {
-                free(edidBytes);
-                edidBytes = NULL;
-            }
-        }
-        unsigned char *edidBytes;
-    } memguard;
-    ret = dsGetEDIDBytes(dispHandle, memguard.edidBytes, &length);
+    unsigned char edid_bytes_data[512] = {0};
+    ret = dsGetEDIDBytes(dispHandle, edid_bytes_data, &length);
     if (ret == dsERR_NONE)
     {
-        if(EDID_Verify(memguard.edidBytes, length)==true)
+        if(EDID_Verify(edid_bytes_data, length)==true)
         {
-               edid.insert(edid.begin(), memguard.edidBytes, memguard.edidBytes + length);
+               edid.insert(edid.begin(), edid_bytes_data, edid_bytes_data + length);
                DEBUG_PRINT(DEBUG_TRACE, "\t Display [%s] has %d bytes EDID\r\n", "HDMI",  edid.size());
                 /* Dump the bytes */
                 for (int i = 0; i < edid.size(); i++) {
