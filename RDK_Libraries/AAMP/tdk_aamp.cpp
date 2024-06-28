@@ -24,10 +24,9 @@
 #include "AampCCManager.h"
 
 PlayerInstanceAAMP::PlayerInstanceAAMP(StreamSink* streamSink
-	, std::function< void(uint8_t *, int, int, int) > exportFrames
-	) : aamp(NULL), sp_aamp(nullptr), mJSBinding_DL(),mAsyncRunning(false),mConfig(),mAsyncTuneEnabled(false),mScheduler()
+        , std::function< void(const unsigned char *, int, int, int) > exportFrames
+        ) : aamp(NULL), sp_aamp(nullptr), mJSBinding_DL(),mAsyncRunning(false),mConfig(),mAsyncTuneEnabled(false),mScheduler(), mLogObj()
 {
-
         printf("\nDUMMY Constructor\n");
 }
 
@@ -46,33 +45,23 @@ void PlayerInstanceAAMP::Stop(bool sendStateChangeEvent)
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-void PlayerInstanceAAMP::Tune(const char *mainManifestUrl, const char *contentType, bool bFirstAttempt, bool bFinalAttempt,const char *traceUUID,bool audioDecoderStreamSync)
+
+void PlayerInstanceAAMP::Tune(const char *mainManifestUrl, const char *contentType, bool bFirstAttempt,
+                                bool bFinalAttempt,const char *traceUUID,bool audioDecoderStreamSync)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
 void PlayerInstanceAAMP::Tune(const char *mainManifestUrl,
-								bool autoPlay,
-								const char *contentType,
-								bool bFirstAttempt,
-								bool bFinalAttempt,
-								const char *traceUUID,
-								bool audioDecoderStreamSync,
-								const char *refreshManifestUrl,
-								int mpdStichingMode)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::TuneInternal(const char *mainManifestUrl,
-										bool autoPlay,
-										const char *contentType,
-										bool bFirstAttempt,
-										bool bFinalAttempt,
-										const char *traceUUID,
-										bool audioDecoderStreamSync,
-										const char *refreshManifestUrl,
-										int mpdStichingMode)
+                                bool autoPlay,
+                                const char *contentType,
+                                bool bFirstAttempt,
+                                bool bFinalAttempt,
+                                const char *traceUUID,
+                                bool audioDecoderStreamSync,
+                                const char *refreshManifestUrl,
+                                int mpdStichingMod,
+                                std::string sid)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }

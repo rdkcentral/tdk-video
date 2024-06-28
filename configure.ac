@@ -80,6 +80,7 @@ SM_STUB_CFLAG_HYBRID=" "
 BLUETOOTH_LIBS=" "
 MFRHAL_LIBS=" "
 HAVE_EGL=" "
+TDKGRAPHICS=" "
 
 AC_ARG_ENABLE([hybrid],
         AS_HELP_STRING([--enable-hybrid],[enable hybrid build]),
@@ -354,6 +355,18 @@ AC_ARG_ENABLE([fireboltcompliance],
 AM_CONDITIONAL([HAVE_EGL], [test x$HAVE_EGL = xtrue])
 AM_CONDITIONAL([FIREBOLTCOMPLIANCE], [test x$FIREBOLTCOMPLIANCE = xtrue])
 
+AC_ARG_ENABLE([tdkgraphics],
+         AS_HELP_STRING([--enable-tdkgraphics],[enable tdkgraphics (default is no)]),
+         [
+           case "${enableval}" in
+              yes) TDKGRAPHICS=true ;;
+             no) TDKGRAPHICS=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-tdkgraphics ]) ;;
+             esac
+            ],
+           [echo "TDK Graphics is not enabled"])
+AM_CONDITIONAL([TDKGRAPHICS], [test x$TDKGRAPHICS = xtrue])
+
 AC_ARG_ENABLE([wifihal],
          AS_HELP_STRING([--enable-wifihal],[enable wifihal (default is no)]),
          [
@@ -518,6 +531,7 @@ AC_SUBST(SM_STUB_CFLAG_HYBRID)
 AC_SUBST(BLUETOOTH_LIBS)
 AC_SUBST(MFRHAL_LIBS)
 AC_SUBST(HAVE_EGL)
+AC_SUBST(TDKGRAPHICS)
 AC_CONFIG_FILES([Makefile
          cfg/Makefile
          agent/Makefile
