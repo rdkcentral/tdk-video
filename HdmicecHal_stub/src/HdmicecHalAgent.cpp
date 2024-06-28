@@ -487,36 +487,34 @@ void HdmicecHalAgent::HdmicecHal_AddLogicalAddress(IN const Json::Value& req, OU
 	}
 								
 	int ret = HdmiCecAddLogicalAddress(driverHandle, logicalAddress);
-	if (0 == ret)
-	{
-		DEBUG_PRINT(DEBUG_TRACE, "HdmiCecAddLogicalAddress call success\n");
-		DEBUG_PRINT(DEBUG_TRACE, "LogicalAddress : 0x%X (dec: %u)\n",logicalAddress,logicalAddress);
-		sprintf(details,"Logical address added successfully in SOC ");
-		response["result"]="SUCCESS";
-		response["details"]=details;
-		DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_AddLogicalAddress ---> Exit\n");	
+	if (0 == ret){
+	DEBUG_PRINT(DEBUG_TRACE, "HdmiCecAddLogicalAddress call success\n");
+	DEBUG_PRINT(DEBUG_TRACE, "LogicalAddress : 0x%X (dec: %u)\n",logicalAddress,logicalAddress);
+	sprintf(details,"Logical address added successfully in SOC ");
+	response["result"]="SUCCESS";
+	response["details"]=details;
+	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_AddLogicalAddress ---> Exit\n");	
 	}
-	else if(5 == ret)
+	else if(ret == 5)
 	{
-		response["result"]="FAILURE";
-        	response["details"]="HdmiCecGetLogicalAddress call failed due to invalid argument";
-        	DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetLogicalAddress call failed\n");
-        	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetLogicalAddress ---> Exit\n");
+	response["result"]="FAILURE";
+        response["details"]="HdmiCecAddLogicalAddress call failed due to invalid argument";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecAddLogicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_AddLogicalAddress ---> Exit\n");
 	}
-	else if(11 == ret)
+	else if(ret == 11)
 	{
-		response["result"]="FAILURE";
-	        response["details"]="HdmiCecGetLogicalAddress call failed due to invalid handle";
-        	DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetLogicalAddress call failed\n");
-		DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetLogicalAddress ---> Exit\n");
+	response["result"]="FAILURE";
+        response["details"]="HdmiCecAddLogicalAddress call failed due to invalid handle";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecAddLogicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_AddLogicalAddress ---> Exit\n");
 	}
-	else
-	{
-		response["result"]="FAILURE";
-		response["details"]="HdmiCecAddLogicalAddress call failed";
-		DEBUG_PRINT(DEBUG_TRACE, "HdmiCecAddLogicalAddress call failed\n");
-		DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_AddLogicalAddress ---> Exit\n");
-	}		
+	else{
+	response["result"]="FAILURE";
+	response["details"]="HdmiCecAddLogicalAddress call failed";
+	DEBUG_PRINT(DEBUG_TRACE, "HdmiCecAddLogicalAddress call failed\n");
+	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_AddLogicalAddress ---> Exit\n");
+																}
 	return;
 }
 
@@ -539,35 +537,33 @@ void HdmicecHalAgent::HdmicecHal_RemoveLogicalAddress(IN const Json::Value& req,
 	}
 				
 	int ret = HdmiCecRemoveLogicalAddress(driverHandle, logicalAddress);
-	if (0 == ret)
-	{
-		DEBUG_PRINT(DEBUG_TRACE, "HdmiCecRemoveLogicalAddress call success\n");
-		DEBUG_PRINT(DEBUG_TRACE, "LogicalAddress : 0x%X (dec: %u)\n",logicalAddress,logicalAddress);
-		sprintf(details,"Last acquired logical address hex:0x%X, dec: %u removed successfully ", logicalAddress, logicalAddress);
-		response["result"]="SUCCESS";
-		response["details"]=details;
-		DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_RemoveLogicalAddress ---> Exit\n");
+	if (0 == ret){
+	DEBUG_PRINT(DEBUG_TRACE, "HdmiCecRemoveLogicalAddress call success\n");
+	DEBUG_PRINT(DEBUG_TRACE, "LogicalAddress : 0x%X (dec: %u)\n",logicalAddress,logicalAddress);
+	sprintf(details,"Last acquired logical address hex:0x%X, dec: %u removed successfully ", logicalAddress, logicalAddress);
+	response["result"]="SUCCESS";
+	response["details"]=details;
+	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_RemoveLogicalAddress ---> Exit\n");
 	}
-	else if(5 == ret)
+	else if(ret == 5)
 	{
-		response["result"]="FAILURE";
-        	response["details"]="HdmiCecGetLogicalAddress call failed due to invalid argument";
-	        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetLogicalAddress call failed\n");
-        	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetLogicalAddress ---> Exit\n");
+	response["result"]="FAILURE";
+        response["details"]="HdmiCecRemoveLogicalAddress call failed due to invalid argument";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecRemoveLogicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_RemoveLogicalAddress ---> Exit\n");
 	}
-	else if(11 == ret)
+	else if(ret == 11)
 	{
-		response["result"]="FAILURE";
-        	response["details"]="HdmiCecGetLogicalAddress call failed due to invalid handle";
-	        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetLogicalAddress call failed\n");
-        	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetLogicalAddress ---> Exit\n");
+	response["result"]="FAILURE";
+        response["details"]="HdmiCecRemoveLogicalAddress call failed due to invalid handle";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecRemoveLogicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_RemoveLogicalAddress ---> Exit\n");
 	}
-	else
-	{
-		response["result"]="FAILURE";
-		response["details"]="HdmiCecRemoveLogicalAddress call failed";
-		DEBUG_PRINT(DEBUG_TRACE, "HdmiCecRemoveLogicalAddress call failed\n");
-		DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_RemoveLogicalAddress ---> Exit\n");
+	else{
+	response["result"]="FAILURE";
+	response["details"]="HdmiCecRemoveLogicalAddress call failed";
+	DEBUG_PRINT(DEBUG_TRACE, "HdmiCecRemoveLogicalAddress call failed\n");
+	DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_RemoveLogicalAddress ---> Exit\n");
 	}
 	return;
 }
@@ -588,23 +584,28 @@ void HdmicecHalAgent::HdmicecHal_GetLogicalAddress(IN const Json::Value& req, OU
 
     char details[100];
 
-    int logicalAddress = 0;
+    int logicalAddress = 0, ret =0, drv_handle = 0;
+	
     int devType = (int) req["dev_type"].asInt();
-
     int Is_handle_invalid = (int) req["Is_handle_invalid"].asInt();
-    if(Is_handle_invalid)
-	driverHandle = (int) req["handle"].asInt();
-
     int Is_null_param_check = (int) req["Is_null_param_check"].asInt();
 	
-    int ret = 0;
-    if(Is_null_param_check)
+    if(Is_handle_invalid)
     {
-	ret = HdmiCecGetLogicalAddress(driverHandle,NULL);
+	drv_handle = (int) req["handle"].asInt();
     }
     else
     {
-	ret = HdmiCecGetLogicalAddress(driverHandle,&logicalAddress);
+	drv_handle = driverHandle;
+    }
+
+    if(Is_null_param_check)
+    {
+	ret = HdmiCecGetLogicalAddress(drv_handle,NULL);
+    }
+    else
+    {
+	ret = HdmiCecGetLogicalAddress(drv_handle,&logicalAddress);
     }
 
     if (ret == 0)
