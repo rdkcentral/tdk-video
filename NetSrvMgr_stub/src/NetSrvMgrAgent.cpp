@@ -1169,3 +1169,549 @@ extern "C" void DestroyObject (NetSrvMgrAgent *stubobj) {
     delete stubobj;
 }
 
+/**************************************************************************
+ *  Function name : NetSrvMgr_setParameters
+ *
+ *  Arguments     : methodName - API nameto invoke
+ *                  iarmParam  - Input param to IARM_Call
+ *                  paramSize  - size of iarmParam
+ *
+ *  Description   : This would collect all necessary data to invoke IRAM_Call
+ *
+ ****************************************************************************/
+static bool NetSrvMgr_setParameters (const Json::Value& req, char* method_name, void** iarmParam, int* paramSize)
+{
+    string methodName = method_name;
+    IARM_Result_t Result = IARM_RESULT_SUCCESS;
+
+    if(IARM_BUS_NETSRVMGR_API_getNetworkInterfaces == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_getDefaultInterface == methodName)
+    {
+       IARM_BUS_NetSrvMgr_DefaultRoute_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_DefaultRoute_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_DefaultRoute_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_DefaultRoute_t);
+    }
+    
+    if(IARM_BUS_NETSRVMGR_API_getActiveInterface == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
+    }
+    
+    if(IARM_BUS_NETSRVMGR_API_getSTBip == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_isConnectedToInternet == methodName)
+    {
+       IARM_BUS_NetSrvMgr_isConnectedInternet_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_isConnectedInternet_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_isConnectedInternet_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_isConnectedInternet_t);
+    }
+
+
+    if(IARM_BUS_NETSRVMGR_API_getInternetConnectionState == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_isInterfaceEnabled == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+       strcpy (param->setInterface, (&req["interface"])?req["interface"].asCString():"");
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_getPublicIP == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_StunRequest_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_StunRequest_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_StunRequest_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_StunRequest_t);
+    }
+
+    if(IARM_BUS_WIFI_MGR_API_getAvailableSSIDsAsync == methodName)
+    {
+       IARM_Bus_WiFiSrvMgr_SsidList_Param_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t);
+    }
+
+    if(IARM_BUS_WIFI_MGR_API_getAvailableSSIDsAsyncIncr == methodName)
+    {
+       IARM_Bus_WiFiSrvMgr_SsidList_Param_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t);
+    }
+
+    if(IARM_BUS_WIFI_MGR_API_stopProgressiveWifiScanning == methodName)
+    {
+       IARM_Bus_WiFiSrvMgr_Param_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_Bus_WiFiSrvMgr_Param_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_Bus_WiFiSrvMgr_Param_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_Bus_WiFiSrvMgr_Param_t);
+    }
+
+    if(IARM_BUS_WIFI_MGR_API_disconnectSSID == methodName)
+    {
+       IARM_Bus_WiFiSrvMgr_Param_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_Bus_WiFiSrvMgr_Param_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_Bus_WiFiSrvMgr_Param_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_Bus_WiFiSrvMgr_Param_t);
+    }
+
+    if(IARM_BUS_WIFI_MGR_API_isAutoSwitchToPrivateEnabled == methodName)
+    {
+       bool *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(bool), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(bool));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(bool);
+    }
+
+#ifdef WIFI_CLIENT_ROAMING
+    if(IARM_BUS_WIFI_MGR_API_getRoamingCtrls == methodName)
+    {
+       WiFi_RoamingCtrl_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(WiFi_RoamingCtrl_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(WiFi_RoamingCtrl_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(WiFi_RoamingCtrl_t);
+    }
+#endif
+    
+    if(IARM_BUS_NETSRVMGR_API_setInterfaceEnabled == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+
+       strcpy (param->setInterface, (&req["interface"])?req["interface"].asCString():"WIFI");
+       param->isInterfaceEnabled = true;
+       param->persist = true;
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
+    }
+
+
+    if(IARM_BUS_NETSRVMGR_API_setDefaultInterface == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+
+       strcpy (param->setInterface, (&req["interface"])?req["interface"].asCString():"WIFI");
+       param->persist = true;
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
+    }
+
+    return TEST_SUCCESS;
+}
+
+/**************************************************************************
+ *  Function name : NetSrvMgr_getParameter
+ *
+ *  Arguments     : methodName - API nameto invoke
+ *                  interfaces - ETHERNET/WIFI
+ *
+ *  Description   : This would provide data which API was invoked.
+ *
+ ****************************************************************************/
+
+static bool NetSrvMgr_getParameter (Json::Value& response, string methodName, void* arg)
+{
+    bool retVal = TEST_FAILURE;
+    char outputDetails[WIFI_MAX_DATA_LEN] = {'\0'};
+
+    DEBUG_PRINT (DEBUG_LOG, "[%s] Entered\n", methodName.c_str());
+
+    if ((IARM_BUS_NETSRVMGR_API_getNetworkInterfaces == methodName)) {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = (IARM_BUS_NetSrvMgr_Iface_EventData_t *)arg;
+       sprintf(outputDetails, "%s", param->allNetworkInterfaces);
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getActiveInterface == methodName)) {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = (IARM_BUS_NetSrvMgr_Iface_EventData_t *)arg;
+       sprintf(outputDetails, "%s", param->activeIface);
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getDefaultInterface == methodName)) {
+       IARM_BUS_NetSrvMgr_DefaultRoute_t *param = (IARM_BUS_NetSrvMgr_DefaultRoute_t *)arg;
+       sprintf(outputDetails, "%s", param->interface);
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getSTBip == methodName)) {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = (IARM_BUS_NetSrvMgr_Iface_EventData_t *)arg;
+       sprintf(outputDetails, "%s", param->activeIfaceIpaddr);
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getInternetConnectionState == methodName)) {
+       IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t *param = (IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t *)arg;
+       sprintf(outputDetails, "%d", param->connectivityState);
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_isConnectedToInternet == methodName)) {
+       IARM_BUS_NetSrvMgr_isConnectedInternet_t *param = (IARM_BUS_NetSrvMgr_isConnectedInternet_t *)arg;
+       sprintf(outputDetails, "%s", (param->isconnected)?"true":"false");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getPublicIP == methodName)) {
+       IARM_BUS_NetSrvMgr_Iface_StunRequest_t *param = (IARM_BUS_NetSrvMgr_Iface_StunRequest_t *)arg;
+       sprintf(outputDetails, "%s", param->public_ip);
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_isInterfaceEnabled == methodName)) {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = (IARM_BUS_NetSrvMgr_Iface_EventData_t *)arg;
+       sprintf(outputDetails, "%s", (param->isInterfaceEnabled)?"true":"false");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_WIFI_MGR_API_getAvailableSSIDsAsync == methodName)) {
+       IARM_Bus_WiFiSrvMgr_SsidList_Param_t *param = (IARM_Bus_WiFiSrvMgr_SsidList_Param_t *)arg;
+       sprintf(outputDetails, "%s", "getAvailableSSIDsAsync succeed");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_WIFI_MGR_API_getAvailableSSIDsAsyncIncr == methodName)) {
+       IARM_Bus_WiFiSrvMgr_SsidList_Param_t *param = (IARM_Bus_WiFiSrvMgr_SsidList_Param_t *)arg;
+       sprintf(outputDetails, "%s", "getAvailableSSIDsAsyncIncr succeed");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_WIFI_MGR_API_stopProgressiveWifiScanning == methodName)) {
+       IARM_Bus_WiFiSrvMgr_Param_t *param = (IARM_Bus_WiFiSrvMgr_Param_t *)arg;
+       sprintf(outputDetails, "%s", "stopProgressiveWifiScanning succeed");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_WIFI_MGR_API_disconnectSSID == methodName)) {
+       IARM_Bus_WiFiSrvMgr_Param_t *param = (IARM_Bus_WiFiSrvMgr_Param_t *)arg;
+       sprintf(outputDetails, "%s", (param->status)?"true":"false");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_WIFI_MGR_API_isAutoSwitchToPrivateEnabled == methodName)) {
+       sprintf(outputDetails, "%s", "true");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+#ifdef WIFI_CLIENT_ROAMING
+    if ((IARM_BUS_WIFI_MGR_API_getRoamingCtrls == methodName)) {
+       WiFi_RoamingCtrl_t *param = (WiFi_RoamingCtrl_t *)arg;
+       sprintf(outputDetails, "%s", (param->status == 0)?"Supporting":"Not supporting");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+#endif
+    
+    if ((IARM_BUS_NETSRVMGR_API_setInterfaceEnabled == methodName)) {
+       sprintf(outputDetails, "%s", "setInterfaceEnabled has succeed");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_setDefaultInterface == methodName)) {
+       sprintf(outputDetails, "%s", "Default interface set successfully");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    DEBUG_PRINT (DEBUG_LOG, "[%s] Exit\n", methodName.c_str());
+
+    return retVal;
+}
+
+/**************************************************************************
+ *   Function name : NetSrvMgrAgent::NetSrvMgrAgent_NetSrvMgr_FunctionCall
+ *
+ *   Arguments     : methodName - API name for IARMBus_Call function.
+ *                   interfaces - ETHERNET/WIFI
+ *
+ *   Description   : This would invoke provided methodName and IARM_Call()
+ *
+ *****************************************************************************/
+
+void NetSrvMgrAgent::NetSrvMgrAgent_NetSrvMgr_FunctionCall (IN const Json::Value& req, OUT Json::Value& response)
+{
+    bool retVal = TEST_FAILURE;
+    char* methodName;
+    void* paramArg = NULL;
+    int paramSize = 0;
+    char resultDetails[WIFI_MGR_PARAM_LIST_BUFFER_SIZE] = {'\0'};
+    IARM_Result_t Result = IARM_RESULT_SUCCESS;
+
+    if(NULL == &req["method_name"])
+    {
+        DEBUG_PRINT (DEBUG_ERROR, "Method name cannot be NULL\n");
+        response["result"] = "FAILURE";
+        response["details"] = "Invalid API Name";
+	return;
+    }
+
+    methodName = (char*)req["method_name"].asCString();
+
+    DEBUG_PRINT (DEBUG_LOG, "[%s] Entered\n", methodName);
+
+    retVal = NetSrvMgr_setParameters(req, methodName, &paramArg, &paramSize);
+
+    if(TEST_SUCCESS != retVal)
+    {
+          DEBUG_PRINT (DEBUG_ERROR, "Error allocating memory for [%s]\n", methodName);
+	  response["result"] = "FAILURE";
+	  response["details"] = "Memory allocation error";
+	  return;
+    }
+
+    DEBUG_PRINT (DEBUG_LOG, "MethodName - [%s]\n", methodName);
+    DEBUG_PRINT (DEBUG_LOG, "Size       - [%d]\n", paramSize);
+
+    if( 0 == strcmp(methodName, "getAvailableSSIDsAsync") || ( 0 == strcmp(methodName, "getAvailableSSIDsAsyncIncr")))
+    {
+	int timeout = 5000;
+	Result = IARM_Bus_Call_with_IPCTimeout(IARM_BUS_NM_SRV_MGR_NAME, methodName, paramArg, paramSize, timeout);
+    }
+    else
+    {
+	Result = IARM_Bus_Call(IARM_BUS_NM_SRV_MGR_NAME, methodName, paramArg, paramSize);
+    }
+
+    if(IARM_RESULT_SUCCESS != Result)
+    {
+        DEBUG_PRINT (DEBUG_ERROR, "IARM_Bus_Call to [%s] for NetSrvMgr manager failed\n", methodName);
+        sprintf (resultDetails, "IARM_Bus_Call to [%s] for NetSrvMgr manager failed", methodName);
+        response["result"] = "FAILURE";
+	response["details"] = resultDetails;
+	return;
+    }
+
+    retVal = NetSrvMgr_getParameter(response, methodName, paramArg);
+
+    if(TEST_SUCCESS != retVal)
+    {
+	DEBUG_PRINT (DEBUG_ERROR, "Unsupported API - [%s]\n", methodName);
+        sprintf (resultDetails, "Unsupported API - [%s]", methodName);
+	response["result"] = "FAILURE";
+	response["details"] = resultDetails;
+    }
+
+    IARM_Free(IARM_MEMTYPE_PROCESSLOCAL, paramArg);
+
+    DEBUG_PRINT (DEBUG_LOG, "[%s] Exit\n", methodName);
+
+    return;
+}
