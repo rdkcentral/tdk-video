@@ -48,6 +48,8 @@ class DeepSleepHalAgent : public RDKTestStubInterface , public AbstractServer<De
                 DeepSleepHalAgent(TcpSocketServer &ptrRpcServer) : AbstractServer <DeepSleepHalAgent>(ptrRpcServer)
                 {
                     this->bindAndAddMethod(Procedure("TestMgr_DeepSleepHal_SetDeepSleep", PARAMS_BY_NAME, JSON_STRING, "timeout", JSON_INTEGER, "networkStandby", JSON_BOOLEAN, NULL), &DeepSleepHalAgent::DeepSleepHal_SetDeepSleep);
+		    this->bindAndAddMethod(Procedure("TestMgr_DeepSleepHal_GetLastWakeupReason", PARAMS_BY_NAME, JSON_STRING, "Is_null_param_check", JSON_INTEGER, NULL), &DeepSleepHalAgent::DeepSleepHal_GetLastWakeupReason);
+		    this->bindAndAddMethod(Procedure("TestMgr_DeepSleepHal_GetLastWakeupKeyCode", PARAMS_BY_NAME, JSON_STRING, "Is_null_param_check", JSON_INTEGER, NULL), &DeepSleepHalAgent::DeepSleepHal_GetLastWakeupKeyCode);
                 }
 
 
@@ -59,6 +61,8 @@ class DeepSleepHalAgent : public RDKTestStubInterface , public AbstractServer<De
 
                 //Stub functions
                 void DeepSleepHal_SetDeepSleep(IN const Json::Value& req, OUT Json::Value& response);
+		void DeepSleepHal_GetLastWakeupReason(IN const Json::Value& req, OUT Json::Value& response);
+		void DeepSleepHal_GetLastWakeupKeyCode(IN const Json::Value& req, OUT Json::Value& response);
 
 };
 #endif //__DEEPSLEEPHAL_STUB_H__

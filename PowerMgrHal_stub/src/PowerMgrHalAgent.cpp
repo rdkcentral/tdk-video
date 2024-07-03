@@ -207,6 +207,143 @@ void PowerMgrHalAgent::PowerMgrHal_SetPowerState(IN const Json::Value& req, OUT 
 }
 
 /***************************************************************************
+ *Function name  : PowerMgrHal_SetWakeupSrc
+ *Description    : This function is to invoke PLAT_API_SetWakeupSrc
+ *****************************************************************************/
+void PowerMgrHalAgent::PowerMgrHal_SetWakeupSrc(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_SetWakeupSrc --->Entry\n");
+	
+	if(&req["wakeupsrc"] == NULL )
+    {
+        response["result"]="FAILURE";
+        response["details"]="No wakeupsrc input value";
+        return;
+    }
+	
+	char wkup_src[20];
+    strcpy(wkup_src,req["wakeupsrc"].asCString());
+	
+	int Is_wkup_src_enable = (int) req["Is_wkup_src_enable"].asInt();
+	
+	PWRMGR_WakeupSrcType_t wkupsrc_type;
+	
+	if (!strcmp(wkup_src,"VOICE"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_VOICE;
+    else if (!strcmp(wkup_src,"MOTION DETECT"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_PRESENCE_DETECTION;
+    else if (!strcmp(wkup_src,"BLE"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_BLUETOOTH;
+    else if (!strcmp(wkup_src,"WIFI"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_WIFI;
+    else if (!strcmp(wkup_src,"IR"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_IR;
+    else if (!strcmp(wkup_src,"POWER KEY"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_POWER_KEY;
+    else if (!strcmp(wkup_src,"TIMER"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_TIMER;
+    else if (!strcmp(wkup_src,"CEC"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_CEC;
+    else if (!strcmp(wkup_src,"LAN"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_LAN;
+    else{
+        response["result"] = "FAILURE";
+        response["details"] = "Invalid wakeup source type";
+        return;
+    }
+    DEBUG_PRINT(DEBUG_TRACE, "Wakeup source to be set:%s\n",wkup_src);
+
+    pmStatus_t ret = PLAT_API_SetWakeupSrc(wkupsrc_type, Is_wkup_src_enable);
+    if (ret == PWRMGR_SUCCESS){
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_SetWakeupSrc call success\n");
+        response["result"]="SUCCESS";
+        response["details"]="PLAT_API_SetWakeupSrc call success";
+        DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_SetWakeupSrc --> Exit\n");
+    }
+    else{
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_SetWakeupSrc call failed %s\n",pmStatusToString(ret));
+        response["result"]="FAILURE";
+        response["details"]="PLAT_API_SetWakeupSrc call failed" + pmStatusToString(ret);
+        DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_SetWakeupSrc --> Exit\n");
+    }	
+	
+	return;
+}
+
+/***************************************************************************
+ *Function name  : PowerMgrHal_GetWakeupSrc
+ *Description    : This function is to invoke PLAT_API_GetWakeupSrc
+ *****************************************************************************/
+void PowerMgrHalAgent::PowerMgrHal_GetWakeupSrc(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_GetWakeupSrc --->Entry\n");
+    char details[50], wkup_src[20];
+	pmStatus_t ret;
+	bool enable = false;
+	
+	if(&req["wakeupsrc"] == NULL )
+    {
+        response["result"]="FAILURE";
+        response["details"]="No wakeupsrc input value";
+        return;
+    }
+	
+    strcpy(wkup_src,req["wakeupsrc"].asCString());
+
+    PWRMGR_WakeupSrcType_t  wkupsrc_type;
+
+	if (!strcmp(wkup_src,"VOICE"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_VOICE;
+    else if (!strcmp(wkup_src,"MOTION DETECT"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_PRESENCE_DETECTION;
+    else if (!strcmp(wkup_src,"BLE"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_BLUETOOTH;
+    else if (!strcmp(wkup_src,"WIFI"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_WIFI;
+    else if (!strcmp(wkup_src,"IR"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_IR;
+    else if (!strcmp(wkup_src,"POWER KEY"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_POWER_KEY;
+    else if (!strcmp(wkup_src,"TIMER"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_TIMER;
+    else if (!strcmp(wkup_src,"CEC"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_CEC;
+    else if (!strcmp(wkup_src,"LAN"))
+        wkupsrc_type = PWRMGR_WAKEUPSRC_LAN;
+    else{
+        response["result"] = "FAILURE";
+        response["details"] = "Invalid wakeup source type";
+        return;
+    }
+	
+	int Is_null_param_check = (int) req["Is_null_param_check"].asInt();
+	
+	if(Is_null_param_check)
+		ret = PLAT_API_GetWakeupSrc(wkupsrc_type, NULL);
+	else
+		ret = PLAT_API_GetWakeupSrc(wkupsrc_type, &enable);
+	
+    if (ret == PWRMGR_SUCCESS)
+	{
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetWakeupSrc call success\n");
+        DEBUG_PRINT(DEBUG_TRACE, "Wakeup Source type :%s Enabled state :%d\n",wkup_src, enable);
+		sprintf(details, "Wakeup source type :%s Enabled state :%d",wkup_src, enable);
+
+        response["result"]="SUCCESS";
+        response["details"]=details;
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetWakeupSrc --> Exit\n");
+    }
+    else
+	{
+        response["result"]="FAILURE";
+        response["details"]="PLAT_API_GetWakeupSrc call failed" + pmStatusToString(ret);
+        DEBUG_PRINT(DEBUG_TRACE, "PLAT_API_GetWakeupSrc call failed %s\n",pmStatusToString(ret));
+        DEBUG_PRINT(DEBUG_TRACE, "PowerMgrHal_GetWakeupSrc --> Exit\n");
+    }
+    return;
+}
+
+/***************************************************************************
  *Function name  : PowerMgrHal_GetTemperature
  *Description    : This function is to invoke PLAT_API_GetTemperature
  *****************************************************************************/
