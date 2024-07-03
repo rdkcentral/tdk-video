@@ -18,6 +18,10 @@
 ##########################################################################
 INC_DIR = ../../RDK_Source/devicesettings_source/ds/include/
 CXXFLAGS += -I$(INC_DIR)
+INC_DIR1 = ${PKG_CONFIG_SYSROOT_DIR}${includedir}/rdk/ds-hal
+CXXFLAGS += -I$(INC_DIR1)
+INC_DIR2 = ../../RDK_Source/devicesettings_source/ds/
+CXXFLAGS += -I$(INC_DIR2)
 CXXFLAGS += -std=c++1y  -g -fPIC -D_REENTRANT -Wall 
 
 # Library name and version
@@ -25,7 +29,7 @@ LIBNAME = ds
 LIBVERSION ?=  $(DS_LIB_VERSION)
 
 # Source files
-SRCS = tdk_ds.cpp
+SRCS = tdk_ds_manager.cpp tdk_ds_videoport.cpp tdk_ds_host.cpp
 
 # Output library filename
 LIBRARY = lib$(LIBNAME).so
