@@ -200,22 +200,6 @@ AC_ARG_ENABLE([tr69],
            [echo "tr69 component is not enabled"])
 AM_CONDITIONAL([tr69], [test x$tr69 = xtrue])
 
-AC_ARG_ENABLE([netsrvmgr],
-         AS_HELP_STRING([--enable-netsrvmgr],[enable netsrvmgr (default is no)]),
-         [
-           case "${enableval}" in
-              yes) NetSrvMgr=true
-                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" NetSrvMgr_stub "],
-                          [echo netsrvmgr enabled in Hybrid])
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" NetSrvMgr_stub "],
-                          [echo netsrvmgr enabled in Client]) ;;
-             no) NetSrvMgr=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-netsrvmgr ]) ;;
-             esac
-            ],
-           [echo "netsrvmgr component is not enabled"])
-AM_CONDITIONAL([netsrvmgr], [test x$netsrvmgr = xtrue])
-
 AC_ARG_ENABLE([audiocapturemgr],
          AS_HELP_STRING([--enable-audiocapturemgr],[enable audiocapturemgr (default is no)]),
          [
@@ -289,24 +273,6 @@ AC_ARG_ENABLE([bluetooth],
            [echo "bluetooth component is not enabled"])
 AM_CONDITIONAL([BLUETOOTH], [test x$BLUETOOTH = xtrue])
 
-AC_ARG_ENABLE([fireboltcompliance],
-         AS_HELP_STRING([--enable-fireboltcompliance],[enable fireboltcompliance (default is no)]),
-         [
-           case "${enableval}" in
-              yes) FIREBOLTCOMPLIANCE=true
-		   PKG_CHECK_MODULES([EGL], [egl >= 0.0], [HAVE_EGL=true], [HAVE_EGL=false])
-                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" FireboltCompliance_Validation "],
-                          [echo "FireboltCompliance enabled in Hybrid"])
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" FireboltCompliance_Validation "],
-                          [echo "FireboltCompliance enabled in Client"]) ;;
-             no) FIREBOLTCOMPLIANCE=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-fireboltcompliance ]) ;;
-             esac
-            ],
-           [echo "FireboltCompliance is not enabled"])
-AM_CONDITIONAL([HAVE_EGL], [test x$HAVE_EGL = xtrue])
-AM_CONDITIONAL([FIREBOLTCOMPLIANCE], [test x$FIREBOLTCOMPLIANCE = xtrue])
-
 AC_ARG_ENABLE([xupnp],
          AS_HELP_STRING([--enable-xupnp],[enable xupnp (default is no)]),
          [
@@ -354,6 +320,39 @@ AC_ARG_ENABLE([storagemanager],
            [echo "storagemanager component is not enabled"])
 AM_CONDITIONAL([STORAGEMGR], [test x$STORAGEMGR = xtrue])
 
+AC_ARG_ENABLE([netsrvmgr],
+         AS_HELP_STRING([--enable-netsrvmgr],[enable netsrvmgr (default is no)]),
+         [
+           case "${enableval}" in
+              yes) NetSrvMgr=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" NetSrvMgr_stub "],
+                          [echo netsrvmgr enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" NetSrvMgr_stub "],
+                          [echo netsrvmgr enabled in Client]) ;;
+             no) NetSrvMgr=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-netsrvmgr ]) ;;
+             esac
+            ],
+           [echo "netsrvmgr component is not enabled"])
+AM_CONDITIONAL([netsrvmgr], [test x$netsrvmgr = xtrue])
+
+AC_ARG_ENABLE([fireboltcompliance],
+         AS_HELP_STRING([--enable-fireboltcompliance],[enable fireboltcompliance (default is no)]),
+         [
+           case "${enableval}" in
+              yes) FIREBOLTCOMPLIANCE=true
+		   PKG_CHECK_MODULES([EGL], [egl >= 0.0], [HAVE_EGL=true], [HAVE_EGL=false])
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" FireboltCompliance_Validation "],
+                          [echo "FireboltCompliance enabled in Hybrid"])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" FireboltCompliance_Validation "],
+                          [echo "FireboltCompliance enabled in Client"]) ;;
+             no) FIREBOLTCOMPLIANCE=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-fireboltcompliance ]) ;;
+             esac
+            ],
+           [echo "FireboltCompliance is not enabled"])
+AM_CONDITIONAL([HAVE_EGL], [test x$HAVE_EGL = xtrue])
+AM_CONDITIONAL([FIREBOLTCOMPLIANCE], [test x$FIREBOLTCOMPLIANCE = xtrue])
 
 AC_ARG_ENABLE([wifihal],
          AS_HELP_STRING([--enable-wifihal],[enable wifihal (default is no)]),
