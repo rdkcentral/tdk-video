@@ -40,6 +40,18 @@ pmStatus_t PLAT_INIT(pmStatus_t cec_enable)
         return PWRMGR_INVALID_ARGUMENT;
 }
 
+pmStatus_t PLAT_API_SetWakeupSrc( PWRMGR_WakeupSrcType_t srcType, bool  enable )
+{
+        printf( "DUMMY PLAT_API_SetWakeupSrc\n");
+        return PWRMGR_INVALID_ARGUMENT;
+}
+
+pmStatus_t PLAT_API_GetWakeupSrc( PWRMGR_WakeupSrcType_t srcType, bool  *enable )
+{
+        printf( "DUMMY PLAT_API_GetWakeupSrc\n");
+        return PWRMGR_INVALID_ARGUMENT;
+}
+
 pmStatus_t PLAT_API_GetPowerState(PWRMgr_PowerState_t *curState)
 {
 	printf( "DUMMY PLAT_API_GetPowerState\n");

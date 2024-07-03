@@ -27,7 +27,7 @@ DeepSleep_Return_Status_t PLAT_DS_INIT(void)
     return DEEPSLEEPMGR_INIT_FAILURE;
 }
 
-DeepSleep_Return_Status_t PLAT_DS_SetiDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool networkStandby)
+DeepSleep_Return_Status_t PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool networkStandby)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
     return DEEPSLEEPMGR_INVALID_ARGUMENT;
@@ -39,13 +39,19 @@ DeepSleep_Return_Status_t PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout)
     return DEEPSLEEPMGR_INVALID_ARGUMENT;
 }
 
-DeepSleep_Return_Status_t PLAT_DS_SetDeepSleep(uint32_t deep_sleep_timeout, bool *isGPIOWakeup, bool coldStandby)
+DeepSleep_Return_Status_t PLAT_DS_DeepSleepWakeup(void)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
     return DEEPSLEEPMGR_INVALID_ARGUMENT;
 }
 
-DeepSleep_Return_Status_t PLAT_DS_DeepSleepWakeup(void)
+DeepSleep_Return_Status_t  PLAT_DS_GetLastWakeupReason(DeepSleep_WakeupReason_t *wakeupReason)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return DEEPSLEEPMGR_INVALID_ARGUMENT;
+}
+
+DeepSleep_Return_Status_t PLAT_DS_GetLastWakeupKeyCode(DeepSleepMgr_WakeupKeyCode_Param_t *wakeupKeyCode)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
     return DEEPSLEEPMGR_INVALID_ARGUMENT;
