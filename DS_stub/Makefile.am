@@ -34,6 +34,6 @@ AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rdk/ds \
 
 lib_LTLIBRARIES = libdevicesettingsstub.la
 libdevicesettingsstub_la_SOURCES = src/DeviceSettingsAgent.cpp
-libdevicesettingsstub_la_LIBADD = -ldshalcli -lds -lIARMBus 
+libdevicesettingsstub_la_LIBADD = -lds -lIARMBus
 libdevicesettingsstub_la_includedir = ${includedir}
 libdevicesettingsstub_la_include_HEADERS = ./include/DeviceSettingsAgent.h
