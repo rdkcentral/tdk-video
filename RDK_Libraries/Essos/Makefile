@@ -33,9 +33,6 @@ LIBRARY = lib$(LIBNAME).so
 #Additional headers
 lib$(LIBNAME)_la_include_HEADERS = essos.h essos-app.h essos-system.h essos-game.h
 
-# Additional linker flags
-LDFLAGS = -lEGL -ldl -lpthread
-
 all: $(LIBRARY)
 
 $(LIBRARY): $(SRCS)

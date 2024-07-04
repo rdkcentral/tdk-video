@@ -25,10 +25,23 @@ Essos_TDKTestApp_CXXFLAGS = ${AM_CXXFLAGS}
 if HAVE_EGL
 Essos_TDKTestApp_CXXFLAGS += ${EGL_CFLAGS}
 endif
+if TDKGRAPHICS
+Essos_TDKTestApp_LDFLAGS = $(AM_FLAGS) -lessos -ltdk-GLESv2
+else
 Essos_TDKTestApp_LDFLAGS = $(AM_FLAGS) -lessos -lGLESv2
+endif
 
 bin_PROGRAMS += Westeros_TDKTestApp
 Westeros_TDKTestApp_SOURCES = src/WesterosValidationSuite.cpp
+if TDKGRAPHICS
+Westeros_TDKTestApp_LDFLAGS= \
+   -lwayland-server \
+   -lwayland-client \
+   -lxkbcommon \
+   -lwesteros_simpleshell_client \
+   -ltdk-wayland-egl -ltdk-GLESv2\
+   -ltdk-EGL
+else
 Westeros_TDKTestApp_LDFLAGS= \
    -lwayland-server \
    -lwayland-client \
@@ -36,3 +49,4 @@ Westeros_TDKTestApp_LDFLAGS= \
    -lwesteros_simpleshell_client \
    -lwayland-egl -lGLESv2\
    -lEGL
+endif
