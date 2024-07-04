@@ -27,6 +27,7 @@
 #include "libIBusDaemon.h"
 #include "libIARMCore.h"
 #include "rdkStorageMgr.h"
+#include "rdkStorageMgrTypes.h"
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
 
@@ -54,15 +55,16 @@ class StorageMgrAgent : public RDKTestStubInterface , public AbstractServer<Stor
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetTSBFreeSpace", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetTSBFreeSpace);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetDVRCapacity", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetDVRCapacity);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetDVRFreeSpace", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetDVRFreeSpace);
-		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetDeviceInfo", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetDeviceInfo);
-		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetDeviceInfoList", PARAMS_BY_NAME, JSON_STRING, "DeviceID", JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetDeviceInfoList);
+		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetDeviceInfoList", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetDeviceInfoList);
+		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetDeviceInfo", PARAMS_BY_NAME, JSON_STRING, "DeviceIDIndex", JSON_INTEGER, NULL), &StorageMgrAgent::StorageMgr_GetDeviceInfo);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetTSBMaxMinutes", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetTSBMaxMinutes);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_SetTSBMaxMinutes", PARAMS_BY_NAME, JSON_STRING, "TSBminutes", JSON_INTEGER, NULL), &StorageMgrAgent::StorageMgr_SetTSBMaxMinutes);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_IsTSBEnabled", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_IsTSBEnabled);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_SetTSBEnabled", PARAMS_BY_NAME, JSON_STRING, "isEnabled", JSON_INTEGER, NULL), &StorageMgrAgent::StorageMgr_SetTSBEnabled);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_IsDVREnabled", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_IsDVREnabled);
 		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_SetDVREnabled", PARAMS_BY_NAME, JSON_STRING, "isDVREnabled", JSON_INTEGER, NULL), &StorageMgrAgent::StorageMgr_SetDVREnabled);
-		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetHealth", PARAMS_BY_NAME, JSON_STRING, "DeviceID", JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetHealth);
+		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetHealth", PARAMS_BY_NAME, JSON_STRING, "DeviceIDIndex", JSON_INTEGER, NULL), &StorageMgrAgent::StorageMgr_GetHealth);
+		    this->bindAndAddMethod(Procedure("TestMgr_StorageMgr_GetMountPath", PARAMS_BY_NAME, JSON_STRING, NULL), &StorageMgrAgent::StorageMgr_GetMountPath);
 		}
 				
 				
@@ -88,6 +90,7 @@ class StorageMgrAgent : public RDKTestStubInterface , public AbstractServer<Stor
 		void StorageMgr_IsDVREnabled(IN const Json::Value& req, OUT Json::Value& response);
                 void StorageMgr_SetDVREnabled(IN const Json::Value& req, OUT Json::Value& response);
 		void StorageMgr_GetHealth(IN const Json::Value& req, OUT Json::Value& response);
+		void StorageMgr_GetMountPath(IN const Json::Value& req, OUT Json::Value& response);
 				
 		bool cleanup(IN const char* szVersion);
 				
