@@ -38,7 +38,7 @@
 
 #define DEVICEID_LENGTH	35
 eSTMGRDeviceIDs getDeviceIDs;
-eSTMGRReturns rc = RDK_STMGR_RETURN_FAILURE;
+eSTMGRReturns rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 /***************************************************************************
  *Function name : testmodulepre_requisites
@@ -218,7 +218,7 @@ bool printDeviceIDs(std::string &DeviceIDs)
 void StorageMgrAgent::StorageMgr_GetDeviceID(IN const Json::Value& req, OUT Json::Value& response)
 {
 	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GETDEVICEID --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 	eSTMGRReturns rc;
     	rc = rdkStorage_getDeviceIds(&getDeviceIDs);
     	if (rc != RDK_STMGR_RETURN_SUCCESS)
@@ -258,7 +258,7 @@ void StorageMgrAgent::StorageMgr_GetTSBStatus(IN const Json::Value& req, OUT Jso
 {
 	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetTSBStatus --->Entry\n");
 
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	eSTMGRTSBStatus TSBStatus;
     	eSTMGRReturns rc;
@@ -329,7 +329,7 @@ void StorageMgrAgent::StorageMgr_GetTSBStatus(IN const Json::Value& req, OUT Jso
 void StorageMgrAgent::StorageMgr_GetTSBCapacity(IN const Json::Value& req, OUT Json::Value& response)
 {
 	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetTSBCapacity --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 	unsigned long long TSBCapacity =0;
     	rc = rdkStorage_getTSBCapacity(&TSBCapacity);
 	DEBUG_PRINT(DEBUG_TRACE, "TSB Capacity = %llu \n", TSBCapacity);
@@ -357,7 +357,7 @@ void StorageMgrAgent::StorageMgr_GetTSBCapacity(IN const Json::Value& req, OUT J
 void StorageMgrAgent::StorageMgr_GetTSBCapacityMinutes(IN const Json::Value& req, OUT Json::Value& response)
 {
 	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetTSBCapacityMinutes --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	unsigned int capacityminutes =0;
     	rc = rdkStorage_getTSBCapacityMinutes(&capacityminutes);
@@ -387,7 +387,7 @@ void StorageMgrAgent::StorageMgr_GetTSBCapacityMinutes(IN const Json::Value& req
 void StorageMgrAgent::StorageMgr_GetTSBFreeSpace(IN const Json::Value& req, OUT Json::Value& response)
 {
 	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetTSBFreeSpace --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	unsigned long long freeSpaceTSB =0;
 
@@ -418,7 +418,7 @@ void StorageMgrAgent::StorageMgr_GetTSBFreeSpace(IN const Json::Value& req, OUT 
 void StorageMgrAgent::StorageMgr_GetDVRCapacity(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetDVRCapacity --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	unsigned long long DVRcapacity =0;
 
@@ -449,7 +449,7 @@ void StorageMgrAgent::StorageMgr_GetDVRCapacity(IN const Json::Value& req, OUT J
 void StorageMgrAgent::StorageMgr_GetDVRFreeSpace(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetDVRFreeSpace --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	unsigned long long freeSpaceDVR =0;
     	
@@ -480,7 +480,7 @@ void StorageMgrAgent::StorageMgr_GetDVRFreeSpace(IN const Json::Value& req, OUT 
 void StorageMgrAgent::StorageMgr_GetDeviceInfo(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetDeviceInfo --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 
 	eSTMGRDeviceInfo deviceInfo;
@@ -526,7 +526,7 @@ void StorageMgrAgent::StorageMgr_GetDeviceInfoList(IN const Json::Value& req, OU
 {
 	eSTMGRDeviceInfoList deviceInfolist;
 	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetDeviceInfoList --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
     	rc = rdkStorage_getDeviceInfoList(&deviceInfolist);
 
@@ -569,7 +569,7 @@ void StorageMgrAgent::StorageMgr_GetDeviceInfoList(IN const Json::Value& req, OU
 void StorageMgrAgent::StorageMgr_GetTSBMaxMinutes(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetTSBMaxMinutes --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	unsigned int TSBminutes =0;
 	rc = rdkStorage_getTSBMaxMinutes (&TSBminutes);
@@ -599,7 +599,7 @@ void StorageMgrAgent::StorageMgr_GetTSBMaxMinutes(IN const Json::Value& req, OUT
 void StorageMgrAgent::StorageMgr_SetTSBMaxMinutes(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_SetTSBMaxMinutes --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	if(&req["TSBminutes"] == NULL)
     	{
@@ -651,7 +651,7 @@ void StorageMgrAgent::StorageMgr_IsTSBEnabled(IN const Json::Value& req, OUT Jso
 void StorageMgrAgent::StorageMgr_SetTSBEnabled(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_SetTSBEnabled --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	if(&req["isEnabled"] == NULL)
         {
@@ -702,7 +702,7 @@ void StorageMgrAgent::StorageMgr_IsDVREnabled(IN const Json::Value& req, OUT Jso
 void StorageMgrAgent::StorageMgr_SetDVREnabled(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_SetDVREnabled --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
         if(&req["isDVREnabled"] == NULL)
         {
@@ -758,7 +758,7 @@ std::string PrintHealthInfo(const eSTMGRHealthInfo &healthInfo)
 void StorageMgrAgent::StorageMgr_GetHealth(IN const Json::Value& req, OUT Json::Value& response) 
 {
     	DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetHealth --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
     	eSTMGRHealthInfo healthInfo;
     	std::string String;
@@ -798,7 +798,7 @@ void StorageMgrAgent::StorageMgr_GetHealth(IN const Json::Value& req, OUT Json::
 void StorageMgrAgent::StorageMgr_GetMountPath(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT(DEBUG_TRACE, "StorageMgr_GetMountPath --->Entry\n");
-	rc = RDK_STMGR_RETURN_FAILURE;
+	rc = RDK_STMGR_RETURN_GENERIC_FAILURE;
 
 	char MountPath[300];
 
