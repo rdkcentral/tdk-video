@@ -79,11 +79,11 @@ echo -e "Test Execution Name is: TDK_Apparmor_Test_02_Enable_Status"
 echo -e "Connected to $ip Box"
 echo -e "Connected to Server!\n"
 
-echo "Executing ExecuteCommand: aa-enabled" 
-aa-enabled >/dev/details
+echo "Executing ExecuteCommand: cat /sys/module/apparmor/parameters/enabled" 
+cat /sys/module/apparmor/parameters/enabled >/dev/details
 echo "DETAILS"
 echo "-------------------------"
-if cat /dev/details |grep 'Yes'
+if cat /dev/details |grep 'Y'
 then
 echo "SUCCESS:Apparmor feature is enabled"
 else
@@ -101,9 +101,9 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 echo "To check Apparmor is enabled"
-command=$(aa-enabled)
+command=$(cat /sys/module/apparmor/parameters/enabled)
 
-if [ $command == "Yes" ]
+if [ $command == "Y" ]
 then
         echo "Apparmor is enabled"
 	FILE=/opt/secure/Apparmor_blocklist                                                                                    
@@ -142,9 +142,9 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 echo "To check Apparmor is enabled"
-command=$(aa-enabled)
+command=$(cat /sys/module/apparmor/parameters/enabled)
 echo "$command"
-if [ $command == "Yes" ]                                                  
+if [ $command == "Y" ]                                                  
 then                                                                 
         echo "Apparmor is enabled"                   
         if [ -d "/etc/apparmor.d/binaryprofiles" ]; then                  
@@ -167,9 +167,9 @@ echo -e "Connected to $ip Box for validating profiles"
 echo -e "Connected to Server!\n"
 
 echo "To check Apparmor is enabled"
-command=$(aa-enabled)
+command=$(cat /sys/module/apparmor/parameters/enabled)
 echo "$command"
-if [ $command == "Yes" ]
+if [ $command == "Y" ]
 then
 	echo "Apparmor is enabled"
 	path=/etc/apparmor.d/ 
@@ -523,7 +523,7 @@ logfile="/opt/apparmor_profile_status.log"
 exec >> "$logfile" 2>&1
 
 #check whether apparmor is enabled 
-if aa-enabled | grep -q "Yes"; then
+if cat /sys/module/apparmor/parameters/enabled | grep -q "Y"; then
   echo "AppArmor is enabled"
 else
   echo "AppArmor is not enabled"
