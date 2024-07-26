@@ -134,11 +134,13 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetVolumeLeveller", PARAMS_BY_NAME, JSON_STRING, "mode", JSON_INTEGER, "level", JSON_INTEGER, NULL), &DSHalAgent::DSHal_SetVolumeLeveller);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetVolumeLeveller", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetVolumeLeveller);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetQuantizationRange", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetQuantizationRange);
-		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetBassEnhancer", PARAMS_BY_NAME, JSON_STRING, "boost", JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetBassEnhancer);
-		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetBassEnhancer", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetBassEnhancer);
-		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetDRCMode", PARAMS_BY_NAME, JSON_STRING, "mode", JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetDRCMode);
-		    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetDRCMode", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetDRCMode);
-
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetBassEnhancer", PARAMS_BY_NAME, JSON_STRING, "boost", JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetBassEnhancer);
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetBassEnhancer", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetBassEnhancer);
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetDRCMode", PARAMS_BY_NAME, JSON_STRING, "mode", JSON_INTEGER,NULL), &DSHalAgent::DSHal_SetDRCMode);
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetDRCMode", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_GetDRCMode);
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAudioCapabilities", PARAMS_BY_NAME, JSON_STRING, "paramhandle", JSON_INTEGER, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAudioCapabilities);
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAudioFormat", PARAMS_BY_NAME, JSON_STRING, "paramhandle", JSON_INTEGER, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAudioFormat);
+					this->bindAndAddMethod(Procedure("TestMgr_DSHal_EnableMS12Config", PARAMS_BY_NAME, JSON_STRING,NULL), &DSHalAgent::DSHal_EnableMS12Config);
                 }
 
                 //Inherited functions
@@ -228,7 +230,10 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                 void DSHal_GetQuantizationRange(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_SetBassEnhancer(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetBassEnhancer(IN const Json::Value& req, OUT Json::Value& response);
-		void DSHal_SetDRCMode(IN const Json::Value& req, OUT Json::Value& response);
-		void DSHal_GetDRCMode(IN const Json::Value& req, OUT Json::Value& response);
+				void DSHal_SetDRCMode(IN const Json::Value& req, OUT Json::Value& response);
+				void DSHal_GetDRCMode(IN const Json::Value& req, OUT Json::Value& response);
+				void DSHal_GetAudioCapabilities(IN const Json::Value& req, OUT Json::Value& response);
+				void DSHal_GetAudioFormat(IN const Json::Value& req, OUT Json::Value& response);
+				void DSHal_EnableMS12Config(IN const Json::Value& req, OUT Json::Value& response);
 }; 
 #endif //__DSHAL_STUB_H__
