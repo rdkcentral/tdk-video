@@ -639,7 +639,7 @@ for profile in "${profiles[@]}"; do
 		exit
     else
 		if [ "$profile" == "default" ]; then
-                       ps -auxZ | grep "$profile" | awk 'NR==1{print $3}' >/dev/details             
+                       ps -auxZ | grep ^"$profile" | awk 'NR==1{print $3}' >/dev/details             
                         if [ $(cat /dev/details) == "root" ]; then                                   
                                 cat $path/$profile | grep -i 'DAC_OVERRIDE' >/dev/details            
                                 if [ $(cat /dev/details|wc -l) -gt 0 ]; then                         
