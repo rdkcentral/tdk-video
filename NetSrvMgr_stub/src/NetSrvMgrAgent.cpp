@@ -762,7 +762,7 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_GetPairedSSID(IN const Json::Value& 
 	    		          sizeof(IARM_Bus_WiFiSrvMgr_Param_t),
 	    		          (void**)&param);
 
-	if(iarmResult != IARM_RESULT_SUCCESS) {
+	if((iarmResult != IARM_RESULT_SUCCESS) || !(param->status)) {
 
 	    DEBUG_PRINT (DEBUG_ERROR, "Error allocating memory for getting paired SSID for wifi manager\n");
 	    response["result"] = "FAILURE";
@@ -777,7 +777,7 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_GetPairedSSID(IN const Json::Value& 
 				        sizeof(IARM_Bus_WiFiSrvMgr_Param_t));
 		
 
-	    if (iarmResult != IARM_RESULT_SUCCESS || !(param->status)) {
+	    if (iarmResult != IARM_RESULT_SUCCESS) {
 
 		DEBUG_PRINT (DEBUG_ERROR, "IARM_Bus_Call to GetPairedSSID of wifi manager failed\n");
 		response["result"] = "FAILURE";
@@ -1184,6 +1184,8 @@ static bool NetSrvMgr_setParameters (const Json::Value& req, char* method_name, 
     string methodName = method_name;
     IARM_Result_t Result = IARM_RESULT_SUCCESS;
 
+    DEBUG_PRINT (DEBUG_LOG, "[%s] Entered\n", methodName.c_str());
+
     if(IARM_BUS_NETSRVMGR_API_getNetworkInterfaces == methodName)
     {
        IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
@@ -1484,6 +1486,129 @@ static bool NetSrvMgr_setParameters (const Json::Value& req, char* method_name, 
        *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
     }
 
+    if(IARM_BUS_NETSRVMGR_API_getInterfaceList == methodName)
+    {
+       IARM_BUS_NetSrvMgr_InterfaceList_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_InterfaceList_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_InterfaceList_t));
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_InterfaceList_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_getIPSettings == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_Settings_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_Settings_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_Settings_t));
+
+       strcpy(param->interface, (&req["interface"])?req["interface"].asCString():"");
+       strcpy(param->ipversion, (&req["ipversion"])?req["ipversion"].asCString():"");
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_Settings_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_getSTBip_family == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t));
+
+       strcpy(param->ipfamily, (&req["family"])?req["family"].asCString():"");
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_EventData_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_getPublicIP == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_StunRequest_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_StunRequest_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_StunRequest_t));
+
+       param->ipv6 = false;
+       strcpy(param->interface, (&req["interface"])?req["interface"].asCString():"WIFI");
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_StunRequest_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_startConnectivityMonitoring == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t));
+
+       param->monitorConnectivity = true;
+       param->monitorInterval = 60; /* Monitor heart beat for 60 sec (default value)*/
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t);
+    }
+
+    if(IARM_BUS_NETSRVMGR_API_stopConnectivityMonitoring == methodName)
+    {
+       IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t *param = NULL;
+
+       Result = IARM_Malloc (IARM_MEMTYPE_PROCESSLOCAL, sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t), (void**)&param);
+	
+       if(IARM_RESULT_SUCCESS != Result)
+       {
+          DEBUG_PRINT (DEBUG_ERROR, "Error in allocating memory for [%s]\n", methodName);
+	  return TEST_FAILURE;
+       }
+
+       memset (param, 0, sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t));
+
+       param->monitorConnectivity = false;
+
+       *iarmParam = (void*)param;
+       *paramSize = sizeof(IARM_BUS_NetSrvMgr_Iface_InternetConnectivityStatus_t);
+    }
+
+    DEBUG_PRINT (DEBUG_LOG, "[%s] Exit\n", methodName.c_str());
+
     return TEST_SUCCESS;
 }
 
@@ -1626,6 +1751,69 @@ static bool NetSrvMgr_getParameter (Json::Value& response, string methodName, vo
 
     if ((IARM_BUS_NETSRVMGR_API_setDefaultInterface == methodName)) {
        sprintf(outputDetails, "%s", "Default interface set successfully");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getInterfaceList == methodName)) {
+       string interfaceInfo;
+       IARM_BUS_NetSrvMgr_InterfaceList_t *list = (IARM_BUS_NetSrvMgr_InterfaceList_t*) arg;
+
+
+       for (int i = 0; i < list->size; i++)
+       {
+          strcpy(outputDetails, (list->interfaces[i].flags&0x40)?"true":"flase");	       
+	  interfaceInfo += "{ Interface : " + string(list->interfaces[i].name) + ", MAC address : " + string(list->interfaces[i].mac) + ", Connected : " +  string(outputDetails) + "},";
+       }
+
+       response["result"] = "SUCCESS";	
+       response["details"] = interfaceInfo.c_str();
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getIPSettings == methodName)) {
+       string interfaceInfo;
+       IARM_BUS_NetSrvMgr_Iface_Settings_t *param = (IARM_BUS_NetSrvMgr_Iface_Settings_t *)arg;
+
+       interfaceInfo = "interface : " + string(param->interface) + " " + "ipversion : " + string(param->ipversion) + " " + "ipaddr : " + string(param->ipaddress);
+
+       response["result"] = "SUCCESS";	
+       response["details"] = interfaceInfo.c_str();
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getSTBip_family == methodName)) {
+       string interfaceInfo;
+       IARM_BUS_NetSrvMgr_Iface_EventData_t *param = (IARM_BUS_NetSrvMgr_Iface_EventData_t *)arg;
+
+       interfaceInfo = "IP : " + string(param->activeIfaceIpaddr);
+
+       response["result"] = "SUCCESS";	
+       response["details"] = interfaceInfo.c_str();
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_getPublicIP == methodName)) {
+       string interfaceInfo;
+       IARM_BUS_NetSrvMgr_Iface_StunRequest_t *param = (IARM_BUS_NetSrvMgr_Iface_StunRequest_t *)arg;
+
+       interfaceInfo = "public_ip : " + string(param->public_ip);
+
+       response["result"] = "SUCCESS";	
+       response["details"] = interfaceInfo.c_str();
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_startConnectivityMonitoring == methodName)) {
+       strcpy(outputDetails, "Monitoring Connectivity start was returned successfully");
+       response["result"] = "SUCCESS";	
+       response["details"] = outputDetails;
+       retVal = TEST_SUCCESS;
+    }
+
+    if ((IARM_BUS_NETSRVMGR_API_stopConnectivityMonitoring == methodName)) {
+       strcpy(outputDetails, "Monitoring Connectivity stop was returned successfully");
        response["result"] = "SUCCESS";	
        response["details"] = outputDetails;
        retVal = TEST_SUCCESS;
