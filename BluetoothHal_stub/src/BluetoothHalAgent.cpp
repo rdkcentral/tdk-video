@@ -1173,7 +1173,6 @@ void BluetoothHalAgent::BluetoothHal_GetDeviceTypeClass (IN const Json::Value& r
    enBTRCoreDeviceClass deviceClass = enBTRCore_DC_Unknown;
    strcpy (deviceIDString, req["device_id"].asCString ());
    deviceID = strtoull (deviceIDString, NULL, 10);
-   deviceType = (enBTRCoreDeviceType) req["device_type"].asInt ();
 
    DEBUG_PRINT (DEBUG_TRACE, "BluetoothHal_GetDeviceTypeClass : Executing BTRCore_GetDeviceTypeClass() with input (device ID - %llu, device type - %d)\n", deviceID, deviceType);
    gBTRCoreRet = BTRCore_GetDeviceTypeClass (gBTRCoreHandle, deviceID, &deviceType, &deviceClass);
