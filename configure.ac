@@ -321,6 +321,20 @@ AC_ARG_ENABLE([storagemanager],
            [echo "storagemanager component is not enabled"])
 AM_CONDITIONAL([STORAGEMGR], [test x$STORAGEMGR = xtrue])
 
+AC_ARG_ENABLE([mediautils],
+         AS_HELP_STRING([--enable-mediautils],[enable mediautils (default is no)]),
+         [
+           case "${enableval}" in
+              yes) MEDIAUTILS=true
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" MediaUtils_stub"],
+                          [echo box type not specified]) ;;
+             no) MEDIAUTILS=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-mediautils ]) ;;
+             esac
+            ],
+           [echo "mediautils component is not enabled"])
+AM_CONDITIONAL([MEDIAUTILS], [test x$MEDIAUTILS = xtrue])
+
 AC_ARG_ENABLE([netsrvmgr],
          AS_HELP_STRING([--enable-netsrvmgr],[enable netsrvmgr (default is no)]),
          [
@@ -563,5 +577,6 @@ AC_CONFIG_FILES([Makefile
          HdmicecHal_stub/Makefile
 	 WIFIHAL_stub/Makefile
 	 StorageMgr_stub/Makefile
-	 WesterosHal_stub/Makefile])
+	 WesterosHal_stub/Makefile
+	 MediaUtils_stub/Makefile])
 AC_OUTPUT
