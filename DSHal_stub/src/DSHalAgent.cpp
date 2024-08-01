@@ -3362,6 +3362,239 @@ void DSHalAgent::DSHal_GetBassEnhancer(IN const Json::Value& req, OUT Json::Valu
         return;
     }
 }
+
+/***************************************************************************
+ *Function name : DSHal_GetAudioCapabilities
+ *Description    : This function is to get the platform audio capabilities
+ *****************************************************************************/
+void DSHalAgent::DSHal_GetAudioCapabilities(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioCapabilities --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+    int audcapabilities = 0, paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioCapabilities handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioCapabilities((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioCapabilities((intptr_t)paramhandle, &audcapabilities);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+		std::string outputDetails;
+		
+		outputDetails += "   Supported Audio Capabilities of the platform: ";
+		if(audcapabilities & dsAUDIOSUPPORT_NONE)
+		{
+			outputDetails += "   Not supported any audio types";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_ATMOS)
+		{
+			outputDetails += "   Dolby ATMOS,";
+		}		
+		if(audcapabilities & dsAUDIOSUPPORT_DD)
+		{
+			outputDetails += "   Dolby Digital,";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_DDPLUS)
+		{
+			outputDetails += "   Dolby Digital Plus,";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_DAD)
+		{
+			outputDetails += "   Digital Audio Delivery,";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_DAPv2)
+		{
+			outputDetails += "   Digital Audio Processing version 2,";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_MS12)
+		{
+			outputDetails += "   Multi Stream 12,";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_MS12V2)
+		{
+			outputDetails += "   Multi Stream Version 2,";
+		}
+		if(audcapabilities & dsAUDIOSUPPORT_Invalid)
+		{
+			outputDetails += "   Invalid audio type";
+		}
+		DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioCapabilities %s\n", outputDetails);
+		
+        response["result"] = "SUCCESS";
+        response["details"] = outputDetails;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioCapabilities call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioCapabilities -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "GetAudioCapabilities call failed"+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioCapabilities call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioCapabilities -->Exit\n");
+    }
+	
+	return;
+}
+
+/***************************************************************************
+ *Function name : checkaudioFormat
+ *Description    : This function is to check the ERROR return code of API
+******************************************************************************/
+void checkaudioFormat(dsAudioFormat_t audioformat,string *audformat)
+{
+    switch(audioformat)
+    {
+     case dsAUDIO_FORMAT_NONE : DEBUG_PRINT(DEBUG_LOG, "No audio format\n");
+		       *audformat="Audio Format: dsAUDIO_FORMAT_NONE";
+		       break;
+     case dsAUDIO_FORMAT_PCM : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_PCM\n");
+			  *audformat="Audio Format: dsAUDIO_FORMAT_PCM";
+                          break;
+     case dsAUDIO_FORMAT_DOLBY_AC3 : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_AC3\n");
+				*audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_AC3";
+                                break;
+     case dsAUDIO_FORMAT_DOLBY_EAC3 : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_EAC3\n");
+				*audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_EAC3";
+                                break;
+     case dsAUDIO_FORMAT_DOLBY_AC4 : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_AC4\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_AC4";
+                                          break;
+     case dsAUDIO_FORMAT_DOLBY_MAT : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_MAT\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_AC4";
+                                          break;
+     case dsAUDIO_FORMAT_DOLBY_TRUEHD : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_TRUEHD\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_TRUEHD";
+                                          break;
+     case dsAUDIO_FORMAT_DOLBY_EAC3_ATMOS : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_EAC3_ATMOS\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_EAC3_ATMOS";
+                                          break;
+     case dsAUDIO_FORMAT_DOLBY_TRUEHD_ATMOS : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_TRUEHD_ATMOS\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_TRUEHD_ATMOS";
+                                          break;
+     case dsAUDIO_FORMAT_DOLBY_MAT_ATMOS : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_MAT_ATMOS\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_MAT_ATMOS";
+                                          break;
+     case dsAUDIO_FORMAT_DOLBY_AC4_ATMOS : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_DOLBY_AC4_ATMOS\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_DOLBY_AC4_ATMOS";
+                                          break;
+     case dsAUDIO_FORMAT_AAC : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_AAC\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_AAC";
+                                          break;
+     case dsAUDIO_FORMAT_VORBIS : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_VORBIS\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_VORBIS";
+                                          break;
+     case dsAUDIO_FORMAT_WMA : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_WMA\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_WMA";
+                                          break;
+     case dsAUDIO_FORMAT_UNKNOWN : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_UNKNOWN\n");
+					  *audformat="Audio Format: dsAUDIO_FORMAT_UNKNOWN";
+                                          break;
+     case dsAUDIO_FORMAT_MAX : DEBUG_PRINT(DEBUG_LOG, "dsAUDIO_FORMAT_MAX\n");
+					  *audformat="Audio Format: Out of Range";
+                                          break;
+     default :DEBUG_PRINT(DEBUG_ERROR, "UNEXPECTED ERROR OBSERVED\n");
+	      *audformat="ERROR:UNEXPECTED ERROR";
+    }
+}
+
+/***************************************************************************
+ *Function name : DSHal_GetAudioFormat
+ *Description    : This function is to get the current audio format
+ *****************************************************************************/
+void DSHalAgent::DSHal_GetAudioFormat(IN const Json::Value& req, OUT Json::Value& response)
+{
+	DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioFormat --->Entry\n");
+	dsAudioFormat_t enaudioFormat = dsAUDIO_FORMAT_NONE;
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioFormat handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+	  ret = dsGetAudioFormat((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+	  ret = dsGetAudioFormat((intptr_t)paramhandle, &enaudioFormat);
+	}
+	
+	if (ret == dsERR_NONE)
+	{
+	  std::string audformat;
+	  checkaudioFormat(enaudioFormat, &audformat);
+	  DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioFormat %s\n", audformat);
+	  response["result"] = "SUCCESS";
+	  response["details"] = audformat;
+	  DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioFormat call is SUCCESS");
+	  DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioFormat -->Exit\n");
+	}
+	else
+	{
+	  checkERROR(ret,&error);
+          response["result"] = "FAILURE";
+          response["details"] = "GetAudioFormat call failed"+error;
+          DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioFormat call is FAILURE");
+          DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioFormat -->Exit\n");
+	}	
+	return;
+}
+
+/***************************************************************************
+ *Function name : DSHal_EnableMS12Config
+ *Description    : This function is to enable/disable the MS12 config features
+ *****************************************************************************/
+void DSHalAgent::DSHal_EnableMS12Config(IN const Json::Value& req, OUT Json::Value& response)
+{
+	DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config --->Entry\n");
+	dsMS12FEATURE_t enMS12feature = dsMS12FEATURE_DAPV2;
+    dsError_t ret = dsERR_NONE;
+	
+	ret = dsEnableMS12Config(apHandle, enMS12feature, true);
+	if (ret == dsERR_NONE)
+    {	
+        response["result"] = "SUCCESS";
+        response["details"] = "MS12: DAPV2 feature got enabled successfully";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioFormat call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioFormat -->Exit\n");
+	}
+	else
+	{
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "EnableMS12Config call failed"+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_EnableMS12Config call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
+	}	
+	return;
+}
+
 /**************************************************************************
 Function Name   : cleanup
 

@@ -649,15 +649,60 @@ void HdmicecHalAgent::HdmicecHal_GetPhysicalAddress(IN const Json::Value& req, O
 {
     DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetPhysicalAddress --->Entry\n");
     char details[100];
-
     unsigned int physicalAddress = 0;
-    HdmiCecGetPhysicalAddress(driverHandle,&physicalAddress);
-    DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetPhysicalAddress call success\n");
-    DEBUG_PRINT(DEBUG_TRACE, "PhysicalAddress : 0x%X (dec: %u)\n",physicalAddress,physicalAddress);
-    sprintf(details,"PhysicalAddress: hex: 0x%X, dec: %u",physicalAddress,physicalAddress);
-    response["result"]="SUCCESS";
-    response["details"]=details;
-    DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetPhysicalAddress ---> Exit\n");
+	int ret = 0, drv_handle = 0;
+	
+	int Is_handle_invalid = (int) req["Is_handle_invalid"].asInt();
+    int Is_null_param_check = (int) req["Is_null_param_check"].asInt();
+	
+    if(Is_handle_invalid)
+    {
+		drv_handle = (int) req["handle"].asInt();
+    }
+    else
+    {
+		drv_handle = driverHandle;
+    }
+
+    if(Is_null_param_check)
+    {
+		ret = HdmiCecGetPhysicalAddress(drv_handle,NULL);
+    }
+    else
+    {
+		ret = HdmiCecGetPhysicalAddress(drv_handle,&physicalAddress);
+    }
+	
+	if (ret == 0)
+	{
+		DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetPhysicalAddress call success\n");
+		DEBUG_PRINT(DEBUG_TRACE, "PhysicalAddress : 0x%X (dec: %u)\n",physicalAddress,physicalAddress);
+		sprintf(details,"PhysicalAddress: hex: 0x%X, dec: %u",physicalAddress,physicalAddress);
+		response["result"]="SUCCESS";
+		response["details"]=details;
+		DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetPhysicalAddress ---> Exit\n");
+	}
+	else if(ret == 5)
+    {
+		response["result"]="FAILURE";
+        response["details"]="HdmiCecGetPhysicalAddress call failed due to invalid argument";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetPhysicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetPhysicalAddress ---> Exit\n");
+    }
+    else if(ret == 11)
+    {
+		response["result"]="FAILURE";
+        response["details"]="HdmiCecGetPhysicalAddress call failed due to invalid handle";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetPhysicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetPhysicalAddress ---> Exit\n");
+    }
+    else
+    {
+        response["result"]="FAILURE";
+        response["details"]="HdmiCecGetPhysicalAddress call failed";
+        DEBUG_PRINT(DEBUG_TRACE, "HdmiCecGetPhysicalAddress call failed\n");
+        DEBUG_PRINT(DEBUG_TRACE, "HdmicecHal_GetPhysicalAddress ---> Exit\n");
+    }
     return;
 }
 
