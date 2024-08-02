@@ -1928,16 +1928,20 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
     if (only_audio)
     {
         flags = GST_PLAY_FLAG_AUDIO;
-#ifdef NATIVE_AUDIO
-	flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
-#endif
+	if (getenv ("TDK_NATIVE_AUDIO") != NULL)
+        {
+            flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+            printf("\nEnabled NATIVE_AUDIO flag for playbin\n");
+        }
     }
     else if (only_video)
     {
 	flags = GST_PLAY_FLAG_VIDEO;
-#ifdef NATIVE_VIDEO
-        flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
-#endif
+	if (getenv ("TDK_NATIVE_VIDEO") != NULL)
+        {
+            flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+            printf("\nEnabled NATIVE_VIDEO flag for playbin\n");
+        }
     }
     else
     {	    
