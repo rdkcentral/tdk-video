@@ -288,50 +288,22 @@ bool getParameterDetails (Json::Value& response,
 	retVal = TEST_SUCCESS;
     }
     else if ((IARM_BUS_WIFI_MGR_API_getRadioProps == methodName) && (((IARM_BUS_WiFi_DiagsPropParam_t*)param)->status)) {
+	memset(outputDetails, '\0', sizeof(outputDetails));
 
- 	strcpy (outputDetails, "Radio Props: "); 
-	sprintf (outputParam, "Enable: %d ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.enable);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "Status: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.status);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "Name: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.name);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "MaxBitRate: %lu ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.maxBitRate);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "SupportedFrequencyBands: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.supportedFrequencyBands);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "OperatingFrequencyBand: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.operatingFrequencyBand);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "AutoChannelEnable: %d ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.autoChannelEnable);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "AutoChannelRefreshPeriod: %lu ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.autoChannelRefreshPeriod);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "AutoChannelSupported: %d ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.autoChannelSupported);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "ChannelsInUse: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.channelsInUse);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "Channel: %lu ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.channel);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "ExtensionChannel: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.extensionChannel);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "GuardInterval: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.guardInterval);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "mcs: %d ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.mcs);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "OperatingChannelBandwidth: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.operatingChannelBandwidth);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "OperatingStandards: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.operatingStandards);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "PossibleChannels: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.possibleChannels);
-	strcat (outputDetails, outputParam);
-	sprintf (outputParam, "RegulatoryDomain: %s ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.regulatoryDomain);
-	strcat (outputDetails, outputParam);
-	
+	sprintf(outputParam, "enable: %d, ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.enable);
+	strcat(outputDetails, outputParam);
+	sprintf(outputParam, "status: %s, ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.status);
+	strcat(outputDetails, outputParam);
+	sprintf(outputParam, "name: %s, ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.name);
+	strcat(outputDetails, outputParam);
+	sprintf(outputParam, "operatingFrequencyBand: %s, ", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.operatingFrequencyBand);
+	strcat(outputDetails, outputParam);
+	sprintf(outputParam, "operatingStandards: %s", ((IARM_BUS_WiFi_DiagsPropParam_t*)param)->data.radio.params.operatingStandards);
+	strcat(outputDetails, outputParam);
+
 	response["result"] = "SUCCESS";
 	response["details"] = outputDetails;
-        retVal = TEST_SUCCESS;
-	DEBUG_PRINT (DEBUG_TRACE, "%s\n", outputDetails);
-
+	retVal = TEST_SUCCESS;
     }	
     else if (IARM_BUS_WIFI_MGR_API_setRadioProps == methodName) {
 
@@ -525,17 +497,18 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_GetAvailableSSIDs(IN const Json::Val
     DEBUG_PRINT (DEBUG_TRACE, "NetSrvMgrAgent_WifiMgr_GetAvailableSSIDs --->Entry\n");
 
     try {
-	    
+	int timeout = 10000;
 	char ssidList[WIFI_MGR_PARAM_LIST_BUFFER_SIZE] = {'\0'};
 	IARM_Result_t iarmResult = IARM_RESULT_SUCCESS;
 	IARM_Bus_WiFiSrvMgr_SsidList_Param_t param;
 
  	memset (&param, 0, sizeof(param));
-	iarmResult = IARM_Bus_Call (IARM_BUS_NM_SRV_MGR_NAME, 
-	    		        IARM_BUS_WIFI_MGR_API_getAvailableSSIDs,
-	    		        (void *)&param,
-	    		        sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t));
-	    
+
+	iarmResult = IARM_Bus_Call_with_IPCTimeout(IARM_BUS_NM_SRV_MGR_NAME,
+			IARM_BUS_WIFI_MGR_API_getAvailableSSIDs,
+			(void *)&param,
+			sizeof(IARM_Bus_WiFiSrvMgr_SsidList_Param_t),
+			timeout);
 
 	if (iarmResult != IARM_RESULT_SUCCESS || !(param.status)) {
 
@@ -551,10 +524,15 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_GetAvailableSSIDs(IN const Json::Val
 	    if (0 >= param.curSsids.jdataLen) {
 	        response["details"] = "No SSIDs are available";
 	    }
-	    else {     
+	    else {
+		char outputDetails[WIFI_MAX_DATA_LEN] = {'\0'};
+
 	        memcpy (ssidList, param.curSsids.jdata, param.curSsids.jdataLen);
-	        DEBUG_PRINT (DEBUG_TRACE, "Available SSIDs for Wifi Service Manager : %s\n", param.curSsids.jdata); 
-	        response["details"] = ssidList;
+
+	        DEBUG_PRINT (DEBUG_TRACE, "Available SSIDs list length [%d] and data : %s\n",  param.curSsids.jdataLen, param.curSsids.jdata);
+		sprintf(outputDetails, "%d", param.curSsids.jdataLen);
+
+	        response["details"] = outputDetails;
 	    }
 	}
     }
@@ -762,7 +740,7 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_GetPairedSSID(IN const Json::Value& 
 	    		          sizeof(IARM_Bus_WiFiSrvMgr_Param_t),
 	    		          (void**)&param);
 
-	if((iarmResult != IARM_RESULT_SUCCESS) || !(param->status)) {
+	if(iarmResult != IARM_RESULT_SUCCESS) {
 
 	    DEBUG_PRINT (DEBUG_ERROR, "Error allocating memory for getting paired SSID for wifi manager\n");
 	    response["result"] = "FAILURE";
@@ -777,7 +755,7 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_GetPairedSSID(IN const Json::Value& 
 				        sizeof(IARM_Bus_WiFiSrvMgr_Param_t));
 		
 
-	    if (iarmResult != IARM_RESULT_SUCCESS) {
+	    if ((iarmResult != IARM_RESULT_SUCCESS) || !(param->status)) {
 
 		DEBUG_PRINT (DEBUG_ERROR, "IARM_Bus_Call to GetPairedSSID of wifi manager failed\n");
 		response["result"] = "FAILURE";
@@ -1902,4 +1880,57 @@ void NetSrvMgrAgent::NetSrvMgrAgent_NetSrvMgr_FunctionCall (IN const Json::Value
     DEBUG_PRINT (DEBUG_LOG, "[%s] Exit\n", methodName);
 
     return;
+}
+
+/**************************************************************************
+ * Function name : NetSrvMgrAgent_WifiMgr_GetAvailableSSIDWithName
+ *
+ * Arguments     : Input argument None.
+ *                 Output argument is "SUCCESS" or "FAILURE" based on SSIDs.
+ *
+ * Description   : Retrieve SSID detail from Wifi Service Manager and
+ *                 pass it to Test Manager.
+ **************************************************************************/
+
+void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_getAvailableSSIDWithName(IN const Json::Value& req, OUT Json::Value& response) {
+
+     char outputDetails[WIFI_MAX_DATA_LEN] = {'\0'};
+     int timeout = 10000;
+
+     IARM_Result_t iarmResult = IARM_RESULT_SUCCESS;
+     IARM_Bus_WiFiSrvMgr_SpecificSsidList_Param_t param;
+
+     DEBUG_PRINT (DEBUG_LOG, "[%s] Entered\n", __func__);
+
+     memset(&param, 0, sizeof(param));
+
+     strcpy(param.SSID, (&req["ssid"])?req["ssid"].asCString():"");
+     param.frequency = (double)req["frequency"].asInt();
+
+     DEBUG_PRINT (DEBUG_TRACE,"SSID : %s, Freq %ld\n", param.SSID, param.frequency);
+
+     iarmResult = IARM_Bus_Call_with_IPCTimeout(IARM_BUS_NM_SRV_MGR_NAME,
+		     IARM_BUS_WIFI_MGR_API_getAvailableSSIDsWithName,
+		     (void *)&param,
+		     sizeof(IARM_Bus_WiFiSrvMgr_SpecificSsidList_Param_t),
+		     timeout);
+
+     if(iarmResult == IARM_RESULT_SUCCESS && param.status)
+     {
+	 DEBUG_PRINT (DEBUG_TRACE, "[\n[%s (with Message size: %d)]:\n %s \n '. \n", IARM_BUS_WIFI_MGR_API_getAvailableSSIDsWithName, param.curSsids.jdataLen, param.curSsids.jdata);
+	 strncpy(outputDetails, param.curSsids.jdata, param.curSsids.jdataLen);
+
+	 response["result"] = "SUCCESS";
+	 response["details"] = outputDetails;
+     }
+     else
+     {
+	 DEBUG_PRINT (DEBUG_ERROR, "Failed : %s\n", __func__);
+	 response["result"] = "FAILURE";
+	 response["details"] = "getAvailableSSIDWithName failed";
+     }
+
+     DEBUG_PRINT (DEBUG_LOG, "[%s] Exit\n", __func__);
+
+     return;
 }
