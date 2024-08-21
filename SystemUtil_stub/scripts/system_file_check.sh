@@ -227,11 +227,37 @@ Unwanted_lib_check()
 # Read config file
 read_config
 
-# Perform date check
-check_file_dates
-
-Library_check
-
-binary_check
-
-Unwanted_lib_check
+# Check for the function name argument and call the corresponding function
+if [[ $# -eq 0 ]]; then
+    # Execute all functions if no argument is provided
+    check_file_dates
+    Library_check
+    binary_check
+    Unwanted_lib_check
+else
+    case $1 in
+        check_file_dates)
+            check_file_dates
+            ;;
+        Library_check)
+            Library_check
+            ;;
+        binary_check)
+            binary_check
+            ;;
+        Unwanted_lib_check)
+            Unwanted_lib_check
+            ;;
+        all)
+            check_file_dates
+            Library_check
+            binary_check
+            Unwanted_lib_check
+            ;;
+        *)
+            echo "Error: Invalid function name '$1'"
+            echo "Usage: $0 {check_file_dates|Library_check|binary_check|Unwanted_lib_check|all}"
+            exit 1
+            ;;
+    esac
+fi
