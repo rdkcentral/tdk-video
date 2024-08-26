@@ -138,6 +138,7 @@ bool use_westerossink_fps = true;
 bool use_audioSink = true;
 gint flags;
 bool ignorePlayJump = false;
+bool ignoreEOS = false;
 bool buffering_flag = true;
 bool checkAudioSamplingrate = false;
 int sampling_rate = 0;
@@ -721,6 +722,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     // Get some parameters initially from pipeline
     if (data->pipelineInitiation)
     {
+	printf("\n Entering to Pipeline Initiation\n");
         assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position");
 	data->pipelineInitiation = false;
     }
@@ -736,6 +738,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     // Get pipeline state
     assert_failure (data->playbin, gst_element_get_state (data->playbin, &(data->cur_state), NULL, 0) == GST_STATE_CHANGE_SUCCESS);
     GstBus *bus;
+    data->eosDetected = FALSE;
     bus = gst_element_get_bus (data->playbin);
 
     // seconds paramters for loop monitoring
@@ -752,7 +755,13 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	  * Break after executing the desired number of seconds
 	  */
          if (std::chrono::high_resolution_clock::now() - loopStart > std::chrono::seconds(seconds))
+	 {
+	      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - loopStart).count();
+
+              // Print the duration using printf
+              printf("\nBreaking Playback Validation loop after %02lld seconds\n", duration);
               break;
+	 }
      
 	 // Second Counter
 	 second_count = milliSeconds/1000;
@@ -764,7 +773,17 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
          }
 
 	 if (data->eosDetected == TRUE)
-	     break;
+         {
+             if (ignoreEOS)
+	     {
+	          printf("Not breaking even though EOS is detected");
+	     }
+	     else
+	     {
+	          printf("\nBreaking due to EOS detected\n");
+ 	          break;
+             }
+	 }
 
 
 	 /* Playback Position Validation
@@ -1805,6 +1824,7 @@ static gboolean read_data (MessageHandlerData * data)
   if ((bufferUnderflowTest) && (total_bytes_fed >= BYTES_THRESHOLD))
   {
      printf("\n reached BYTES_THRESHOLD %lld \n",BYTES_THRESHOLD);
+     printf("\n data->terminate = %d\n".data->terminate);
      if (data->terminate)
      {
 	 printf ("\nEmitting EOS");
@@ -3434,17 +3454,19 @@ GST_START_TEST (test_appsrc_underflow)
     assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
 
     data.app.offset = 0;
+    printf("\nSetting data.terminate as false\n");
+    data.terminate = false;
     while(read_data(&data));
     WaitForOperation;
 
     PlaybackValidation(&data,play_timeout);
 
-    if (checkSignalTest)
-	 goto EXIT;
     if (video_underflow_test)
 	 assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive buffer underflow signal");
     if (audio_underflow_test)
 	 assert_failure (data.playbin,audio_underflow_received_global == true, "Failed to receive buffer underflow signal");
+    if (checkSignalTest)
+         goto EXIT;
 
     BYTES_THRESHOLD *= 2;
     printf ("\nUpdating bytestThreshold to %lld",BYTES_THRESHOLD);
@@ -3452,6 +3474,7 @@ GST_START_TEST (test_appsrc_underflow)
     videoUnderflowReceived = false;
     audio_underflow_received_global = false;
     data.terminate = true;
+    ignoreEOS = false;
     while(read_data(&data));
 
     PlaybackValidation(&data,play_timeout);
@@ -4115,6 +4138,10 @@ int main (int argc, char **argv)
          	{
             	    ignorePlayJump = true;
          	}
+		if (strcmp ("ignoreEOS", argv[arg]) == 0)
+                {
+                    ignoreEOS = true;
+                }
 		if (strcmp ("buffering_flag=no", argv[arg]) == 0)
                 {
                     buffering_flag = false;
