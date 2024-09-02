@@ -297,7 +297,7 @@ AC_ARG_ENABLE([defaultComponents],
               yes) DefaultComponents=true
 		   SUBDIR_DEFAULT=" agent IARMBUS_stub DS_stub RDKLogger_stub AAMP_stub MediaPipelineTests_stub Apparmor_Stub SystemUtil_stub DSHal_stub ";;
              no) DefaultComponents=false 
-		   SUBDIR_DEFAULT="  agent DSHal_stub MediaPipelineTests_stub SystemUtil_stub AAMP_stub DS_stub "
+		   SUBDIR_DEFAULT="  agent IARMBUS_stub DSHal_stub MediaPipelineTests_stub SystemUtil_stub AAMP_stub DS_stub "
 		   SUBDIR_HYBRID=" "
 		   SUBDIR_CLIENT=" ";;
             *) AC_MSG_ERROR([bad value ${enableval} for --enable-defaultComponents ]) ;;
