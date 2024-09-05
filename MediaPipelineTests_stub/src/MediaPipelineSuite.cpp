@@ -1824,7 +1824,7 @@ static gboolean read_data (MessageHandlerData * data)
   if ((bufferUnderflowTest) && (total_bytes_fed >= BYTES_THRESHOLD))
   {
      printf("\n reached BYTES_THRESHOLD %lld \n",BYTES_THRESHOLD);
-     printf("\n data->terminate = %d\n".data->terminate);
+     printf("\n data->terminate = %d\n",data->terminate);
      if (data->terminate)
      {
 	 printf ("\nEmitting EOS");
