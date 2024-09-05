@@ -75,6 +75,7 @@ public:
         this->bindAndAddMethod(Procedure("TestMgr_NetSrvMgr_WifiMgrSetGetParameters", PARAMS_BY_NAME,JSON_STRING,"method_name",JSON_STRING,"new_mode",JSON_INTEGER,"enable",JSON_INTEGER,"ssid",JSON_STRING,"passphrase",JSON_STRING,"security_mode",JSON_INTEGER,NULL), &NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_SetGetParameters);
         this->bindAndAddMethod(Procedure("TestMgr_NetSrvMgrAgent_WifiMgr_BroadcastEvent", PARAMS_BY_NAME, JSON_STRING,"owner",JSON_STRING,"event_id",JSON_INTEGER,"event_log",JSON_STRING,"key_code",JSON_INTEGER,"key_type",JSON_INTEGER,"isFP",JSON_INTEGER,"value",JSON_INTEGER, NULL), &NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_BroadcastEvent);
 	this->bindAndAddMethod(Procedure("TestMgr_NetSrvMgr_FunctionCall", PARAMS_BY_NAME,JSON_STRING,"method_name",JSON_STRING,"interface",JSON_STRING,"ipversion",JSON_STRING,"family",JSON_STRING,NULL), &NetSrvMgrAgent::NetSrvMgrAgent_NetSrvMgr_FunctionCall);
+	this->bindAndAddMethod(Procedure("TestMgr_WifiMgr_getAvailableSSIDWithName", PARAMS_BY_NAME, JSON_STRING, "ssid", JSON_STRING, "frequency", JSON_INTEGER, NULL), &NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_getAvailableSSIDWithName);
     }
 
 private:
@@ -118,6 +119,7 @@ public:
     void NetSrvMgrAgent_WifiMgr_SetGetParameters (IN const Json::Value& req, OUT Json::Value& response);
     void NetSrvMgrAgent_WifiMgr_BroadcastEvent (IN const Json::Value& req, OUT Json::Value& response);
     void NetSrvMgrAgent_NetSrvMgr_FunctionCall (IN const Json::Value& req, OUT Json::Value& response);
+    void NetSrvMgrAgent_WifiMgr_getAvailableSSIDWithName (IN const Json::Value& req, OUT Json::Value& response);
 };
 
 //extern "C" NetSrvMgrAgent* CreateObject();
