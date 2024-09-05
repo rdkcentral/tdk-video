@@ -18,6 +18,25 @@
 */
 
 #include "DSHalAgent.h"
+
+/*Not available the below MS12 capability lists(from Volumeleveller to LEConfig) in the latest HAL header/interface file. 
+https://github.com/rdkcentral/rdk-halif-device_settings/blob/3.0.0/include/dsAVDTypes.h
+
+so, currently defining here based on the reference from VTS to unblock the script developments. 
+Need to remove this in future once its defined/added properly in the HAL header file. 
+*/
+typedef enum _dsMS12Capabilities {
+	MS12SUPPORT_Volumeleveller             = 0x08,  ///< MS12 Volume leveller
+	MS12SUPPORT_BassEnhancer               = 0x10,  ///< MS12 Bass Enhancer
+	MS12SUPPORT_SurroundDecoder            = 0x20,  ///< MS12 Surround Decoder
+	MS12SUPPORT_DRCMode                    = 0x40,  ///< MS12 DRC Mode
+	MS12SUPPORT_SurroundVirtualizer        = 0x80,  ///< MS12 Surround Virtualizer
+	MS12SUPPORT_MISteering                 = 0x100, ///< MS12 MI Steering
+	MS12SUPPORT_GraphicEqualizer           = 0x200, ///< MS12 Graphic equalizer
+	MS12SUPPORT_LEConfig                   = 0x400, ///< MS12 LE config
+	MS12SUPPORT_Invalid		       = 0x800  ///< Invalid / Out of range
+} dsMS12Capabilities;
+
 /***************************************************************************
  *Function name : testmodulepre_requisites
  *Description   : testmodulepre_requisites will be used for setting the
@@ -464,6 +483,54 @@ void DSHalAgent::DSHal_GetAudioEncoding(IN const Json::Value& req, OUT Json::Val
         return;
     }
 }
+
+/***************************************************************************
+ *Function name : DSHal_SetAudioEncoding
+ *Description    : This function is to set the current audio encoding setting for the audio port
+ *****************************************************************************/
+void DSHalAgent::DSHal_SetAudioEncoding(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioEncoding --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+    if(&req["encoding"] == NULL)
+    {
+        return;
+    }
+
+    dsAudioEncoding_t encoding = (dsAudioEncoding_t) req["encoding"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+
+    ret = dsSetAudioEncoding(paramhandle, encoding);
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = encoding;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetAudioEncoding call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioEncoding -->Exit\n");
+    }
+    else
+    {
+        checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "Encoding setting not retrieved"+ error;
+        DEBUG_PRINT(DEBUG_TRACE1, "Encoding : %d\n",encoding);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetAudioEncoding call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioEncoding -->Exit\n");
+    }
+	return;
+}
+
 /***************************************************************************
  *Function name : DSHal_IsAudioPortEnabled
  *Description    : This function is to indicate whether the specified Audio port is enabled or not
@@ -496,6 +563,7 @@ void DSHalAgent::DSHal_IsAudioPortEnabled(IN const Json::Value& req, OUT Json::V
         return;
     }
 }
+
 /***************************************************************************
  *Function name : DSHal_EnableAudioPort
  *Description    : This function is to enable or disable the specified Audio port
@@ -3581,8 +3649,8 @@ void DSHalAgent::DSHal_EnableMS12Config(IN const Json::Value& req, OUT Json::Val
     {	
         response["result"] = "SUCCESS";
         response["details"] = "MS12: DAPV2 feature got enabled successfully";
-        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioFormat call is SUCCESS");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioFormat -->Exit\n");
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_EnableMS12Config call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
 	}
 	else
 	{
@@ -3592,6 +3660,1452 @@ void DSHalAgent::DSHal_EnableMS12Config(IN const Json::Value& req, OUT Json::Val
         DEBUG_PRINT(DEBUG_ERROR, "DSHal_EnableMS12Config call is FAILURE");
         DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
 	}	
+	return;
+}
+
+/*********************************************************************************************
+ *Function name : DSHal_IsSurroundDecoderEnabled
+ *Description    : This function is to get the enable/disable status of audio Surround Decoder
+ **********************************************************************************************/
+void DSHalAgent::DSHal_IsSurroundDecoderEnabled(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsSurroundDecoderEnabled --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+    bool enabled = 0;
+
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_IsSurroundDecoderEnabled handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsIsSurroundDecoderEnabled((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsIsSurroundDecoderEnabled((intptr_t)paramhandle, &enabled);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = enabled;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_IsSurroundDecoderEnabled call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsSurroundDecoderEnabled -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "Audio Surround Decoder status not retrieved "+ error;
+		DEBUG_PRINT(DEBUG_TRACE1, "Audio Surround Decoder Status : %d\n",enabled);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_IsSurroundDecoderEnabled call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsSurroundDecoderEnabled -->Exit\n");
+    }
+	return;
+}
+
+/************************************************************************************************************
+ *Function name : DSHal_EnableSurroundDecoder
+ *Description    : This function is to enable or disable audio surround decoder of the specified Audio port
+ ************************************************************************************************************/
+void DSHalAgent::DSHal_EnableSurroundDecoder(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableSurroundDecoder--->Entry\n");
+    if(&req["enable"] == NULL)
+    {
+        return;
+    }
+
+	int paramhandle = 0;
+    bool enable = req["enable"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    dsError_t ret = dsERR_NONE;
+
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsEnableSurroundDecoder((intptr_t)paramhandle, enable);
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "EnableSurroundDecoder call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_EnableSurroundDecoder call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableSurroundDecoder -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "EnableSurroundDecoder call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_EnableSurroundDecoder call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableSurroundDecoder -->Exit\n");
+    }
+	return;
+}
+
+/*******************************************************************************
+ *Function name : DSHal_GetMS12Capabilities
+ *Description    : This function is used to get the supported MS12 capabilities
+ ********************************************************************************/
+void DSHalAgent::DSHal_GetMS12Capabilities(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12Capabilities --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+    int audcapabilities = 0, paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12Capabilities handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetMS12Capabilities((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetMS12Capabilities((intptr_t)paramhandle, &audcapabilities);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+		std::string outputDetails;
+		
+		outputDetails += "   Platform supported MS12 Capabilities: ";
+		if(audcapabilities & dsMS12SUPPORT_NONE)
+		{
+			outputDetails += "   Not supported any audio types";
+		}
+		if(audcapabilities & dsMS12SUPPORT_DolbyVolume)
+		{
+			outputDetails += "   Dolby Volume,";
+		}		
+		if(audcapabilities & dsMS12SUPPORT_InteligentEqualizer)
+		{
+			outputDetails += "   Intelligent Equalizer,";
+		}
+		if(audcapabilities & dsMS12SUPPORT_DialogueEnhancer)
+		{
+			outputDetails += "   Dialogue Enhancer,";
+		}
+		if(audcapabilities & MS12SUPPORT_Volumeleveller)
+		{
+			outputDetails += "   Volume leveller,";
+		}
+		if(audcapabilities & MS12SUPPORT_BassEnhancer)
+		{
+			outputDetails += "   Bass Enhancer,";
+		}
+		if(audcapabilities & MS12SUPPORT_SurroundDecoder)
+		{
+			outputDetails += "   Surround Decoder,";
+		}
+		if(audcapabilities & MS12SUPPORT_DRCMode)
+		{
+			outputDetails += "   DRC Mode,";
+		}
+		if(audcapabilities & MS12SUPPORT_SurroundVirtualizer)
+		{
+			outputDetails += "   Surround Virtualizer,";
+		}
+		if(audcapabilities & MS12SUPPORT_MISteering)
+		{
+			outputDetails += "   MI Steering,";
+		}
+		if(audcapabilities & MS12SUPPORT_GraphicEqualizer)
+		{
+			outputDetails += "   Graphic equalizer,";
+		}
+		if(audcapabilities & MS12SUPPORT_LEConfig)
+		{
+			outputDetails += "   LE config,";
+		}
+		if(audcapabilities & MS12SUPPORT_Invalid)
+		{
+			outputDetails += "   Invalid/Out of range,";
+		}
+		DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12Capabilities %s\n", outputDetails);
+		
+        response["result"] = "SUCCESS";
+        response["details"] = outputDetails;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12Capabilities call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12Capabilities -->Exit\n");
+    }
+    else
+    {
+	checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "GetMS12Capabilities call failed"+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetMS12Capabilities call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12Capabilities -->Exit\n");
+    }	
+	return;
+}
+
+/************************************************************************************************
+ *Function name : DSHal_GetMISteering
+ *Description    : This function is used to get the Media Intelligent steering of the audio port
+ ************************************************************************************************/
+void DSHalAgent::DSHal_GetMISteering(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMISteering --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+    bool enabled = 0;
+
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+	if (Isnullparamcheck)
+	{
+		ret = dsGetMISteering((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetMISteering((intptr_t)paramhandle, &enabled);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details,"Media Intelligent Steering Enabled State : %d", enabled);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMISteering call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMISteering -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "dsGetMISteering call getting failed due to "+ error;
+		DEBUG_PRINT(DEBUG_TRACE1, "Audio Surround Decoder Status : %d\n",enabled);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetMISteering call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMISteering -->Exit\n");
+    }
+	return;
+}
+
+/********************************************************************************************
+ *Function name : DSHal_SetMISteering
+ *Description    : This function is to set the Media Intelligent steering of the audio port
+ ********************************************************************************************/
+void DSHalAgent::DSHal_SetMISteering(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetMISteering --->Entry\n");
+	if(&req["enable"] == NULL)
+    {
+        return;
+    }
+
+	int paramhandle = 0;
+    bool enable = req["enable"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    dsError_t ret = dsERR_NONE;
+
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetMISteering((intptr_t)paramhandle, enable);
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "SetMISteering call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetMISteering call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetMISteering -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetMISteering call failed "+ error;
+        DEBUG_PRINT(DEBUG_TRACE1, "Enable Status : %d\n",enable);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetMISteering call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetMISteering -->Exit\n");
+    }
+
+	return;
+}
+
+/********************************************************************************
+ *Function name : DSHal_GetMS12AudioProfileList
+ *Description    : This function is used to get the supported MS12 audio profiles
+ *********************************************************************************/
+void DSHalAgent::DSHal_GetMS12AudioProfileList(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfileList --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+	dsMS12AudioProfileList_t stAudioprofiles = { 0 };
+	char details[100];
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12AudioProfileList handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetMS12AudioProfileList((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetMS12AudioProfileList((intptr_t)paramhandle, &stAudioprofiles);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+		sprintf(details,"Audio profile count: %d, Profile lists: %s",stAudioprofiles.audioProfileCount,stAudioprofiles.audioProfileList);
+        response["result"] = "SUCCESS";
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12AudioProfileList call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfileList -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetMS12AudioProfileList call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetMS12AudioProfileList call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfileList -->Exit\n");
+    }	
+	return;
+}
+
+/**********************************************************************************
+ *Function name : DSHal_GetMS12AudioProfile
+ *Description    : This function is used to get the current audio profile selection
+ **********************************************************************************/
+void DSHalAgent::DSHal_GetMS12AudioProfile(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfile --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+	char strProfile[50] = {'\0'};
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12AudioProfile handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetMS12AudioProfile((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetMS12AudioProfile((intptr_t)paramhandle, strProfile);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = strProfile;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12AudioProfile call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfile -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetMS12AudioProfile call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetMS12AudioProfile call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfile -->Exit\n");
+    }	
+	return;
+}
+
+/*****************************************************************
+ *Function name : DSHal_SetMS12AudioProfile
+ *Description    : This function is to set the MS12 audio profile
+ *****************************************************************/
+void DSHalAgent::DSHal_SetMS12AudioProfile(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetMS12AudioProfile --->Entry\n");
+	int paramhandle = 0;
+	//char aud_profiles[50] = "Music,Movie,Sports,Entertainment";
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	char aud_profiles[50] = {'\0'};
+	dsError_t ret = dsERR_NONE;
+	
+	std::string audioprofile = req["audioprofile"].asCString();
+	strcpy(aud_profiles,audioprofile.c_str());
+	
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+	if (Isnullparamcheck)
+	{
+		ret = dsSetMS12AudioProfile((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsSetMS12AudioProfile((intptr_t)paramhandle, aud_profiles);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "SetMS12AudioProfile call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetMS12AudioProfile call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetMS12AudioProfile -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetMS12AudioProfile call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetMS12AudioProfile call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetMS12AudioProfile -->Exit\n");
+    }
+	return;
+}
+
+/*****************************************************************************************************
+ *Function name : DSHal_GetAssociatedAudioMixing
+ *Description    : This function is used to get the Associated Audio Mixing status - enabled/disabled
+ ******************************************************************************************************/
+void DSHalAgent::DSHal_GetAssociatedAudioMixing(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAssociatedAudioMixing --->Entry\n");
+    dsError_t ret = dsERR_NONE;
+	bool bAudioMixingStatus = 0;
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAssociatedAudioMixing handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAssociatedAudioMixing((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAssociatedAudioMixing((intptr_t)paramhandle, &bAudioMixingStatus);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = bAudioMixingStatus;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAssociatedAudioMixing call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAssociatedAudioMixing -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetAssociatedAudioMixing call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAssociatedAudioMixing call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAssociatedAudioMixing -->Exit\n");
+    }	
+	return;
+}
+
+/********************************************************************************************
+ *Function name : DSHal_SetAssociatedAudioMixing
+ *Description    : This function is used to enables/disables associated audio mixing feature
+ ********************************************************************************************/
+void DSHalAgent::DSHal_SetAssociatedAudioMixing(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAssociatedAudioMixing --->Entry\n");
+	
+	if(&req["enable"] == NULL)
+    {
+        return;
+    }
+
+	int paramhandle = 0;
+    bool enable = req["enable"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    dsError_t ret = dsERR_NONE;
+
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetAssociatedAudioMixing((intptr_t)paramhandle, enable);
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "SetAssociatedAudioMixing call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetAssociatedAudioMixing call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAssociatedAudioMixing -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetAssociatedAudioMixing call failed "+ error;
+        DEBUG_PRINT(DEBUG_TRACE1, "Audio mixing enable status : %d\n",enable);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetAssociatedAudioMixing call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAssociatedAudioMixing -->Exit\n");
+    }
+	return;
+}
+
+/*******************************************************************************************
+ *Function name : DSHal_GetAudioMaxDB
+ *Description    : This function is used to get the max db that the audio port can support
+ *******************************************************************************************/
+void DSHalAgent::DSHal_GetAudioMaxDB(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioMaxDB --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	float fMaxDb = 0.0;
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioMaxDB handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioMaxDB((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioMaxDB((intptr_t)paramhandle, &fMaxDb);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Maximum Db value that the audio port can support is : %f", fMaxDb);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioMaxDB call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioMaxDB -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetAudioMaxDB call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioMaxDB call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioMaxDB -->Exit\n");
+    }	
+	return;
+}
+
+/*******************************************************************************************
+ *Function name : DSHal_GetAudioMinDB
+ *Description    : This function is used to get the min db that the audio port can support
+ *******************************************************************************************/
+void DSHalAgent::DSHal_GetAudioMinDB(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioMinDB --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	float fMinDb = 0.0;
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioMinDB handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioMinDB((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioMinDB((intptr_t)paramhandle, &fMinDb);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Minimum Db value that the audio port can support is : %f", fMinDb);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioMinDB call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioMinDB -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetAudioMinDB call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioMinDB call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioMinDB -->Exit\n");
+    }	
+	return;
+}
+
+/***********************************************************************************************************************************
+ *Function name : DSHal_GetGraphicEqualizerMode
+ *Description    : This function is used to get the Graphic Equalizer Mode(0 = EQ OFF, 1 = EQ Open, 2 = EQ Rich and 3 = EQ Focused)
+ ***********************************************************************************************************************************/
+void DSHalAgent::DSHal_GetGraphicEqualizerMode(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetGraphicEqualizerMode --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	int EqlzrMode = 0, paramhandle = 0;
+  
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+	if (Isnullparamcheck)
+	{
+		ret = dsGetGraphicEqualizerMode((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetGraphicEqualizerMode((intptr_t)paramhandle, &EqlzrMode);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Received Graphic Equalizer mode : %d", EqlzrMode);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetGraphicEqualizerMode call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetGraphicEqualizerMode -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "dsGetGraphicEqualizerMode call getting failed due to "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetGraphicEqualizerMode call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetGraphicEqualizerMode -->Exit\n");
+    }
+	return;
+}
+
+/*****************************************************************************************************************************
+ *Function name : DSHal_SetGraphicEqualizerMode
+ *Description    : This function is to set the Graphic Equalizer Mode(0 = EQ OFF, 1 = EQ Open, 2 = EQ Rich and 3 = EQ Focused)
+ ******************************************************************************************************************************/
+void DSHalAgent::DSHal_SetGraphicEqualizerMode(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetGraphicEqualizerMode --->Entry\n");
+	int paramhandle = 0;
+	
+	if(&req["mode"] == NULL)
+    {
+        return;
+    }
+
+    int mode = (int) req["mode"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    dsError_t ret = dsERR_NONE;
+
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetGraphicEqualizerMode((intptr_t)paramhandle, mode);
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "SetGraphicEqualizerMode call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetGraphicEqualizerMode call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetGraphicEqualizerMode -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetGraphicEqualizerMode call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetGraphicEqualizerMode call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetGraphicEqualizerMode -->Exit\n");
+    }
+
+	return;
+}
+
+/********************************************************************************************************
+ *Function name : DSHal_GetSupportedARCTypes
+ *Description    : This function is used to get the supported ARC types of the connected ARC/eARC device
+ *********************************************************************************************************/
+void DSHalAgent::DSHal_GetSupportedARCTypes(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetSupportedARCTypes --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	int ArcTypes = 0, paramhandle = 0;
+  
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+	if (Isnullparamcheck)
+	{
+		ret = dsGetSupportedARCTypes((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetSupportedARCTypes((intptr_t)paramhandle, &ArcTypes);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Supported ARC Type : %d", ArcTypes);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetSupportedARCTypes call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetSupportedARCTypes -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "dsGetSupportedARCTypes call getting failed due to "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetSupportedARCTypes call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetSupportedARCTypes -->Exit\n");
+    }
+	return;
+}
+
+/**************************************************************************************************
+ *Function name : DSHal_AudioEnableARC
+ *Description    : This function is to enable/disable ARC/eARC and route audio to connected device
+ **************************************************************************************************/
+void DSHalAgent::DSHal_AudioEnableARC(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_AudioEnableARC--->Entry\n");
+ 	dsAudioARCStatus_t stARCStatus;
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+    dsAudioARCTypes_t arctype = (dsAudioARCTypes_t) req["ARCType"].asInt();
+	bool enable = req["enable"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    
+	stARCStatus.type = arctype;
+	stARCStatus.status = enable;
+	
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsAudioEnableARC(paramhandle, stARCStatus);
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "AudioEnableARC call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_AudioEnableARC call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_AudioEnableARC -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "AudioEnableARC call failed"+ error;
+        DEBUG_PRINT(DEBUG_TRACE1, "Port Status : %d\n",enable);
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_AudioEnableARC call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_AudioEnableARC -->Exit\n");
+    }
+	return;
+}
+
+/***********************************************************************************************************
+ *Function name : DSHal_GetStereoAuto
+ *Description    : This function is used to check if auto mode is enabled or not for the digital interfaces
+ ***********************************************************************************************************/
+void DSHalAgent::DSHal_GetStereoAuto(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetStereoAuto --->Entry\n");
+	char details[100];
+	int autoModeState = 0, paramhandle = 0;
+	dsError_t ret = dsERR_NONE;
+  
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+	if (Isnullparamcheck)
+	{
+		ret = dsGetStereoAuto((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetStereoAuto((intptr_t)paramhandle, &autoModeState);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Stereo Auto mode enabled state : %d", autoModeState);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetStereoAuto call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetStereoAuto -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "dsGetStereoAuto call getting failed due to "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetStereoAuto call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetStereoAuto -->Exit\n");
+    }
+	return;
+}
+
+/*******************************************************************************************
+ *Function name : DSHal_SetStereoAuto
+ *Description    : This function is used to Sets the Auto Mode to be used on the audio port
+ *******************************************************************************************/
+void DSHalAgent::DSHal_SetStereoAuto(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetStereoAuto--->Entry\n");
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+	int enable = req["automode"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetStereoAuto((intptr_t)paramhandle, enable);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "SetStereoAuto call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetStereoAuto call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetStereoAuto -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetStereoAuto call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetStereoAuto call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetStereoAuto -->Exit\n");
+    }
+	return;
+}
+
+/*******************************************************************************
+ *Function name : DSHal_GetAudioGain
+ *Description    : This function is used to get the audio gain of an audio port
+ *******************************************************************************/
+void DSHalAgent::DSHal_GetAudioGain(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioGain --->Entry\n");
+	char details[100];
+	int paramhandle = 0;
+	float audiogain = 0.0;
+	dsError_t ret = dsERR_NONE;
+  
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioGain((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioGain((intptr_t)paramhandle, &audiogain);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Audio gain value : %f", audiogain);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioGain call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioGain -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "dsGetAudioGain call getting failed due to "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioGain call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioGain -->Exit\n");
+    }
+	return;
+}
+
+/**********************************************************************************
+ *Function name : DSHal_SetAudioGain
+ *Description    : This function is used to Sets the audio gain of an audio port
+ **********************************************************************************/
+void DSHalAgent::DSHal_SetAudioGain(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioGain--->Entry\n");
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+	float audiogain = (float) req["audiogain"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetAudioGain((intptr_t)paramhandle, audiogain);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "DSHal_SetAudioGain call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetAudioGain call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioGain -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetAudioGain call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetAudioGain call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioGain -->Exit\n");
+    }
+	return;
+}
+
+/***************************************************************************************
+ *Function name : DSHal_GetAudioDB
+ *Description    : This function is used to get current audio dB level of an audio port
+ ***************************************************************************************/
+void DSHalAgent::DSHal_GetAudioDB(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioDB --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	float fAudiodB_level = 0.0;
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioDB handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioDB((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioDB((intptr_t)paramhandle, &fAudiodB_level);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Current audio dB audio level : %f", fAudiodB_level);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioDB call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioDB -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetAudioDB call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioDB call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioDB -->Exit\n");
+    }	
+	return;
+}
+
+/*******************************************************************************************
+ *Function name : DSHal_SetAudioDB
+ *Description    : This function is used to sets the current audio dB level of an audio port
+ ********************************************************************************************/
+void DSHalAgent::DSHal_SetAudioDB(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioDB--->Entry\n");
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+	float audiodBlevel = (float) req["audiodBlevel"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetAudioDB((intptr_t)paramhandle, audiodBlevel);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "DSHal_SetAudioDB call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetAudioDB call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioDB -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetAudioDB call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetAudioDB call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioDB -->Exit\n");
+    }
+	return;
+}
+
+/***********************************************************************************************
+ *Function name : DSHal_GetAudioLevel
+ *Description    : This function is used to get the current audio volume level of an audio port
+ ***********************************************************************************************/
+void DSHalAgent::DSHal_GetAudioLevel(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioLevel --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	float fAudiolevel = 0.0;
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioLevel handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioLevel((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioLevel((intptr_t)paramhandle, &fAudiolevel);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Current audio volume level : %f", fAudiolevel);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioLevel call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioLevel -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetAudioLevel call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioLevel call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioLevel -->Exit\n");
+    }	
+	return;
+}
+
+/*****************************************************************************************
+ *Function name : DSHal_SetAudioLevel
+ *Description    : This function is used to  Sets the audio volume level of an audio port
+ *****************************************************************************************/
+void DSHalAgent::DSHal_SetAudioLevel(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioLevel--->Entry\n");
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+	float audiolevel = (float) req["audiolevel"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetAudioLevel((intptr_t)paramhandle, audiolevel);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "DSHal_SetAudioLevel call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetAudioLevel call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioLevel -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetAudioLevel call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetAudioLevel call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioLevel -->Exit\n");
+    }
+	return;
+}
+
+/************************************************************************************
+ *Function name : DSHal_GetAudioOptimalLevel
+ *Description    : This function is used to get optimal audio level of an audio port
+ ************************************************************************************/
+void DSHalAgent::DSHal_GetAudioOptimalLevel(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioOptimalLevel --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	float fOptimalLevel = 0.0;
+    int paramhandle = 0;
+	
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioOptimalLevel handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsGetAudioOptimalLevel((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsGetAudioOptimalLevel((intptr_t)paramhandle, &fOptimalLevel);
+	}
+	
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Optimal audio level : %f", fOptimalLevel);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioOptimalLevel call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioOptimalLevel -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "DSHal_GetAudioOptimalLevel call failed "+error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_GetAudioOptimalLevel call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetAudioOptimalLevel -->Exit\n");
+    }	
+	return;
+}
+
+/*****************************************************************************************************
+ *Function name : DSHal_IsAudioLoopThru
+ *Description    : This function is to used to check if the audio port is configured for loop-through
+ *****************************************************************************************************/
+void DSHalAgent::DSHal_IsAudioLoopThru(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsAudioLoopThru --->Entry\n");
+	char details[100];
+	int paramhandle = 0;
+    dsError_t ret = dsERR_NONE;
+    bool enabled = 0;
+
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_IsAudioLoopThru handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsIsAudioLoopThru((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsIsAudioLoopThru((intptr_t)paramhandle, &enabled);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Configured state of audio port for loop-through is : %d", enabled);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_IsAudioLoopThru call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsAudioLoopThru -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "Audio loop-through check call getting failed due to "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_IsAudioLoopThru call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsAudioLoopThru -->Exit\n");
+    }
+	return;
+}
+
+/*****************************************************************************************
+ *Function name : DSHal_EnableLoopThru
+ *Description    : This function is used to  Sets the audio volume level of an audio port
+ *****************************************************************************************/
+void DSHalAgent::DSHal_EnableLoopThru(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableLoopThru--->Entry\n");
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+	int enableLoopThru = (int) req["enableLoopThru"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsEnableLoopThru((intptr_t)paramhandle, (bool)enableLoopThru);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "DSHal_EnableLoopThru call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_EnableLoopThru call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableLoopThru -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "EnableLoopThru call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_EnableLoopThru call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableLoopThru -->Exit\n");
+    }
+	return;
+}
+
+/**************************************************************************************************
+ *Function name : DSHal_IsAudioOutConnected
+ *Description    : This function is to used to check  if the audio output port is connected or not
+ **************************************************************************************************/
+void DSHalAgent::DSHal_IsAudioOutConnected(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsAudioOutConnected --->Entry\n");
+	char details[100];
+    dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+    bool Isconnected = 0;
+
+	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	DEBUG_PRINT(DEBUG_LOG, "DSHal_IsAudioOutConnected handle %d %d",paramhandle, apHandle );
+	if (Isnullparamcheck)
+	{
+		ret = dsAudioOutIsConnected((intptr_t)paramhandle, NULL);
+	}
+	else
+	{
+		ret = dsAudioOutIsConnected((intptr_t)paramhandle, &Isconnected);
+	}
+
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+		sprintf(details, "Audio port connected state : %d", Isconnected);
+        response["details"] = details;
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_IsAudioOutConnected call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsAudioOutConnected -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "dsAudioOutIsConnected call getting failed due to "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_IsAudioOutConnected call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsAudioOutConnected -->Exit\n");
+    }
+	return;
+}
+
+/***********************************************************************************************************
+ *Function name : DSHal_SetAudioMixerLevels
+ *Description    : This function is used to  Sets the Mixer Volume level of sink device for the given input
+ ***********************************************************************************************************/
+void DSHalAgent::DSHal_SetAudioMixerLevels(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioMixerLevels--->Entry\n");
+	dsError_t ret = dsERR_NONE;
+	int paramhandle = 0;
+
+	dsAudioInput_t aInput = (dsAudioInput_t) req["AudioInput"].asInt();
+	int audiolevel = (int) req["audiolevel"].asInt();
+	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+	if (IsHandleInvalid)
+	{
+		paramhandle = (int) req["paramhandle"].asInt();
+	}
+	else
+	{
+		paramhandle = (int)apHandle;
+	}
+	
+    ret = dsSetAudioMixerLevels((intptr_t)paramhandle, aInput, audiolevel);
+    if (ret == dsERR_NONE)
+    {
+        response["result"] = "SUCCESS";
+        response["details"] = "DSHal_SetAudioMixerLevels call success";
+        DEBUG_PRINT(DEBUG_LOG, "DSHal_SetAudioMixerLevels call is SUCCESS");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioMixerLevels -->Exit\n");
+    }
+    else
+    {
+		checkERROR(ret,&error);
+        response["result"] = "FAILURE";
+        response["details"] = "SetAudioMixerLevels call failed "+ error;
+        DEBUG_PRINT(DEBUG_ERROR, "DSHal_SetAudioMixerLevels call is FAILURE");
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal_SetAudioMixerLevels -->Exit\n");
+    }
 	return;
 }
 
