@@ -1044,10 +1044,10 @@ void AampAgent::AampGetPreferredLanguages(IN const Json::Value& req, OUT Json::V
 {
     DEBUG_PRINT (DEBUG_TRACE, "AampGetPreferredLanguages  Entry \n");
     char details[200];
-    const char *languages = mSingleton->GetPreferredLanguages();
-    if (languages != NULL){
-        DEBUG_PRINT (DEBUG_TRACE, "Preferred Languages: %s\n",languages);
-        sprintf(details,"Preferred Languages: %s",languages);
+    std::string languages = mSingleton->GetPreferredLanguages();
+    if (! languages.empty()){
+        DEBUG_PRINT (DEBUG_TRACE, "Preferred Languages: %s\n",languages.c_str());
+        sprintf(details,"Preferred Languages: %s",languages.c_str());
         response["result"] = "SUCCESS";
         response["details"] = details;
         DEBUG_PRINT (DEBUG_TRACE, "GetPreferredLanguages call is fine\n");
@@ -1401,7 +1401,7 @@ Description     : This function is used to get the current DRM
 void AampAgent::AampGetCurrentDRM(IN const Json::Value& req, OUT Json::Value& response)
 {
         DEBUG_PRINT (DEBUG_TRACE, "AampGetCurrentDRM Entry \n");
-        std::string drm = mSingleton->GetCurrentDRM();
+        std::string drm = mSingleton->GetDRM();
         if (!drm.empty())
         {
                 DEBUG_PRINT(DEBUG_LOG,"Current DRM retrieved %s\n", drm.c_str());

@@ -23,21 +23,9 @@
 #include "AampUtils.h"
 #include "AampCCManager.h"
 
-PlayerInstanceAAMP::PlayerInstanceAAMP(StreamSink* streamSink
-        , std::function< void(const unsigned char *, int, int, int) > exportFrames
-        ) : aamp(NULL), sp_aamp(nullptr), mJSBinding_DL(),mAsyncRunning(false),mConfig(),mAsyncTuneEnabled(false),mScheduler(), mLogObj()
-{
-        printf("\nDUMMY Constructor\n");
-}
-
 PlayerInstanceAAMP::~PlayerInstanceAAMP()
 {
 	printf("\nDUMMY Destructor\n");
-}
-
-void PlayerInstanceAAMP::ResetConfiguration()
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
 void PlayerInstanceAAMP::Stop(bool sendStateChangeEvent)
@@ -45,33 +33,13 @@ void PlayerInstanceAAMP::Stop(bool sendStateChangeEvent)
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-
 void PlayerInstanceAAMP::Tune(const char *mainManifestUrl, const char *contentType, bool bFirstAttempt,
                                 bool bFinalAttempt,const char *traceUUID,bool audioDecoderStreamSync)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-void PlayerInstanceAAMP::Tune(const char *mainManifestUrl,
-                                bool autoPlay,
-                                const char *contentType,
-                                bool bFirstAttempt,
-                                bool bFinalAttempt,
-                                const char *traceUUID,
-                                bool audioDecoderStreamSync,
-                                const char *refreshManifestUrl,
-                                int mpdStichingMod,
-                                std::string sid)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 void PlayerInstanceAAMP::detach()
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::RegisterEvent(AAMPEventType type, EventListener* listener)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
@@ -84,43 +52,6 @@ void PlayerInstanceAAMP::RegisterEvents(EventListener* eventListener)
 void PlayerInstanceAAMP::UnRegisterEvents(EventListener* eventListener)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetSegmentInjectFailCount(int value)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetSegmentDecryptFailCount(int value)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetInitialBufferDuration(int durationSec)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-int PlayerInstanceAAMP::GetInitialBufferDuration(void)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-	return 1;
-}
-
-void PlayerInstanceAAMP::SetMaxPlaylistCacheSize(int cacheSize)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetRampDownLimit(int limit)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-int PlayerInstanceAAMP::GetRampDownLimit(void)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-	return 1;
 }
 
 void PlayerInstanceAAMP::SetLanguageFormat(LangCodePreference preferredFormat, bool useRole)
@@ -163,40 +94,12 @@ void PlayerInstanceAAMP::SetRate(float rate,int overshootcorrection)
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-bool PlayerInstanceAAMP::SetUserAgent(std::string &userAgent)
-{
-	bool ret = false;
-	printf("\nDUMMY %s\n", __FUNCTION__);
-	return ret;
-}
-
-void PlayerInstanceAAMP::SetPlaybackSpeed (float speed)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetRateInternal(float rate,int overshootcorrection)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 void PlayerInstanceAAMP::PauseAt(double position)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-void PlayerInstanceAAMP::PauseAtInternal(double position)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 void PlayerInstanceAAMP::Seek(double secondsRelativeToTuneTime, bool keepPaused)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-
-void PlayerInstanceAAMP::SeekInternal(double secondsRelativeToTuneTime, bool keepPaused)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
@@ -246,26 +149,6 @@ void PlayerInstanceAAMP::SetLanguage(const char* language)
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-void PlayerInstanceAAMP::SetSubscribedTags(std::vector<std::string> subscribedTags)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SubscribeResponseHeaders(std::vector<std::string> responseHeaders)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::AddEventListener(AAMPEventType eventType, EventListener* eventListener)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::RemoveEventListener(AAMPEventType eventType, EventListener* eventListener)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 bool PlayerInstanceAAMP::IsLive()
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
@@ -280,7 +163,7 @@ const char* PlayerInstanceAAMP::GetCurrentAudioLanguage(void)
 	return lang;
 }
 
-const char* PlayerInstanceAAMP::GetCurrentDRM(void)
+std::string PlayerInstanceAAMP::GetDRM()
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 	return "NONE";
@@ -479,11 +362,6 @@ void PlayerInstanceAAMP::SetRetuneForUnpairedDiscontinuity(bool bValue)
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-void PlayerInstanceAAMP::SetRetuneForGSTInternalError(bool bValue)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 void PlayerInstanceAAMP::SetAlternateContents(const std::string &adBreakId, const std::string &adId, const std::string &url)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
@@ -574,11 +452,6 @@ void PlayerInstanceAAMP::SetAudioTrack(std::string language, std::string renditi
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 						
-void PlayerInstanceAAMP::SetAudioTrackInternal(std::string language,  std::string rendition, std::string type, std::string codec, unsigned int channel, std::string label)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 void PlayerInstanceAAMP::SetPreferredCodec(const char *codecList)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
@@ -617,7 +490,7 @@ DRMSystems PlayerInstanceAAMP::GetPreferredDRM()
 	return eDRM_NONE;
 }
 
-const char* PlayerInstanceAAMP::GetPreferredLanguages()
+std::string PlayerInstanceAAMP::GetPreferredLanguages()
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 	return NULL;
@@ -696,11 +569,6 @@ int PlayerInstanceAAMP::GetAudioTrack()
 }
 
 void PlayerInstanceAAMP::SetTextTrack(int trackId, char *ccData)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetTextTrackInternal(int trackId, char *data)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
@@ -806,11 +674,6 @@ void PlayerInstanceAAMP::PersistBitRateOverSeek(bool bValue)
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
-void PlayerInstanceAAMP::StopInternal(bool sendStateChangeEvent)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
 void PlayerInstanceAAMP::SetPausedBehavior(int behavior)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
@@ -827,30 +690,12 @@ void PlayerInstanceAAMP::SetRepairIframes(bool configState)
 
 }
 
-bool PlayerInstanceAAMP::InitAAMPConfig(char *jsonStr)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-	return false;
-}
-
-std::string PlayerInstanceAAMP::GetAAMPConfig()
-{
-	std::string jsonStr;
-	printf("\nDUMMY %s\n", __FUNCTION__);
-	return jsonStr;
-}
-
 void PlayerInstanceAAMP::XRESupportedTune(bool xreSupported)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
 
 void PlayerInstanceAAMP::SetAuxiliaryLanguage(const std::string &language)
-{
-	printf("\nDUMMY %s\n", __FUNCTION__);
-}
-
-void PlayerInstanceAAMP::SetAuxiliaryLanguageInternal(const std::string &language)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
 }
