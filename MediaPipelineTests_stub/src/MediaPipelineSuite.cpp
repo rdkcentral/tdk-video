@@ -33,6 +33,8 @@
 #include <stdexcept>
 #include <sys/stat.h>
 #include <gst/audio/audio.h>
+#include "tinyxml2.h"
+
 
 extern "C"
 {
@@ -41,6 +43,7 @@ extern "C"
 }
 
 using namespace std;
+using namespace tinyxml2;
 
 
 #define PAUSE_TIMEOUT                   5
@@ -78,6 +81,7 @@ using namespace std;
 #define PROGRESS_BAR_WIDTH              50
 #define CHUNK_SIZE                      4096
 #define PROGRESS_BAR_DISPLAY_INTERVAL   5 //seconds 
+#define resolution_count		3
 
 char m_play_url[BUFFER_SIZE_LONG] = {'\0'};
 char tcname[BUFFER_SIZE_SHORT] = {'\0'};
@@ -91,6 +95,7 @@ vector<string> operationsList;
  */
 
 bool checkAVStatus = false;
+bool Switch_up = false;
 bool checkPTS = true;
 bool bufferUnderflowTest = false;
 bool checkSignalTest = true;
@@ -168,6 +173,8 @@ bool video_underflow_test = false;
 bool audio_underflow_test = false;
 bool forceAudioSink = false;
 bool seek_with_pause = false;
+guint bandwidth;
+GstElement *dash_demux;
 
 /*
  * Playbin flags
@@ -253,6 +260,7 @@ typedef struct CustomData {
     gint current_video;                 /* Currently playing video streams */
     gint current_text;                  /* Currently playing text stream */
     gint current_audio;                 /* Currently playing audio stream */
+    guint current_bandwidth;
 } MessageHandlerData;
 
 /*
@@ -1151,8 +1159,143 @@ static void elementSetupCallback (GstElement* playbin, GstElement* element, Mess
 	rtk = true;
         g_signal_connect( element, "buffer-underflow-callback", G_CALLBACK(AudioUndeflowCallback), &audio_underflow_received);
     }
+    if (g_str_has_prefix(GST_ELEMENT_NAME(element), "dashdemux"))
+    {
+	g_print ("\nGot Dashdemux\n");
+        dash_demux = element;
+	if ( data->current_bandwidth > 0 )
+            g_object_set(G_OBJECT(element), "max-bitrate", data->current_bandwidth, NULL);
+    }
+
+
 
 }
+
+
+// Helper function to write downloaded data into a string
+size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) 
+{
+    userp->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+
+
+/******************************************************************************************************************
+ * Purpose:            Funtion to parse the manifest file
+ *****************************************************************************************************************/
+
+
+bool parse_mpd(const string& m_play_url, vector<pair<unsigned int, unsigned int>>& resolutions)
+{
+    // Create a TinyXML-2 XMLDocument object
+    XMLDocument doc;
+    string mpdFile = m_play_url;
+    XMLError eResult;
+
+    // Check and remove "file:" prefix if present in the URL
+    const string file_prefix = "file:";
+    bool is_local_file = true;
+
+    if (mpdFile.find(file_prefix) == 0)
+    {
+        mpdFile = mpdFile.substr(file_prefix.length());
+    }
+    else if (mpdFile.find("http://") == 0 || mpdFile.find("https://") == 0)
+    {
+        // It's an online stream, so download the MPD file
+        is_local_file = false;
+        CURL* curl;
+        CURLcode res;
+        std::string mpd_content;
+        curl = curl_easy_init();
+        if (curl)
+        {
+            curl_easy_setopt(curl, CURLOPT_URL, mpdFile.c_str());
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &mpd_content);
+
+            // Perform the request, res will get the return code
+            res = curl_easy_perform(curl);
+            if (res != CURLE_OK)
+            {
+                cerr << "Failed to download MPD file: " << curl_easy_strerror(res) << endl;
+
+                curl_easy_cleanup(curl);
+                return false;
+            }
+            curl_easy_cleanup(curl);
+
+            // Parse the downloaded MPD content
+            eResult = doc.Parse(mpd_content.c_str());
+        }
+    }
+
+    // Load the MPD XML file if it's a local file
+    if (is_local_file)
+    {
+        eResult = doc.LoadFile(mpdFile.c_str());
+    }
+
+    if (eResult != XML_SUCCESS)
+    {
+        cerr << "Failed to load MPD file: " << doc.ErrorName() << endl;
+        return false;
+    }
+
+    // Get the root element (MPD)
+    XMLElement* mpd = doc.FirstChildElement("MPD");
+    if (mpd == nullptr)
+    {
+        cerr << "No MPD element found." << endl;
+        return false;
+    }
+
+    // Iterate over Period elements
+    XMLElement* period = mpd->FirstChildElement("Period");
+    while (period != nullptr)
+    {
+        // Iterate over AdaptationSet elements
+        XMLElement* adaptationSet = period->FirstChildElement("AdaptationSet");
+        while (adaptationSet != nullptr)
+        {
+            const char* contentType = adaptationSet->Attribute("contentType");
+            if ((contentType && strcmp(contentType, "video") == 0) || ( ! contentType))
+            { 
+                XMLElement* representation = adaptationSet->FirstChildElement("Representation");
+                while (representation != nullptr)
+                {
+		    const char* mimeType = representation->Attribute("mimeType");
+		    if ((mimeType && strcmp(mimeType, "video/mp4") == 0) || ( ! mimeType))
+		    {
+                    	const char* height_str = representation->Attribute("height");
+                    	const char* bandwidth_str = representation->Attribute("bandwidth");
+
+                    	if (height_str && bandwidth_str)
+                    	{
+                        	unsigned int height = (unsigned int)atoi(height_str);
+	                        unsigned int bandwidth = (unsigned int)atoi(bandwidth_str);
+	
+        	                // Push height and bandwidth into the resolutions vector
+                	        resolutions.push_back(make_pair(height, bandwidth));
+
+                        	// Debugging print
+                        	printf("Parsed Height: %u, Bandwidth: %u\n", height, bandwidth);
+                    	}
+		    }
+                    representation = representation->NextSiblingElement("Representation");
+		}
+	    }
+            
+            adaptationSet = adaptationSet->NextSiblingElement("AdaptationSet");
+        }
+        period = period->NextSiblingElement("Period");
+    }
+    return true;
+}
+
+
+
 
 /* Print all propeties of the stream represented in the tag */
 static void printTag (const GstTagList *tags, const gchar *tag, gpointer user_data)
@@ -2019,6 +2162,7 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
     data->pipelineInitiation = true;
     data->westerosSink.previous_rendered_frames = 0;
     data->audioSink.previous_rendered_frames = 0;
+    data->current_bandwidth = 0;
 
     /*
      * Set playbin to PLAYING
@@ -3603,9 +3747,102 @@ GST_START_TEST (test_audio_volume)
 }
 GST_END_TEST;
 
+bool compare_resolutions(const pair<unsigned int, unsigned int>& res1, const pair<unsigned int, unsigned int>& res2) {
+    if (res1.second == res2.second) 
+    {
+	    if (Switch_up)
+	    {
+	        return res1.first < res2.first;  // Sort by width if heights are equal
+	    }
+	    else
+	    {
+		return res1.first > res2.first;
+	    }
+    }
+    if (Switch_up)
+    {
+        return res1.second < res2.second;  // Sort by height otherwise
+    }
+    else
+    {
+        return res1.first > res2.first;
+    }
+}
 
+GST_START_TEST(test_bitrate_switch)
+{
+    // Setup the pipeline
+    MessageHandlerData data;
+    SetupPipeline(&data);
 
+    // Vector to store the resolutions (height, bandwidth) parsed from the MPD
+    vector<pair<unsigned int, unsigned int>> resolutions;
 
+    // Call the parse_mpd function, which will populate the resolutions vector
+    assert_failure(data.playbin, parse_mpd(m_play_url, resolutions), "\nError in parsing MPD file");  // m_play_url is passed here
+
+    // Check if any resolutions were parsed
+    if (resolutions.empty()) {
+        printf("Error: No resolutions parsed from MPD file\n");
+        return;
+
+    }
+
+    unsigned int height_before = 0;
+    // Loop through the parsed resolutions (height, bandwidth pairs)
+    sort(resolutions.begin(), resolutions.end(), compare_resolutions);
+    int i=1;
+    for (const auto& res : resolutions) {
+	unsigned int height_str = res.first;
+	unsigned int bandwidth_str = res.second;
+
+        unsigned int bandwidth = bandwidth_str;
+
+        // Print the parsed height and bandwidth
+        printf("\nHeight: %u, Bandwidth: %u\n", height_str, bandwidth_str);
+	if (height_before > 0)
+            printf("Height before flush: %u, Bandwidth to set: %u\n", height_before, bandwidth);
+	height_before = height_str;
+
+        // Set the current bandwidth in the data structure
+        data.current_bandwidth = bandwidth;
+
+        // Simulate flush operation
+	g_object_set(G_OBJECT(dash_demux), "max-bitrate", data.current_bandwidth, NULL);
+        flushPipeline(&data);
+	if (checkNewPlay)
+            PlaybackValidation(&data,play_timeout);
+        else
+            PlaySeconds(data.playbin,play_timeout);
+	
+
+        // Assume height remains unchanged after flush for validation
+	unsigned int height_after;
+	g_object_get (data.westerosSink.sink, "video-height", &height_after, NULL);
+
+        // Check if the height is the same before and after flush
+        if (height_before == height_after) 
+	{
+            printf("SUCCESS: Height remained the same after flush: %u\n", height_after);
+        }
+       	else 
+	{
+	    printf("FAILURE: Height changed after flush. Before: %u, After: %u\n", height_before, height_after);
+	    assert_failure (data.playbin, false, "Resolution is not obtained as expected");
+        }
+	i++;
+	if (i > resolution_count)
+	    break;
+	
+    }
+    if (data.playbin)
+    {
+	    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
+    }
+
+    gst_object_unref (data.playbin);
+}
+GST_END_TEST;
 
 
 
@@ -3793,6 +4030,20 @@ media_pipeline_suite (void)
     {
        only_audio = true;
        tcase_add_test (tc_chain, test_playback_duration);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_bitrate_switch_up", tcname) == 0)
+    {
+       tcase_add_test (tc_chain, test_bitrate_switch);
+       Switch_up = true;
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_bitrate_switch_down", tcname) == 0)
+    {
+       tcase_add_test (tc_chain, test_bitrate_switch);
+       Switch_up = false;
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
@@ -4026,7 +4277,9 @@ int main (int argc, char **argv)
 	    (strcmp ("test_audio_volume_stress", tcname) == 0) ||
 	    (strcmp ("test_playback_duration", tcname) == 0) ||
 	    (strcmp ("test_channel_change_playback", tcname) == 0) ||
-	    (strcmp ("test_audio_duration", tcname) == 0))
+	    (strcmp ("test_audio_duration", tcname) == 0) || 
+	    (strcmp ("test_bitrate_switch_down", tcname) == 0) || 
+	    (strcmp ("test_bitrate_switch_up", tcname) ==0))
 	{
 	    strcpy(m_play_url,argv[2]);
 
