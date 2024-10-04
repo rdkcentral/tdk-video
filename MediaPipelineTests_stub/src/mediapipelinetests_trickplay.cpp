@@ -95,6 +95,8 @@ bool checkEachSecondPTS = false;
 bool justPrintPTS = false;
 bool use_westerossink_fps = true;
 bool checkNewPlay = false;
+bool only_audio = false;
+bool only_video = false;
 
 /*
  * Playbin flags
@@ -237,6 +239,13 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=fa
    g_object_get (playbin,"video-sink",&videoSink,NULL);
 
    gst_element_get_state (playbin, &cur_state, NULL, (GST_SECOND));
+
+   if (only_audio)
+   {
+        checkPTS=false;
+        use_westerossink_fps=false;
+   }
+
 
    if (checkPTS)
    {	   
@@ -405,6 +414,13 @@ void PlaybackValidation(MessageHandlerData *data, int seconds, bool seekOperatio
     gdouble current_rate;
     gboolean video_frames_zero = false;
     gboolean video_pts_zero = false;
+
+    if (only_audio)
+    {
+         checkPTS=false;
+         use_westerossink_fps=false;
+    }
+
     // Get some parameters initially from pipeline
     if (data->pipelineInitiation)
     {
@@ -1064,7 +1080,7 @@ static void SetupStream (MessageHandlerData *data)
     /*
      * Check if the first frame received flag is set
      */
-    assert_failure (data->playbin, (firstFrameReceived == true), "Failed to receive first video frame signal");
+    assert_failure (data->playbin, (only_audio) ||  (firstFrameReceived == true), "Failed to receive first video frame signal");
     if (checkNewPlay)
         PlaybackValidation(data,5);
     else
@@ -1547,6 +1563,10 @@ int main (int argc, char **argv)
          {
             checkEachSecondPTS = true;
          }
+	 if (strcmp ("only_audio", argv[arg]) == 0)
+	 {
+            only_audio = true;  		
+	 }
     }
     gst_check_init (&argc, &argv);
 
