@@ -150,8 +150,6 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetMS12AudioProfile", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetMS12AudioProfile);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAssociatedAudioMixing", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAssociatedAudioMixing);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetAssociatedAudioMixing", PARAMS_BY_NAME, JSON_STRING, "enable", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_SetAssociatedAudioMixing);
-                    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAudioMaxDB", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAudioMaxDB);
-                    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAudioMinDB", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAudioMinDB);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetGraphicEqualizerMode", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetGraphicEqualizerMode);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetGraphicEqualizerMode", PARAMS_BY_NAME, JSON_STRING, "mode", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_SetGraphicEqualizerMode);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetSupportedARCTypes", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetSupportedARCTypes);
@@ -164,7 +162,6 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetAudioDB", PARAMS_BY_NAME, JSON_STRING, "audiodBlevel", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_SetAudioDB);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAudioLevel", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAudioLevel);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_SetAudioLevel", PARAMS_BY_NAME, JSON_STRING, "audiolevel", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_SetAudioLevel);
-                    this->bindAndAddMethod(Procedure("TestMgr_DSHal_GetAudioOptimalLevel", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_GetAudioOptimalLevel);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_IsAudioLoopThru", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_IsAudioLoopThru);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_EnableLoopThru", PARAMS_BY_NAME, JSON_STRING, "enableLoopThru", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_EnableLoopThru);
                     this->bindAndAddMethod(Procedure("TestMgr_DSHal_IsAudioOutConnected", PARAMS_BY_NAME, JSON_STRING, "Isnullparamcheck", JSON_INTEGER, "IsHandleInvalid", JSON_INTEGER, "paramhandle", JSON_INTEGER, NULL), &DSHalAgent::DSHal_IsAudioOutConnected);
@@ -274,8 +271,6 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                 void DSHal_GetMS12AudioProfile(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetAssociatedAudioMixing(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_SetAssociatedAudioMixing(IN const Json::Value& req, OUT Json::Value& response);
-                void DSHal_GetAudioMaxDB(IN const Json::Value& req, OUT Json::Value& response);
-                void DSHal_GetAudioMinDB(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetGraphicEqualizerMode(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_SetGraphicEqualizerMode(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetSupportedARCTypes(IN const Json::Value& req, OUT Json::Value& response);
@@ -288,7 +283,6 @@ class DSHalAgent : public RDKTestStubInterface , public AbstractServer<DSHalAgen
                 void DSHal_SetAudioDB(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_SetAudioLevel(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_GetAudioLevel(IN const Json::Value& req, OUT Json::Value& response);
-                void DSHal_GetAudioOptimalLevel(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_IsAudioLoopThru(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_EnableLoopThru(IN const Json::Value& req, OUT Json::Value& response);
                 void DSHal_IsAudioOutConnected(IN const Json::Value& req, OUT Json::Value& response);
