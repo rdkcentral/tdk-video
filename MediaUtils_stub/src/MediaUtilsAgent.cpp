@@ -257,7 +257,7 @@ void MediaUtilsAgent::MediaUtils_AudioCapture_Open(IN const Json::Value& req, OU
 void MediaUtilsAgent::MediaUtils_Get_DefaultSettings(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT(DEBUG_TRACE, "MediaUtils_Get_DefaultSettings --->Entry\n");
-    int returnStatus = 0;
+    rmf_Error returnStatus = RMF_ERROR;
 	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
 	
 	if(Isnullparamcheck)
@@ -301,7 +301,7 @@ void MediaUtilsAgent::MediaUtils_Get_DefaultSettings(IN const Json::Value& req, 
 void MediaUtilsAgent::MediaUtils_Get_Current_Settings(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT(DEBUG_TRACE, "MediaUtils_GetCurrentSettings --->Entry\n");
-    int returnStatus = 0;
+    rmf_Error returnStatus = RMF_ERROR;
     paramHandle = req["paramHandle"].asCString();
 	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
 	
@@ -359,7 +359,8 @@ void MediaUtilsAgent::MediaUtils_Get_Current_Settings(IN const Json::Value& req,
 void MediaUtilsAgent::MediaUtils_Get_Status(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT(DEBUG_TRACE, "MediaUtils_GetStatus --->Entry\n");
-    int returnStatus = 0, paramhandle = 0;
+    rmf_Error returnStatus = RMF_ERROR;
+    int  paramhandle = 0;
 	
 	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
 	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
@@ -425,7 +426,7 @@ void MediaUtilsAgent::MediaUtils_AudioCaptureStart(IN const Json::Value& req, OU
     settings.cbBufferReadyParm  = &appData;
     settings.samplingFreq = racFreq_e48000;
     
-    int returnStatus;
+    rmf_Error returnStatus;
 
     string paramHandle, paramBufferReady,paramFifosize;
     paramBufferReady = req["paramBufferReady"].asCString();
@@ -508,7 +509,7 @@ void MediaUtilsAgent::MediaUtils_AudioCaptureStart(IN const Json::Value& req, OU
 void MediaUtilsAgent::MediaUtils_AudioCaptureStop(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT(DEBUG_TRACE, "MediaUtils_AudioCaptureStop --->Entry\n");
-    int returnStatus;
+    rmf_Error returnStatus;
     paramHandle = req["paramHandle"].asCString();
     if(paramHandle == "NULL")
 	{

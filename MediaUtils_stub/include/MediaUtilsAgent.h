@@ -26,7 +26,6 @@
 #include "rdkteststubintf.h"
 #include "rdktestagentintf.h"
 #include "rmfAudioCapture.h"
-#include "rmf_error.h"
 #include <iostream>
 #include <stddef.h>
 #include <string>
