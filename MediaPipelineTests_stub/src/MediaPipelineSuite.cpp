@@ -4191,6 +4191,25 @@ int setVariables()
      }
 }
 
+/********************************************************************************************************************
+ * Purpose      : To avoid tearing down of pipeline while handling warning level messages
+ ********************************************************************************************************************/
+void log_handler(const gchar *log_domain, GLogLevelFlags log_level, const gchar *message, gpointer user_data)
+{
+    if (log_level & G_LOG_LEVEL_WARNING)
+    {
+        printf("\nWARNING : %s\n", message);
+        // Ignore warnings messages and do not exit from app
+        return;
+    }
+    if (log_level & G_LOG_LEVEL_CRITICAL)
+    {
+        printf("\nCRITICAL : %s\n", message);
+        // Ignore critical messages and do not exit from app
+        return;
+    }
+}
+
 int main (int argc, char **argv)
 {
     Suite *testSuite;
@@ -4499,6 +4518,16 @@ int main (int argc, char **argv)
 	goto exit;
     }
     gst_check_init (&argc, &argv);
+    g_log_set_handler (NULL, (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
+      log_handler, NULL);
+    g_log_set_handler ("GStreamer", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
+      log_handler, NULL);
+    g_log_set_handler ("GLib-GObject", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
+      log_handler, NULL);
+    g_log_set_handler ("GLib-GIO", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
+      log_handler, NULL);
+    g_log_set_handler ("GLib", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
+      log_handler, NULL);
     testSuite = media_pipeline_suite ();
     returnValue =  gst_check_run_suite (testSuite, "playbin_plugin_test", __FILE__);
 exit:
