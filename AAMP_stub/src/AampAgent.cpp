@@ -964,6 +964,7 @@ Description     : This function is used to set video zoom level
 void AampAgent::AampSetVideoZoom(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT (DEBUG_TRACE, "AampSetVideoZoom  Entry \n");
+    char details[100];
     if(&req["zoom"]==NULL)
     {
         response["result"] = "FAILURE";
@@ -986,11 +987,47 @@ void AampAgent::AampSetVideoZoom(IN const Json::Value& req, OUT Json::Value& res
 
     DEBUG_PRINT (DEBUG_TRACE, "Video Zoom level: %s",zoom);
     mSingleton->SetVideoZoom(zoom_mode);
+    sprintf(details, "SetVideoZoom call is fine: %d", zoom_mode);
     response["result"] = "SUCCESS";
-    response["details"] = "SetVideoZoom call is fine";
+    response["details"] = details;
     DEBUG_PRINT (DEBUG_TRACE, "SetVideoZoom call is fine\n");
     DEBUG_PRINT (DEBUG_TRACE, "AampSetVideoZoom Exit \n");
     return;
+}
+
+/*************************************************************************
+Function Name   : AampGetVideoZoom
+
+Arguments       : None
+
+Description     : This function is used to get video zoom mode
+
+*************************************************************************/
+void AampAgent::AampGetVideoZoom(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampGetVideoZoom Entry \n");
+        char details[100];
+        long bitRate = 0;
+        VideoZoomMode zoom_mode;
+		
+        zoom_mode = static_cast<VideoZoomMode> (mSingleton->GetVideoZoom());
+        
+        if ((zoom_mode == VIDEO_ZOOM_FULL) || (zoom_mode == VIDEO_ZOOM_NONE))
+        {
+                DEBUG_PRINT (DEBUG_TRACE, "Video Zoom mode: %d\n",zoom_mode);
+                sprintf(details, "Video Zoom mode: %d", zoom_mode);
+                response["result"] = "SUCCESS";
+                response["details"] = details;
+        }
+        else
+        {
+                DEBUG_PRINT (DEBUG_TRACE, "Video Zoom mode not retrieved");
+                response["result"] = "FAILURE";
+                response["details"] = "Video Zoom mode not retrieved";
+        }
+
+        DEBUG_PRINT (DEBUG_TRACE, "AampGetVideoZoom Exit \n");
+        return;
 }
 
 /*************************************************************************
@@ -1722,6 +1759,34 @@ void AampAgent::AampGetPreferredDRM(IN const Json::Value& req, OUT Json::Value& 
         return;
 }
 
+/************************************************************************************************************
+Function Name   : AampPersistBitRateOverSeek
+
+Description     : This function is used to enable/disable configuration to persist ABR profile over seek/SAP
+*************************************************************************************************************/
+void AampAgent::AampPersistBitRateOverSeek(IN const Json::Value& req, OUT Json::Value& response)
+{
+        DEBUG_PRINT (DEBUG_TRACE, "AampPersistBitRateOverSeek Entry \n");
+        char enable[10];
+        strcpy(enable,req["enable"].asCString());
+        bool b_value;
+        if (!strcmp(enable,"true"))
+            b_value = true;
+        else if (!strcmp(enable,"false"))
+            b_value = false;
+        else{
+            response["result"] = "FAILURE";
+            response["details"] = "Invalid Enable param";
+            return;
+        }
+        DEBUG_PRINT (DEBUG_TRACE, "PersistBitRateOverSeek config value : %s",enable);
+        mSingleton->PersistBitRateOverSeek(b_value);
+        response["result"] = "SUCCESS";
+        response["details"] = "PersistBitRateOverSeek call is fine";
+        DEBUG_PRINT (DEBUG_TRACE, "PersistBitRateOverSeek call is fine\n");
+        DEBUG_PRINT (DEBUG_TRACE, "AampPersistBitRateOverSeek Exit \n");
+        return;
+}
 
 /**************************************************************************
 Function Name : DestroyObject
