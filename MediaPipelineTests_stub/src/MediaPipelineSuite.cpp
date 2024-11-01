@@ -77,7 +77,6 @@ using namespace tinyxml2;
 #define AUDIO_PTS_ERROR_FILE            "/audio_pts_error"
 #define RESOLUTION_OFFSET               5
 #define BUFF_LENGTH 			512
-#define ENV_FILE                        "/opt/TDK/TDK.env"
 #define PROGRESS_BAR_WIDTH              50
 #define CHUNK_SIZE                      4096
 #define PROGRESS_BAR_DISPLAY_INTERVAL   5 //seconds 
@@ -173,6 +172,7 @@ bool video_underflow_test = false;
 bool audio_underflow_test = false;
 bool forceAudioSink = false;
 bool seek_with_pause = false;
+bool westeros_started = false;
 guint bandwidth;
 GstElement *dash_demux;
 
@@ -4150,11 +4150,28 @@ void setEnvironmentVariable(const char* varName, const char* varValue)
 }
 
 /********************************************************************************************************************
+ * Purpose      : To set environment file path
+ ********************************************************************************************************************/
+std::string GetTDKEnvPath() {
+    // Fetch the environment variable TDK_ENV_PATH
+    const char* env_path = std::getenv("TDK_ENV_PATH");
+    // If TDK_ENV_PATH is not set, default to /opt/TDK
+    if (env_path == nullptr) {
+        printf("\nEnvironment file set as /opt/TDK/TDK.env\n");
+        return "/opt/TDK/TDK.env";
+    }
+    printf("\nEnvironment file set as %s/TDK.env\n",env_path);
+    // Return the value of TDK_ENV_PATH
+    return std::string(env_path) + "/TDK.env";
+}
+
+
+/********************************************************************************************************************
  * Purpose      : To read from ENV_FILE and set the corresponding environmental variables
  ********************************************************************************************************************/
 int setVariables()
 {
-    FILE* inputFile = fopen(ENV_FILE, "r");
+    FILE* inputFile = fopen(GetTDKEnvPath().c_str(), "r");
     if (inputFile)
     {
         char line[256];
@@ -4186,7 +4203,7 @@ int setVariables()
      }
      else
      {
-	 printf ("\nUnable to open %s file for reading\n", ENV_FILE);
+	 printf ("\nUnable to open %s file for reading\n", GetTDKEnvPath().c_str());
 	 return 0;
      }
 }
@@ -4210,6 +4227,98 @@ void log_handler(const gchar *log_domain, GLogLevelFlags log_level, const gchar 
     }
 }
 
+/********************************************************************************************************************
+ * Purpose      : To execute command in DUT and return output
+ ********************************************************************************************************************/
+std::string executeCmndInDUT(std::string command,bool debug = true)
+{
+    if (debug)
+        printf("\nExecuting command : %s",command.c_str());
+    // Execute the command using po
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        printf("\npopen() failed!\n");
+        return "failure";
+    }
+    // Read the output of the command
+    std::string output;
+    char buffer[128];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+    // Close the pipe
+    if (pclose(pipe) == -1) {
+        printf("\npclose() failed!\n");
+        return "failure";
+    }
+    return std::string(output);
+}
+
+/********************************************************************************************************************
+ * Purpose      : To check if westeros is rendering or not
+ ********************************************************************************************************************/
+std::string WesterosProcessID(bool debug = true)
+{
+    std::string command = "pidof westeros";
+    std::string output = executeCmndInDUT(command,debug);
+    // Check if output is not empty
+    if (!output.empty())
+    {
+	if (debug)
+            printf("\npidof westeros received: %s\n",output.c_str());
+	return std::string(output);
+    }
+    else
+    {
+        printf("\nWesteros not running\n");
+	return "NIL";
+    }
+}
+
+/********************************************************************************************************************
+ * Purpose      : To start westeros by reading the westeros renderer command from TDK.env
+ ********************************************************************************************************************/
+bool startWesteros()
+{
+    std::ifstream infile(GetTDKEnvPath());
+    std::string command;
+    if (!infile) {
+        printf("\nCould not open the file!\n");
+        return false;
+    }
+
+    // Read each command from the file
+    while (std::getline(infile, command))
+    {
+        // Skip empty lines
+        if (command.empty()) {
+            continue;
+        }
+
+        if (command.find("westeros") != 0) {
+            continue; // Skip all commands except westeros
+        }
+
+        pid_t pid = fork();
+        if (pid < 0)
+        {
+            printf("\nFork failed!\n");
+            return false;
+        }
+
+        if (pid == 0)
+        {
+            // In the child process
+            // Execute the command
+            // Use "/bin/sh -c" to run the command in a shell
+	    printf("\nInitializing westeros\n");
+            execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
+            return true;
+        }
+    }
+    return true;
+}
+
 int main (int argc, char **argv)
 {
     Suite *testSuite;
@@ -4218,6 +4327,7 @@ int main (int argc, char **argv)
     char *timeoutparser;
     std::vector<int> TimeoutList;
     char* timeout = NULL;
+    bool startWesterosConfig = false;
 
     /*
      * Get TDK path
@@ -4229,7 +4339,7 @@ int main (int argc, char **argv)
     }
     else
     {
-	if (access(ENV_FILE, F_OK) == 0)
+	if (access(GetTDKEnvPath().c_str(), F_OK) == 0)
 	{
 	    if (!(setVariables()))
 		goto exit;
@@ -4242,6 +4352,7 @@ int main (int argc, char **argv)
 	    goto exit;
 	}
     }
+
 
     if (getenv ("AUDIO_PTS_CHECK") != NULL)
     {
@@ -4495,6 +4606,10 @@ int main (int argc, char **argv)
                 {
                     only_audio = true;
                 }
+		if (strcmp ("startWesteros=yes", argv[arg]) == 0)
+		{
+		    startWesterosConfig = true;
+		}
             }
 
             printf ("\nArg : TestCase Name: %s \n", tcname);
@@ -4528,9 +4643,30 @@ int main (int argc, char **argv)
       log_handler, NULL);
     g_log_set_handler ("GLib", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
       log_handler, NULL);
+    if ((startWesterosConfig) && (WesterosProcessID() == "NIL"))
+    {
+	if (!startWesteros())
+	    goto exit;
+	Sleep(1);
+        if (WesterosProcessID() == "NIL")
+	{
+	    printf("\nERROR : Unable to start westeros compositor\n");
+	    goto exit;
+	}
+	else
+	{
+	    westeros_started = true;
+	}
+    }
     testSuite = media_pipeline_suite ();
     returnValue =  gst_check_run_suite (testSuite, "playbin_plugin_test", __FILE__);
 exit:
+    if (startWesterosConfig && westeros_started)
+    {
+	std::string command = "kill -9 " + WesterosProcessID(false);
+        printf("Deinitializing westeros\n");
+        executeCmndInDUT(command,false);
+    }
     return returnValue;
 }
 
