@@ -879,6 +879,29 @@ static void trickplayOperation(MessageHandlerData *data)
 	assert_failure (data->playbin, gst_element_seek (data->playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
                                    GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, data->seekPosition,
                                    GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
+	if (only_audio)
+        {
+           GstBus *bus;
+           bus = gst_element_get_bus (data->playbin);
+           GstMessage *message;
+           start = std::chrono::high_resolution_clock::now();
+           while (true)
+           {
+               message = gst_bus_pop_filtered (bus,(GstMessageType) ((GstMessageType) GST_MESSAGE_STATE_CHANGED |
+                                     (GstMessageType) GST_MESSAGE_ERROR | (GstMessageType) GST_MESSAGE_EOS |
+                                   (GstMessageType) GST_MESSAGE_ASYNC_DONE ));
+               if ((message != NULL) && (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ASYNC_DONE))
+               {
+                    printf("\nBreaking due to Async message");
+                    break;
+               }
+               if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(2))
+                   break;
+           }
+
+           gst_message_unref (message);
+           gst_object_unref (bus);
+        }
     }
     else
     {
