@@ -100,18 +100,19 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetAudioTrack",PARAMS_BY_NAME,JSON_STRING,"track_index",JSON_INTEGER,NULL), &AampAgent::AampSetAudioTrack);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetAudioTrack",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetAudioTrack);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampEnableVideoRectangle",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampEnableVideoRectangle);
-		   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetDisable4K",PARAMS_BY_NAME,JSON_STRING,"disable4K",JSON_STRING,NULL), &AampAgent::AampSetDisable4K);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetDisable4K",PARAMS_BY_NAME,JSON_STRING,"disable4K",JSON_STRING,NULL), &AampAgent::AampSetDisable4K);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetWesterosSinkConfig",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampSetWesterosSinkConfig);
-		   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampCheckPlaybackRate",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampCheckPlaybackRate);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampCheckPlaybackRate",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampCheckPlaybackRate);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampPauseAtPosition",PARAMS_BY_NAME,JSON_STRING,"position",JSON_REAL,NULL), &AampAgent::AampPauseAtPosition);
                    this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampSetLicenseServerURL",PARAMS_BY_NAME,JSON_STRING,"DRM",JSON_STRING,"license_server_url",JSON_STRING,NULL), &AampAgent::AampSetLicenseServerURL);
-		   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetBitrateDetails",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetBitrateDetails);
-
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetBitrateDetails",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetBitrateDetails);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampPersistBitRateOverSeek",PARAMS_BY_NAME,JSON_STRING,"enable",JSON_STRING,NULL), &AampAgent::AampPersistBitRateOverSeek);
+                   this->bindAndAddMethod(Procedure("TestMgr_Aamp_AampGetVideoZoom",PARAMS_BY_NAME,JSON_STRING,NULL), &AampAgent::AampGetVideoZoom);
                 }
 
                 //Inherited functions
                 bool initialize(IN const char* szVersion);
-		void AampTune(IN const Json::Value& req, OUT Json::Value& response);
+                void AampTune(IN const Json::Value& req, OUT Json::Value& response);
                 void AampStop(IN const Json::Value& req, OUT Json::Value& response);
                 void AampSetRate(IN const Json::Value& req, OUT Json::Value& response);
                 void AampSetLanguage(IN const Json::Value& req, OUT Json::Value& response);
@@ -148,15 +149,16 @@ class AampAgent : public RDKTestStubInterface , public AbstractServer<AampAgent>
                 void AampGetAudioTrack(IN const Json::Value& req, OUT Json::Value& response);
                 void AampEnableVideoRectangle(IN const Json::Value& req, OUT Json::Value& response);
                 void AampSetWesterosSinkConfig(IN const Json::Value& req, OUT Json::Value& response);
-		void AampCheckPlaybackRate(IN const Json::Value& req, OUT Json::Value& response);
+                void AampCheckPlaybackRate(IN const Json::Value& req, OUT Json::Value& response);
                 void AampPauseAtPosition(IN const Json::Value& req, OUT Json::Value& response);
-		void AampSetLicenseServerURL(IN const Json::Value& req, OUT Json::Value& response);
-		void AampSetDisable4K(IN const Json::Value& req, OUT Json::Value& response);
-		void AampGetBitrateDetails(IN const Json::Value& req, OUT Json::Value& response);
+                void AampSetLicenseServerURL(IN const Json::Value& req, OUT Json::Value& response);
+                void AampSetDisable4K(IN const Json::Value& req, OUT Json::Value& response);
+                void AampGetBitrateDetails(IN const Json::Value& req, OUT Json::Value& response);
+                void AampPersistBitRateOverSeek(IN const Json::Value& req, OUT Json::Value& response);
+                void AampGetVideoZoom(IN const Json::Value& req, OUT Json::Value& response);
                 bool cleanup(const char*);
                 std::string testmodulepre_requisites();
                 bool testmodulepost_requisites();
-
 };
 
 #endif // __AAMP_STUB_H__
