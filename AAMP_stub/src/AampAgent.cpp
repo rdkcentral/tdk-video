@@ -1769,7 +1769,7 @@ void AampAgent::AampPersistBitRateOverSeek(IN const Json::Value& req, OUT Json::
         DEBUG_PRINT (DEBUG_TRACE, "AampPersistBitRateOverSeek Entry \n");
         char enable[10];
         strcpy(enable,req["enable"].asCString());
-        bool b_value;
+        bool b_value = true;
         if (!strcmp(enable,"true"))
             b_value = true;
         else if (!strcmp(enable,"false"))
