@@ -163,6 +163,7 @@ bool only_video = false;
 bool checkEachSecondPlayback = false;
 bool use_appsrc = false;
 int ReadSize = 0;
+int expected_height = 0;
 guint64 total_bytes_fed = 0;
 guint64 BYTES_THRESHOLD = 0;
 float previous_progress_percentage = 0.0;
@@ -730,7 +731,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     // Get some parameters initially from pipeline
     if (data->pipelineInitiation)
     {
-	printf("\n Entering to Pipeline Initiation\n");
+	printf("\nEntering to Pipeline Initiation\n");
         assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position");
 	data->pipelineInitiation = false;
     }
@@ -3436,22 +3437,33 @@ GST_START_TEST (test_video_bitrate)
 {
     MessageHandlerData data;
 
-    SetupPipeline(&data);
+    SetupPipeline(&data,false);
 
     assert_failure (data.playbin,connection_speed != 0,"connection speed is not given");
     g_object_set (data.playbin, "connection_speed", connection_speed, NULL);
-    printf("\nConnection Speed: %" G_GUINT64_FORMAT, connection_speed);
+    printf("\nConnection Speed: %" G_GUINT64_FORMAT "\n", connection_speed);
 
+    GST_FIXME( "Setting to Playing State\n");
+    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    GST_FIXME( "Set to Playing State\n");
+    WaitForOperation;
 
-    g_object_get (data.westerosSink.sink, "video-height", &height, NULL);
-    g_object_get (data.westerosSink.sink, "video-width", &width, NULL);
-
-    printf("\nVideo height = %d\nVideo width = %d", height, width);
+    printf("\nPlaying the pipeline to reach maximum connection_speed\n");
 
     if (checkNewPlay)
         PlaybackValidation(&data,play_timeout);
     else
         PlaySeconds(data.playbin,play_timeout);
+
+    printf("\nValidating video height");
+    g_object_get (data.westerosSink.sink, "video-height", &height, NULL);
+    g_object_get (data.westerosSink.sink, "video-width", &width, NULL);
+    printf("\nVideo height = %d\nVideo width = %d", height, width);
+    printf("\nExpected Video height = %d",expected_height);
+    char resolution_value_string[130];
+    sprintf(resolution_value_string,"\nPipeline is not playing at expected resolution\nObtained video-height as %d | Expected video-height as %d",height,expected_height);
+    assert_failure (data.playbin, expected_height == height ,resolution_value_string);
+    printf("\nSUCCESS : Pipeline restricted to expected resolution for full duration of playback\n");
 
     if (data.playbin)
     {
@@ -4453,7 +4465,7 @@ int main (int argc, char **argv)
 		if (strstr (argv[arg], "height=") != NULL)
                 {
                     strtok (argv[arg], "=");
-                    height = atoi (strtok (NULL, "="));
+                    expected_height = atoi (strtok (NULL, "="));
                 }
 		if (strstr (argv[arg], "bit_depth=") != NULL)
                 {
