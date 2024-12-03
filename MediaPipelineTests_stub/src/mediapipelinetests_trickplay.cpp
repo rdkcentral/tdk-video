@@ -1696,11 +1696,11 @@ int main (int argc, char **argv)
          }
 	 if (strcmp ("checkFPS=no", argv[arg]) == 0)
          {
-            use_audioSink = false;
+	    use_westerossink_fps = false;
          }
 	 if (strcmp ("checkAudioFPS=no", argv[arg]) == 0)
          {
-            use_westerossink_fps = false;
+	    use_audioSink = false;
          }
 	 if (strcmp ("validateFullPlayback", argv[arg]) == 0)
          {
