@@ -22,6 +22,73 @@ static WstGLCtx *ctx = 0;
 static userData *data = 0;
 
 /***************************************************************************
+ *Function name : startWesteros
+ *Description   : Function will start westeros renderer by reading
+ *                the platform specific renderer commands from TDK.env file
+ *
+ *****************************************************************************/
+bool startWesteros()
+{
+    ifstream infile(TDK_ENV_FILE);
+    string command;
+    if (!infile) {
+        DEBUG_PRINT(DEBUG_TRACE,"\nCould not open %s\n",TDK_ENV_FILE);
+        return false;
+    }
+
+    // Read each command from the file
+    while (getline(infile, command))
+    {
+        // Skip empty lines
+        if (command.empty()) {
+            continue;
+        }
+
+        if (command.find("westeros") != 0)
+        {
+            DEBUG_PRINT(DEBUG_TRACE,"\nExecuting command: %s\n", command.c_str());
+            FILE* pipe = popen(command.c_str(), "r");
+            if (!pipe)
+            {
+                DEBUG_PRINT(DEBUG_TRACE,"\nFailed to execute command: %s\n", command.c_str());
+                continue;
+            }
+            if (pclose(pipe) == -1)
+            {
+                DEBUG_PRINT(DEBUG_TRACE,"\npclose() failed!\n");
+                return false;
+            }
+        }
+        else
+        {
+            pid_t pid = fork();
+            if (pid < 0)
+            {
+                DEBUG_PRINT(DEBUG_TRACE,"\nFork failed!\n");
+                return false;
+            }
+
+            if (pid == 0)
+            {
+                // In the child process
+                // Execute the command
+                // Use "/bin/sh -c" to run the command in a shell
+                execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
+                return true;
+            }
+            else
+            {
+                // In the parent process
+                // Wait for westeros to start
+                sleep(2);
+            }
+
+        }
+    }
+    return true;
+}
+
+/***************************************************************************
  *Function name : testmodulepre_requisites
  *Description   : testmodulepre_requisites will be used for setting the
  *                pre-requisites that are necessary for this component
@@ -30,8 +97,20 @@ static userData *data = 0;
 std::string WesterosHalAgent::testmodulepre_requisites()
 {
     DEBUG_PRINT(DEBUG_TRACE, "WesterosHal testmodule pre_requisites --> Entry\n");
+    bool start_westeros_result = false;
+    if (getenv ("START_WESTEROS") != NULL)
+    {
+        start_westeros_result = startWesteros();
+    }
     DEBUG_PRINT(DEBUG_TRACE, "WesterosHal testmodule pre_requisites --> Exit\n");
-    return "SUCCESS";
+    if (start_westeros_result)
+    {
+        return "SUCCESS";
+    }
+    else
+    {
+        return "FAILURE";
+    }
 }
 
 /***************************************************************************
@@ -43,14 +122,37 @@ std::string WesterosHalAgent::testmodulepre_requisites()
 bool WesterosHalAgent::testmodulepost_requisites()
 {
     DEBUG_PRINT(DEBUG_TRACE, "WesterosHal testmodule post_requisites --> Entry\n");
+    int system_command_result = 1;
+    if (getenv ("START_WESTEROS") != NULL)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "Killing westeros \n");
+        char kill_command[30];
+        sprintf(kill_command,"kill -9 `pidof westeros`");
+        system_command_result = system(kill_command);
+        if ( system_command_result == 0 )
+        {
+             DEBUG_PRINT(DEBUG_TRACE, "Successfully killed westeros\n");
+        }
+        else
+        {
+             DEBUG_PRINT(DEBUG_TRACE, "Unable to kill westeros\n");
+        }
+    }
     DEBUG_PRINT(DEBUG_TRACE, "WesterosHal testmodule post_requisites --> Exit\n");
-    return TEST_SUCCESS;
+    if (!system_command_result)
+    {
+        return TEST_SUCCESS;
+    }
+    else
+    {
+        return TEST_FAILURE;
+    }
 }
 
 /**************************************************************************
 Function Name   : CreateObject
 Arguments       : NULL
-Description     : This function is used to create a new object of the class "DSHalAgent".
+Description     : This function is used to create a new object of the class "WesterosHalAgent".
 **************************************************************************/
 extern "C" WesterosHalAgent* CreateObject(TcpSocketServer &ptrtcpServer)
 {

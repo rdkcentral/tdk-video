@@ -28,6 +28,8 @@
 #include "rdkteststubintf.h"
 #include "rdktestagentintf.h"
 #include "westeros-gl.h"
+#include <fstream>
+#include <unistd.h>
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
 
@@ -36,6 +38,8 @@
 
 #define TEST_SUCCESS true
 #define TEST_FAILURE false
+
+#define TDK_ENV_FILE "/opt/TDK/TDK.env"
 
 using namespace std;
 
