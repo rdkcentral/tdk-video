@@ -833,6 +833,24 @@ void RpcMethods::ResetCrashStatus()
 
 }/* End of ResetCrashStatus */
 
+/********************************************************************************************************************
+ Purpose:              To execute command in DUT
+
+ Return:               Output string of the command executed
+
+*********************************************************************************************************************/
+std::string ExecuteCommand(const std::string& command )
+{
+    string resultDetails;
+    char readRespBuff[50] = { '\0' };
+    FILE *file = popen (command.c_str(), "r");
+    while(fgets(readRespBuff,sizeof(readRespBuff),file) != NULL)
+    {
+	resultDetails += readRespBuff;
+    }
+    pclose(file);
+    return resultDetails;
+}/* End of ExecuteCommand */
 
 /********************************************************************************************************************
  Purpose:              To reboot device.
@@ -843,10 +861,24 @@ void RpcMethods::ResetCrashStatus()
 void RpcMethods::CallReboot()
 {
     DEBUG_PRINT (DEBUG_ERROR, "Box Going for a REBOOT !!!\n\n");
-    if(-1 == (system("sleep 10 && sh /rebootNow.sh -s rpcmethodsRecovery -o 'Rebooting the box as Json request to enable reboot for RPCEnableReboot...' && source /rebootNow.sh -s rpcmethodsRecovery -o 'Rebooting the box as Json request to enable reboot for RPCEnableReboot...' &")))
+    string rebootNow_exists;
+    rebootNow_exists = ExecuteCommand ("[ -f \"/rebootNow.sh\" ] && echo \"rebootNow exists\" || echo \"File not present\"");
+    if (rebootNow_exists.find("rebootNow exists") != string::npos)
     {
-	DEBUG_PRINT(DEBUG_ERROR, "Error: failed to reboot\n");
-    }	
+	DEBUG_PRINT(DEBUG_TRACE,"rebootNow.sh is present in DUT, executing /rebootNow.sh for reboot\n");
+        if(-1 == (system("sleep 10 && sh /rebootNow.sh -s rpcmethodsRecovery -o 'Rebooting the box as Json request to enable reboot for RPCEnableReboot...' && source /rebootNow.sh -s rpcmethodsRecovery -o 'Rebooting the box as Json request to enable reboot for RPCEnableReboot...' &")))
+        {
+	     DEBUG_PRINT(DEBUG_ERROR, "Error: failed to reboot\n");
+        }
+    }
+    else
+    {
+	DEBUG_PRINT(DEBUG_TRACE,"rebootNow.sh is not present in DUT, executing reboot command directly\n");
+	if(-1 == (system("sleep 10 && reboot")))
+	{
+	     DEBUG_PRINT(DEBUG_ERROR, "Error: failed to reboot\n");
+        }
+    }
 } /* End of CallReboot */
 
 
