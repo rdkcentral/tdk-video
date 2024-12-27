@@ -19,6 +19,45 @@
 
 #include "DSHalAgent.h"
 
+// Macro to declare weak symbols
+#define DECLARE_WEAK_SYMBOL(func, ret_type, ...) \
+    extern "C" ret_type func(__VA_ARGS__) __attribute__((weak))
+
+/***************************************************************************
+ *Function name : FUNCTION_EXISTS
+ *Description   : Function to check if a weak symbol exists in the hal library
+ *Retrun Value  : true  - if function signature exists in library
+                  false - if function signature is not present in library
+ *****************************************************************************/
+#define FUNCTION_EXISTS(func, ...)                  \
+    function_exists(func, #func, __VA_ARGS__)
+// Template to handle function calls
+template <typename Func, typename... Args>
+bool function_exists(Func func, const char* func_name, Args... args) {
+    if (func) {
+        return true;
+    } else {
+	DEBUG_PRINT(DEBUG_TRACE, "ERROR : %s API not found in HAL",func_name);
+        return false;
+    }
+}
+
+/* DECLARE_WEAK SYMBOL SYNTAX
+ * DECLARE_WEAK_SYMBOL(API NAME, RETURN VALUE, ARGUMENTS);
+ */
+DECLARE_WEAK_SYMBOL(dsGetAudioFormat, dsError_t, intptr_t handle, dsAudioFormat_t *audioFormat);
+DECLARE_WEAK_SYMBOL(dsGetAudioPort, dsError_t, dsAudioPortType_t type, int index, intptr_t *handle);
+DECLARE_WEAK_SYMBOL(dsSetResolution, dsError_t, intptr_t handle, dsVideoPortResolution_t *resolution);
+DECLARE_WEAK_SYMBOL(dsGetEDIDBytes, dsError_t, intptr_t handle, unsigned char *edid, int *length);
+DECLARE_WEAK_SYMBOL(dsEnableMS12Config, dsError_t, intptr_t handle, dsMS12FEATURE_t feature,const bool enable);
+DECLARE_WEAK_SYMBOL(dsGetMS12AudioProfileList, dsError_t, intptr_t handle, dsMS12AudioProfileList_t* profiles);
+
+/* Writing FUNCTION_EXISTS
+ * API to be tested - int func(int arg1, char arg2)
+ * FUNCTION_EXISTS call - FUNCTION_EXISTS(API , return value, arguments)
+ * FUNCTION_EXISTS(func, int , arg1, arg2)
+ */
+
 /*Not available the below MS12 capability lists(from Volumeleveller to LEConfig) in the latest HAL header/interface file. 
 https://github.com/rdkcentral/rdk-halif-device_settings/blob/3.0.0/include/dsAVDTypes.h
 
@@ -159,6 +198,8 @@ extern "C" DSHalAgent* CreateObject(TcpSocketServer &ptrtcpServer)
         return new DSHalAgent(ptrtcpServer);
 }
 
+void signalHandler(int signal);
+
 /***************************************************************************
  *Function name : initialize
  *Description    : Initialize Function will be used for registering the wrapper method
@@ -171,6 +212,20 @@ bool DSHalAgent::initialize(IN const char* szVersion)
     DEBUG_PRINT (DEBUG_TRACE, "DSHal Initialization Entry\n");
     DEBUG_PRINT (DEBUG_TRACE, "DSHal Initialization Exit\n");
     return TEST_SUCCESS;
+}
+
+jmp_buf jumpBuffer;
+void signalHandler(int signal)
+{
+    switch(signal)
+    {
+       case SIGSEGV:
+            DEBUG_PRINT(DEBUG_TRACE, "Observed Segmentation fault during test execution\n");
+	    longjmp(jumpBuffer,1);
+	    break;
+       default :
+	    DEBUG_PRINT(DEBUG_TRACE, "Received unknown signal\n");
+    }
 }
 
 /***************************************************************************
@@ -274,7 +329,10 @@ void DSHalAgent::DSHal_GetAudioPort(IN const Json::Value& req, OUT Json::Value& 
     int get_DefaultType = req["get_DefaultType"].asInt();
 
     dsError_t ret = dsERR_NONE;
-    ret = dsGetAudioPort(portType, index, &apHandle);
+    if (FUNCTION_EXISTS(dsGetAudioPort, portType, index, &apHandle))
+	 ret = dsGetAudioPort(portType, index, &apHandle);
+    else
+	 ret = dsERR_OPERATION_FAILED;
 
     /*audioPortType = {"LR":0, "HDMI":1, "SPDIF":2, "SPEAKER":3, "HDMI_ARC":4, "HEADPHONE":5, "INVALID":9}
 
@@ -283,7 +341,7 @@ void DSHalAgent::DSHal_GetAudioPort(IN const Json::Value& req, OUT Json::Value& 
 
     In order to skip this functionality get_DefaultType must be set to 0 */
 
-    if ((portType == 1) && (get_DefaultType == 1))
+    if ((portType == 1) && (get_DefaultType == 1) && (ret != dsERR_OPERATION_FAILED))
     {
         if (ret != dsERR_NONE)
         {
@@ -2404,7 +2462,15 @@ void DSHalAgent::DSHal_SetResolution(IN const Json::Value& req, OUT Json::Value&
     strcpy(resolution.name,resolutionName.c_str());
     dsError_t ret = dsERR_NONE;
 
-    ret = dsSetResolution(vpHandle, &resolution);
+    if (FUNCTION_EXISTS(dsSetResolution, vpHandle, &resolution))
+    {
+        ret = dsSetResolution(vpHandle, &resolution);
+    }
+    else
+    {
+	ret = dsERR_OPERATION_FAILED;
+    }
+    sleep(5);
 
     if (ret == dsERR_NONE)
     {
@@ -2777,7 +2843,14 @@ void DSHalAgent::DSHal_GetEDIDBytes(IN const Json::Value& req, OUT Json::Value& 
     std::vector<unsigned char> edid;
     int length = 0;
     unsigned char edid_bytes_data[512] = {0};
-    ret = dsGetEDIDBytes(dispHandle, edid_bytes_data, &length);
+    if (FUNCTION_EXISTS(dsGetEDIDBytes,dispHandle, edid_bytes_data, &length))
+    {
+        ret = dsGetEDIDBytes(dispHandle, edid_bytes_data, &length);
+    }
+    else
+    {
+	ret = dsERR_OPERATION_FAILED;
+    }
     if (ret == dsERR_NONE)
     {
         if(EDID_Verify(edid_bytes_data, length)==true)
@@ -3464,17 +3537,20 @@ void DSHalAgent::DSHal_GetAudioCapabilities(IN const Json::Value& req, OUT Json:
     dsError_t ret = dsERR_NONE;
     int audcapabilities = 0, paramhandle = 0;
 	
-	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
-	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
-	if (IsHandleInvalid)
-	{
-		paramhandle = (int) req["paramhandle"].asInt();
-	}
-	else
-	{
-		paramhandle = (int)apHandle;
-	}
-	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioCapabilities handle %d %d",paramhandle, apHandle );
+    int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+    int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    if (IsHandleInvalid)
+    {
+	paramhandle = (int) req["paramhandle"].asInt();
+    }
+    else
+    {
+	paramhandle = (int)apHandle;
+    }
+    DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioCapabilities handle %d %d",paramhandle, apHandle );
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
 	if (Isnullparamcheck)
 	{
 		ret = dsGetAudioCapabilities((intptr_t)paramhandle, NULL);
@@ -3483,7 +3559,13 @@ void DSHalAgent::DSHal_GetAudioCapabilities(IN const Json::Value& req, OUT Json:
 	{
 		ret = dsGetAudioCapabilities((intptr_t)paramhandle, &audcapabilities);
 	}
-	
+    }
+    else
+    {
+
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        ret = dsERR_OPERATION_FAILED;
+    }    
     if (ret == dsERR_NONE)
     {
 		std::string outputDetails;
@@ -3627,14 +3709,24 @@ void DSHalAgent::DSHal_GetAudioFormat(IN const Json::Value& req, OUT Json::Value
 		paramhandle = (int)apHandle;
 	}
 	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetAudioFormat handle %d %d",paramhandle, apHandle );
-	if (Isnullparamcheck)
-	{
-	  ret = dsGetAudioFormat((intptr_t)paramhandle, NULL);
+        signal(SIGSEGV,signalHandler);
+	
+	if ((setjmp(jumpBuffer) == 0) && (FUNCTION_EXISTS(dsGetAudioFormat, (intptr_t)paramhandle, &enaudioFormat)))
+        {
+	    if (Isnullparamcheck)
+	    {
+	        ret = dsGetAudioFormat((intptr_t)paramhandle, NULL);
+	    }
+	    else
+	    {
+	        ret = dsGetAudioFormat((intptr_t)paramhandle, &enaudioFormat);
+	    }
 	}
-	else
-	{
-	  ret = dsGetAudioFormat((intptr_t)paramhandle, &enaudioFormat);
-	}
+        else
+        {
+            DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+            ret = dsERR_OPERATION_FAILED;
+        }
 	
 	if (ret == dsERR_NONE)
 	{
@@ -3665,23 +3757,30 @@ void DSHalAgent::DSHal_EnableMS12Config(IN const Json::Value& req, OUT Json::Val
 {
 	DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config --->Entry\n");
 	dsMS12FEATURE_t enMS12feature = dsMS12FEATURE_DAPV2;
-    dsError_t ret = dsERR_NONE;
-	
-	ret = dsEnableMS12Config(apHandle, enMS12feature, true);
-	if (ret == dsERR_NONE)
-    {	
-        response["result"] = "SUCCESS";
-        response["details"] = "MS12: DAPV2 feature got enabled successfully";
-        DEBUG_PRINT(DEBUG_LOG, "DSHal_EnableMS12Config call is SUCCESS");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
+        dsError_t ret = dsERR_NONE;
+
+        if (FUNCTION_EXISTS(dsEnableMS12Config, apHandle, enMS12feature, true))
+	{		
+	    ret = dsEnableMS12Config(apHandle, enMS12feature, true);
 	}
 	else
 	{
-		checkERROR(ret,&error);
-        response["result"] = "FAILURE";
-        response["details"] = "EnableMS12Config call failed"+error;
-        DEBUG_PRINT(DEBUG_ERROR, "DSHal_EnableMS12Config call is FAILURE");
-        DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
+	    ret = dsERR_OPERATION_FAILED;
+	}
+	if (ret == dsERR_NONE)
+        {	
+            response["result"] = "SUCCESS";
+            response["details"] = "MS12: DAPV2 feature got enabled successfully";
+            DEBUG_PRINT(DEBUG_LOG, "DSHal_EnableMS12Config call is SUCCESS");
+            DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
+	}
+	else
+	{
+	    checkERROR(ret,&error);
+            response["result"] = "FAILURE";
+            response["details"] = "EnableMS12Config call failed"+error;
+            DEBUG_PRINT(DEBUG_ERROR, "DSHal_EnableMS12Config call is FAILURE");
+            DEBUG_PRINT(DEBUG_TRACE, "DSHal_EnableMS12Config -->Exit\n");
 	}	
 	return;
 }
@@ -3694,20 +3793,23 @@ void DSHalAgent::DSHal_IsSurroundDecoderEnabled(IN const Json::Value& req, OUT J
 {
     DEBUG_PRINT(DEBUG_TRACE, "DSHal_IsSurroundDecoderEnabled --->Entry\n");
     dsError_t ret = dsERR_NONE;
-	int paramhandle = 0;
+    int paramhandle = 0;
     bool enabled = 0;
 
-	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
-	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
-	if (IsHandleInvalid)
-	{
-		paramhandle = (int) req["paramhandle"].asInt();
-	}
-	else
-	{
-		paramhandle = (int)apHandle;
-	}
-	DEBUG_PRINT(DEBUG_LOG, "DSHal_IsSurroundDecoderEnabled handle %d %d",paramhandle, apHandle );
+    int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+    int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    if (IsHandleInvalid)
+    {
+	paramhandle = (int) req["paramhandle"].asInt();
+    }
+    else
+    {
+        paramhandle = (int)apHandle;
+    }
+    DEBUG_PRINT(DEBUG_LOG, "DSHal_IsSurroundDecoderEnabled handle %d %d",paramhandle, apHandle );
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
 	if (Isnullparamcheck)
 	{
 		ret = dsIsSurroundDecoderEnabled((intptr_t)paramhandle, NULL);
@@ -3716,7 +3818,13 @@ void DSHalAgent::DSHal_IsSurroundDecoderEnabled(IN const Json::Value& req, OUT J
 	{
 		ret = dsIsSurroundDecoderEnabled((intptr_t)paramhandle, &enabled);
 	}
+    }
+    else
+    {
 
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        ret = dsERR_OPERATION_FAILED;
+    }
     if (ret == dsERR_NONE)
     {
         response["result"] = "SUCCESS";
@@ -3792,17 +3900,20 @@ void DSHalAgent::DSHal_GetMS12Capabilities(IN const Json::Value& req, OUT Json::
     dsError_t ret = dsERR_NONE;
     int audcapabilities = 0, paramhandle = 0;
 	
-	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
-	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
-	if (IsHandleInvalid)
-	{
-		paramhandle = (int) req["paramhandle"].asInt();
-	}
-	else
-	{
-		paramhandle = (int)apHandle;
-	}
-	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12Capabilities handle %d %d",paramhandle, apHandle );
+    int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+    int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    if (IsHandleInvalid)
+    {
+	paramhandle = (int) req["paramhandle"].asInt();
+    }
+    else
+    {
+	paramhandle = (int)apHandle;
+    }
+    DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12Capabilities handle %d %d",paramhandle, apHandle );
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
 	if (Isnullparamcheck)
 	{
 		ret = dsGetMS12Capabilities((intptr_t)paramhandle, NULL);
@@ -3811,7 +3922,13 @@ void DSHalAgent::DSHal_GetMS12Capabilities(IN const Json::Value& req, OUT Json::
 	{
 		ret = dsGetMS12Capabilities((intptr_t)paramhandle, &audcapabilities);
 	}
-	
+    }
+    else
+    {
+
+	DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        ret = dsERR_OPERATION_FAILED;
+    }	
     if (ret == dsERR_NONE)
     {
 		std::string outputDetails;
@@ -3894,22 +4011,25 @@ void DSHalAgent::DSHal_GetMS12Capabilities(IN const Json::Value& req, OUT Json::
 void DSHalAgent::DSHal_GetMISteering(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMISteering --->Entry\n");
-	char details[100];
+    char details[100];
     dsError_t ret = dsERR_NONE;
-	int paramhandle = 0;
+    int paramhandle = 0;
     bool enabled = 0;
 
-	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
-	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
-	if (IsHandleInvalid)
-	{
-		paramhandle = (int) req["paramhandle"].asInt();
-	}
-	else
-	{
-		paramhandle = (int)apHandle;
-	}
-	
+    int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+    int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    if (IsHandleInvalid)
+    {
+	paramhandle = (int) req["paramhandle"].asInt();
+    }
+    else
+    {
+	paramhandle = (int)apHandle;
+    }
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {    
 	if (Isnullparamcheck)
 	{
 		ret = dsGetMISteering((intptr_t)paramhandle, NULL);
@@ -3918,7 +4038,13 @@ void DSHalAgent::DSHal_GetMISteering(IN const Json::Value& req, OUT Json::Value&
 	{
 		ret = dsGetMISteering((intptr_t)paramhandle, &enabled);
 	}
+    }
+    else
+    {
 
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        ret = dsERR_OPERATION_FAILED;
+    }
     if (ret == dsERR_NONE)
     {
         response["result"] = "SUCCESS";
@@ -3995,22 +4121,25 @@ void DSHalAgent::DSHal_GetMS12AudioProfileList(IN const Json::Value& req, OUT Js
 {
     DEBUG_PRINT(DEBUG_TRACE, "DSHal_GetMS12AudioProfileList --->Entry\n");
     dsError_t ret = dsERR_NONE;
-	dsMS12AudioProfileList_t stAudioprofiles = { 0 };
-	char details[100];
+    dsMS12AudioProfileList_t stAudioprofiles = { 0 };
+    char details[100];
     int paramhandle = 0;
 	
-	int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
-	int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
-	if (IsHandleInvalid)
-	{
-		paramhandle = (int) req["paramhandle"].asInt();
-	}
-	else
-	{
-		paramhandle = (int)apHandle;
-	}
-	DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12AudioProfileList handle %d %d",paramhandle, apHandle );
-	if (Isnullparamcheck)
+    int Isnullparamcheck = (int) req["Isnullparamcheck"].asInt();
+    int IsHandleInvalid = (int) req["IsHandleInvalid"].asInt();
+    if (IsHandleInvalid)
+    {
+	paramhandle = (int) req["paramhandle"].asInt();
+    }
+    else
+    {
+	paramhandle = (int)apHandle;
+    }
+    DEBUG_PRINT(DEBUG_LOG, "DSHal_GetMS12AudioProfileList handle %d %d",paramhandle, apHandle );
+    signal(SIGSEGV,signalHandler);
+    if (FUNCTION_EXISTS(dsGetMS12AudioProfileList, (intptr_t)paramhandle, &stAudioprofiles) && (setjmp(jumpBuffer) == 0))
+    {
+        if (Isnullparamcheck)
 	{
 		ret = dsGetMS12AudioProfileList((intptr_t)paramhandle, NULL);
 	}
@@ -4018,7 +4147,11 @@ void DSHalAgent::DSHal_GetMS12AudioProfileList(IN const Json::Value& req, OUT Js
 	{
 		ret = dsGetMS12AudioProfileList((intptr_t)paramhandle, &stAudioprofiles);
 	}
-	
+    }
+    else
+    {
+        ret = dsERR_OPERATION_FAILED;
+    }	
     if (ret == dsERR_NONE)
     {
 		sprintf(details,"Audio profile count: %d, Profile lists: %s",stAudioprofiles.audioProfileCount,stAudioprofiles.audioProfileList);

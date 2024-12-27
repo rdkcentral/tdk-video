@@ -33,6 +33,9 @@
 #include "dsHost.h"
 #include "dsFPD.h"
 #include "dsHdmiIn.h"
+#include <unistd.h>
+#include <csignal>
+#include <csetjmp>
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
 
