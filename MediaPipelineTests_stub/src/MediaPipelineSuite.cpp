@@ -34,7 +34,8 @@
 #include <sys/stat.h>
 #include <gst/audio/audio.h>
 #include "tinyxml2.h"
-
+#include <dlfcn.h>
+#include <json/json.h>
 
 extern "C"
 {
@@ -173,7 +174,9 @@ bool video_underflow_test = false;
 bool audio_underflow_test = false;
 bool forceAudioSink = false;
 bool seek_with_pause = false;
-bool westeros_started = false;
+bool westerosStarted = false;
+std::vector<void *> handles;
+bool curlError = false;
 guint bandwidth;
 GstElement *dash_demux;
 
@@ -507,8 +510,8 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 
 
 		audio_sampling_diff = (int)audio_sampling_rate - sampling_rate;
-		printf(" Sampling rate = %d",sampling_rate);
-		printf(" Audio_sampling_rate_diff = %d",audio_sampling_diff);
+		printf(" Expected Audio Sampling rate = %d",sampling_rate);
+		printf(" Audio sampling rate diff = %d",audio_sampling_diff);
 
 
 		if (audio_sampling_diff < 0)
@@ -4177,6 +4180,7 @@ std::string GetTDKEnvPath() {
     return std::string(env_path) + "/TDK.env";
 }
 
+void handle_LDPRELOAD(const std::string &inputStr);
 
 /********************************************************************************************************************
  * Purpose      : To read from ENV_FILE and set the corresponding environmental variables
@@ -4190,6 +4194,13 @@ int setVariables()
         while (fgets(line, sizeof(line), inputFile))
         {
              line[strcspn(line, "\n")] = '\0';
+	     if (std::string(line).find("LD_PRELOAD") != std::string::npos)
+	     {
+	         char *varName = line + 7;
+                 printf("Handling : %s",varName);
+                 handle_LDPRELOAD(std::string(line));
+		 continue;
+             }
              if (strncmp(line, "export ", 7) == 0)
              {
 		 char* varName = line + 7;
@@ -4288,46 +4299,264 @@ std::string WesterosProcessID(bool debug = true)
 }
 
 /********************************************************************************************************************
- * Purpose      : To start westeros by reading the westeros renderer command from TDK.env
+ * Purpose      : Write callback to parse json response
+ ********************************************************************************************************************/
+size_t WriteCallbackJson(void *contents, size_t size, size_t nmemb, std::string *output) {
+    size_t totalSize = size * nmemb;
+    output->append((char *)contents, totalSize);
+    return totalSize;
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to perform POST request and return JSON response as a string
+ ********************************************************************************************************************/
+std::string sendRequest(const std::string& jsonData) {
+    CURL *curl = curl_easy_init();
+    std::string response;
+    if (curl) {
+        const char* url = "http://0.0.0.0:9998/jsonrpc";
+        // Set curl options
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, jsonData.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallbackJson);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        // Perform the request
+        CURLcode res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
+	    curlError = true;
+	    response = "FAILURE";
+        }
+        curl_easy_cleanup(curl);
+    } else {
+        std::cerr << "Failed to initialize libcurl" << std::endl;
+    }
+    return response;  // Return the response as a string
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to parse json Response
+ ********************************************************************************************************************/
+bool parseResult(const std::string& jsonResponse)
+{
+    //Check if response is FAILURE
+    if (jsonResponse == "FAILURE")
+	return false;
+    // Parse JSON response using jsoncpp
+    Json::Value root;
+    Json::CharReaderBuilder builder;
+    std::string errs;
+    // Use istringstream to parse the response
+    std::istringstream sstream(jsonResponse);
+    if (Json::parseFromStream(builder, sstream, &root, &errs))
+    {
+        // Check for "error" field in the response
+        if (root.isMember("error"))
+        {
+            std::string message = root["error"]["message"].asString();
+	    printf("\nERROR : %s \n",message.c_str());
+            return false;
+        }
+        else if (root.isMember("result") && root["result"].isArray() && root["result"].size() > 0)
+        {
+            // Access the 'state' field in the first object in the result array
+            std::string state = root["result"][0]["state"].asString();
+	    printf(" %s \n",state.c_str());
+            return state == "activated";
+        }
+        else if (root.isMember("result") && root["result"].isNull())
+        {
+	    printf("\nresult : \"null\"\n");
+            return true;
+        }
+	else if (root.isMember("result") && root["result"].isMember("clients") && root["result"]["clients"].isArray())
+	{
+	    std::string client = root["result"]["clients"][0].asString();
+	    return client == "test";
+	}
+        else if (root.isMember("result"))
+        {
+            // If "result" exists, check the "success" field
+            bool success = root["result"]["success"].asBool();
+	    printf(" success : %s\n", success ? "true" : "false");
+	    return success;
+        }
+	else
+	{
+	    printf("\nERROR : Unable to parse json response");
+	    return false;
+	}
+    }
+    else
+    {
+        std::cerr << "Error parsing JSON: " << errs << std::endl;
+        return false;
+    }
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to obtain RDKShell plugin status
+ ********************************************************************************************************************/
+bool RDKShellStatus()
+{
+    std::string jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.status@org.rdk.RDKShell"})";
+    // Call sendRequest function to get the JSON response as string
+    std::string response = sendRequest(jsonData);
+    if (response == "FAILURE")
+	printf ("\nERROR : Unable to send request to 0.0.0.0:9998\n");
+    else
+	printf("\nRDKShell State : ");
+    return parseResult(response);
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to activate RDKShell
+ ********************************************************************************************************************/
+bool activateRDKShell()
+{
+    std::string jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.activate", "params": { "callsign": "org.rdk.RDKShell" }})";
+    // Call sendRequest function to get the JSON response as string
+    std::string response = sendRequest(jsonData);
+    return parseResult(response);
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to verify a display named test is already running via RDKShell plugin
+ ********************************************************************************************************************/
+bool checkDisplay()
+{
+    std::string jsonData = R"({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "org.rdk.RDKShell.1.getClients"
+    })";
+
+    // Call sendRequest function to get the JSON response as string
+    std::string response = sendRequest(jsonData);
+    return parseResult(response);
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to create Display via RDKShell plugin
+ ********************************************************************************************************************/
+bool createDisplay()
+{
+    std::string jsonData = R"({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "org.rdk.RDKShell.1.createDisplay",
+        "params": {
+            "client": "test",
+            "displayName": "test"
+        }
+    })";
+
+    // Call sendRequest function to get the JSON response as string
+    std::string response = sendRequest(jsonData);
+    return parseResult(response);
+}
+
+/********************************************************************************************************************
+ * Purpose      : Function to destroy Display via RDKShell plugin
+ ********************************************************************************************************************/
+bool destroyDisplay()
+{
+    std::string jsonData = R"({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "org.rdk.RDKShell.1.kill",
+        "params": {
+            "client": "test"
+        }
+    })";
+
+    // Call sendRequest function to get the JSON response as string
+    std::string response = sendRequest(jsonData);
+    return parseResult(response);
+}
+
+/********************************************************************************************************************
+ * Purpose      : To handle LD_PRELOAD by loading libraries using dlopen
+ ********************************************************************************************************************/
+void handle_LDPRELOAD(const std::string &inputStr)
+{
+    std::string prefix = "export LD_PRELOAD=";
+    // Ensure the input string starts with the expected prefix
+    if (inputStr.find(prefix) != 0) {
+        std::cerr << "Invalid LD_PRELOAD string format!\n";
+        return;
+    }
+    // Extract the actual library paths (removing "export LD_PRELOAD=")
+    std::string ldPreloadStr = inputStr.substr(prefix.length());
+    std::stringstream ss(ldPreloadStr);
+    std::string libPath;
+    // Split by ':' and load each shared library
+    while (std::getline(ss, libPath, ':'))
+    {
+        void *handle = dlopen(libPath.c_str(), RTLD_LAZY);
+        if (!handle)
+	{
+            std::cerr << "Failed to load: " << libPath << " | Error: " << dlerror() << "\n";
+        }
+	else
+	{
+            printf("\nLoaded: %s",libPath.c_str());
+            handles.push_back(handle);
+        }
+    }
+    printf("\n");
+}
+
+/********************************************************************************************************************
+ * Purpose      : To close libraries opened via dlclose
+ ********************************************************************************************************************/
+void closeLibs()
+{
+    // Close libraries before exiting
+    if (!handles.empty())
+	printf("Closing libs");
+    for (void *handle : handles)
+    {
+        if (handle)
+	{
+            dlclose(handle);
+        }
+    }
+    printf("\n");
+}
+
+
+/********************************************************************************************************************
+ * Purpose      : To start westeros by executing commands from TDK.env
  ********************************************************************************************************************/
 bool startWesteros()
 {
     std::ifstream infile(GetTDKEnvPath());
-    std::string command;
+    std::string command = "source " + GetTDKEnvPath();
     if (!infile) {
         printf("\nCould not open the file!\n");
         return false;
     }
 
-    // Read each command from the file
-    while (std::getline(infile, command))
+    pid_t pid = fork();
+    if (pid < 0)
     {
-        // Skip empty lines
-        if (command.empty()) {
-            continue;
-        }
-
-        if (command.find("westeros") != 0) {
-            continue; // Skip all commands except westeros
-        }
-
-        pid_t pid = fork();
-        if (pid < 0)
-        {
-            printf("\nFork failed!\n");
-            return false;
-        }
-
-        if (pid == 0)
-        {
-            // In the child process
-            // Execute the command
-            // Use "/bin/sh -c" to run the command in a shell
-	    printf("\nInitializing westeros\n");
-            execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
-            return true;
-        }
+        printf("\nFork failed!\n");
+	return false;
     }
+
+    if (pid == 0)
+    {
+        // In the child process
+	// Execute the command
+	// Use "/bin/sh -c" to run the command in a shell
+	printf("\nInitializing westeros\n");
+	execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
+	return true;
+    }
+   
+    //Return true from parent process
     return true;
 }
 
@@ -4340,11 +4569,12 @@ int main (int argc, char **argv)
     std::vector<int> TimeoutList;
     char* timeout = NULL;
     bool startWesterosConfig = false;
+    bool createDisplayConfig = false;
+    bool displayCreated = false;
 
     /*
      * Get TDK path
      */
-    setVariables();
     if (getenv ("TDK_PATH") != NULL)
     {
     	strcpy (TDK_PATH, getenv ("TDK_PATH"));
@@ -4622,6 +4852,11 @@ int main (int argc, char **argv)
 		{
 		    startWesterosConfig = true;
 		}
+		if (strcmp ("createDisplay=yes", argv[arg]) == 0)
+                {
+                    createDisplayConfig = true;
+		    startWesterosConfig = false;
+                }
             }
 
             printf ("\nArg : TestCase Name: %s \n", tcname);
@@ -4655,6 +4890,56 @@ int main (int argc, char **argv)
       log_handler, NULL);
     g_log_set_handler ("GLib", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
       log_handler, NULL);
+    if (createDisplayConfig)
+    {
+	if(!RDKShellStatus())
+        {
+	     if (curlError)
+		  goto exit;
+             printf("\nRDKShell is deactivated\n");
+             printf("Activating RDKShell\n");
+             if (activateRDKShell())
+             {
+                  printf("\nActivate RDKShell success\n");
+                  //Wait for RDKShell to activate
+                  sleep(5);
+		  if (!RDKShellStatus())
+		  {
+		       printf("\nERROR : Unable to activate RDKShell plugin");
+		       goto exit;
+		  }
+             }
+	 }
+	 if (checkDisplay())
+	 {
+	     printf("\nAlready a display \"test\" is running in DUT");
+	     printf("\nRe-using display");
+	 }
+	 else
+	 {
+	     printf("\nCreating RDKShell Display :");
+             if (!createDisplay())
+             {
+	          printf("\nERROR : Unable to create Display\n");
+                  goto exit;
+             }
+             else
+             {
+	          displayCreated = true;
+	     }
+	 }
+
+         // Set WAYLAND_DISPLAY to "test" as RDKShell creates a window with displayName as "test"
+         printf("\nSetting WAYLAND_DISPLAY to \"test\"");
+         setenv("WAYLAND_DISPLAY", "test", 1);
+         if (strcmp(getenv ("WAYLAND_DISPLAY"), "test") == 0)
+             printf("\nWAYLAND_DISPLAY successfully set to \"test\"\n\n");
+         else
+         {
+             printf("\nUnable to set WAYLAND_DISPLAY to \"test\"\n\n");
+             goto exit;
+         }
+    }
     if ((startWesterosConfig) && (WesterosProcessID() == "NIL"))
     {
 	if (!startWesteros())
@@ -4667,18 +4952,29 @@ int main (int argc, char **argv)
 	}
 	else
 	{
-	    westeros_started = true;
+	    westerosStarted = true;
 	}
     }
     testSuite = media_pipeline_suite ();
     returnValue =  gst_check_run_suite (testSuite, "playbin_plugin_test", __FILE__);
 exit:
-    if (startWesterosConfig && westeros_started)
+    if (startWesterosConfig && westerosStarted)
     {
 	std::string command = "kill -9 " + WesterosProcessID(false);
         printf("Deinitializing westeros\n");
         executeCmndInDUT(command,false);
     }
+    if (createDisplayConfig && displayCreated)
+    {
+        printf("Destroying RDKShell Display :");
+	if (!destroyDisplay())
+	{
+	    printf("ERROR: Unable to destroy RDKShell display\n");
+	    //Add destroying display failure to number of failures
+	    returnValue += 1;
+	}
+    }
+    closeLibs();
     return returnValue;
 }
 
