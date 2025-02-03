@@ -295,11 +295,11 @@ AC_ARG_ENABLE([defaultComponents],
          [
            case "${enableval}" in
               yes) DefaultComponents=true
-		   SUBDIR_DEFAULT=" agent IARMBUS_stub DS_stub RDKLogger_stub AAMP_stub MediaPipelineTests_stub Apparmor_Stub SystemUtil_stub DSHal_stub ";;
-             no) DefaultComponents=false 
-		   SUBDIR_DEFAULT="  agent IARMBUS_stub DSHal_stub MediaPipelineTests_stub SystemUtil_stub AAMP_stub DS_stub "
-		   SUBDIR_HYBRID=" "
-		   SUBDIR_CLIENT=" ";;
+                   SUBDIR_DEFAULT=" agent IARMBUS_stub DS_stub RDKLogger_stub AAMP_stub MediaPipelineTests_stub Apparmor_Stub SystemUtil_stub DSHal_stub ";;
+             no) DefaultComponents=false
+                   SUBDIR_DEFAULT="  agent IARMBUS_stub DSHal_stub MediaPipelineTests_stub SystemUtil_stub AAMP_stub DS_stub "
+                   SUBDIR_HYBRID=" "
+                   SUBDIR_CLIENT=" ";;
             *) AC_MSG_ERROR([bad value ${enableval} for --enable-defaultComponents ]) ;;
              esac
             ],
@@ -350,6 +350,22 @@ AC_ARG_ENABLE([netsrvmgr],
             ],
            [echo "netsrvmgr component is not enabled"])
 AM_CONDITIONAL([netsrvmgr], [test x$netsrvmgr = xtrue])
+
+AC_ARG_ENABLE([rdkfwupdater],
+         AS_HELP_STRING([--enable-rdkfwupdater],[enable rdkfwupdater (default is no)]),
+         [
+           case "${enableval}" in
+              yes) rdkfwupdater=true
+                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" RDK_fwupdater_stub "],
+                          [echo rdkfwupdater enabled in Hybrid])
+                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" RDK_fwupdater_stub "],
+                          [echo rdkfwupdater enabled in Client]) ;;
+             no) rdkfwupdater=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-rdkfwupdater ]) ;;
+             esac
+            ],
+           [echo "rdkfwupdater component is not enabled"])
+AM_CONDITIONAL([rdkfwupdater], [test x$rdkfwupdater = xtrue])
 
 AC_ARG_ENABLE([fireboltcompliance],
          AS_HELP_STRING([--enable-fireboltcompliance],[enable fireboltcompliance (default is no)]),
@@ -578,5 +594,6 @@ AC_CONFIG_FILES([Makefile
 	 WIFIHAL_stub/Makefile
 	 StorageMgr_stub/Makefile
 	 WesterosHal_stub/Makefile
+         RDK_fwupdater_stub/Makefile
 	 MediaUtils_stub/Makefile])
 AC_OUTPUT
