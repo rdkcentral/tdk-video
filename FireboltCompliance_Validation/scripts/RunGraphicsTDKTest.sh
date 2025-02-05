@@ -16,10 +16,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
+
+wpeframework_stop=0
+
 TEST=$1
 TIMEOUT=$2
-DISPLAY=$3
-TEST_OPTION=$4
+TEST_OPTION=$3
+
+
 if [ "$1" == "--help" ];then
    printf '#%.0s' {1..100}
    printf "\nThis Test Script executes Essos_TDKTestApp, Westeros_TDKTestApp and waymetric along with all the pre-requisites\n"
@@ -52,27 +56,40 @@ then
     fi
 fi
 
-#Stop wpeframework to get EGL Display
-systemctl stop wpeframework
+if [[ ! -z `systemctl status wpeframework 2>/dev/null | grep "active (running)"` ]]; then
+    #Stop wpeframework to get EGL Display
+    systemctl stop wpeframework
+    echo "WPEFramework stopped"
+    wpeframework_stop=1
+fi
+
 
 #Run waymetric --no-multi test
 if [ "$TEST" == "Waymetric" ];
 then
     printf "Starting waymetric test"
     waymetric --no-multi
-     #Reset wpeframework to original state
-    systemctl start wpeframework
+    #Reset wpeframework to original state
+    if [[ "$wpeframework_stop" == 1 ]]; then
+        systemctl start wpeframework
+    fi
     exit
 fi
 
-#Export westeros library
-export XDG_RUNTIME_DIR=/tmp
-westeros_gl_library=`find /usr/lib -iname "libwesteros_gl.so*.0.0"`
-export LD_PRELOAD=$westeros_gl_library
 
-start_westeros_renderer(){
-  timeout 30 westeros --renderer libwesteros_render_embedded.so.0.0.0 --display $DISPLAY --embedded --noFBO &
-}
+if [ "$TEST" == "Essos" ] && [ "$TEST_OPTION" != "USE_WAYLAND" ]; then
+    grep -v '&$' TDK.env > temp_tdk.env
+    source temp_tdk.env
+    rm -rf temp_tdk.env
+    sleep 1
+
+else
+    source TDK.env
+    sleep 1
+    WESTEROS_PID=$(pidof westeros)
+    printf "\n PID of westeros : $WESTEROS_PID\n"
+fi
+
 log(){
     if [ $1 == "yes" ];
     then
@@ -107,7 +124,10 @@ then
         printf "\nEssos_TDKTestApp didnot run properly\nExiting from Test\n"
         printf '#%.0s' {1..40}
         printf '\n'
-	systemctl start wpeframework
+	#Reset wpeframework to original state
+        if [[ "$wpeframework_stop" == 1 ]]; then
+             systemctl start wpeframework
+        fi
         exit
     fi
     resultvar=()
@@ -146,28 +166,33 @@ then
     printf '#%.0s' {1..100}
     printf '\n'
     pkill -f  Essos_TDKTestApp
-    systemctl start wpeframework
+    #Reset wpeframework to original state
+    if [[ "$wpeframework_stop" == 1 ]]; then
+        systemctl start wpeframework
+    fi
     exit
 fi
-if [ "$TEST_OPTION" == "USE_WAYLAND" ];
-then
-    start_westeros_renderer
-    sleep 3
-    wayland_egl_library=`find /usr/lib -iname libwayland-egl.so*.0.0`
-    export LD_PRELOAD=$wayland_egl_library
-    export WAYLAND_DISPLAY=$DISPLAY
-else
-    unset WAYLAND_DISPLAY
-fi
-if [ "$TEST" == "Essos" ];
-then
+if [ "$TEST" == "Essos" ]; then
+    if [ "$TEST_OPTION" == "USE_WAYLAND" ]; then
+       sleep 3
+       wayland_egl_library=`find /usr/lib -iname libwayland-egl.so*.0.0`
+       export LD_PRELOAD=$wayland_egl_library
+    else
+       unset WAYLAND_DISPLAY
+    fi
     ./Essos_TDKTestApp -d -t=$TIMEOUT
 elif [ "$TEST" == "Westeros" ];
 then
-    start_westeros_renderer
     sleep 3
-    Westeros_TDKTestApp --display $DISPLAY -t=$TIMEOUT
+    Westeros_TDKTestApp --display $WAYLAND_DISPLAY -t=$TIMEOUT
 fi
 
-#Start wpeframework
-systemctl start wpeframework
+if [ ! -z "$WESTEROS_PID" ]; then
+     kill $WESTEROS_PID
+     printf "\n\n Killed the process ID : $WESTEROS_PID\n"
+fi
+
+if [[ "$wpeframework_stop" == 1 ]]; then
+     systemctl start wpeframework
+fi
+
