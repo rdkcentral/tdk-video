@@ -22,69 +22,82 @@ static WstGLCtx *ctx = 0;
 static userData *data = 0;
 
 /***************************************************************************
+ *Function name : setEnvironmentVariablesFromFile
+ *Description   : setEnvironmentVariablesFromFile will setup the environment
+ *                from the platform specific TDK.env file
+ *
+ *****************************************************************************/
+void setEnvironmentVariablesFromFile(const std::string& filename)
+{
+    std::ifstream file(filename);
+    if (!file)
+    {
+	DEBUG_PRINT(DEBUG_TRACE,"Error: Could not open file %s", filename.c_str());
+        return;
+    }
+    std::string line;
+    while (std::getline(file, line))
+    {
+        // Ignore empty lines
+        if (line.empty())
+	    continue;
+        // Check if the line starts with "export "
+        if (line.find("export ") == 0)
+	{
+            std::string var = line.substr(7);  // Remove "export " prefix
+            size_t eq_pos = var.find('=');
+            if (eq_pos != std::string::npos)
+	    {
+                std::string key = var.substr(0, eq_pos);
+                std::string value = var.substr(eq_pos + 1);
+                setenv(key.c_str(), value.c_str(), 1); // Overwrite if exists
+		DEBUG_PRINT(DEBUG_TRACE,"Set: %s=%s\n", key.c_str(), value.c_str());
+            }
+        }
+    }
+    file.close();
+}
+
+/***************************************************************************
  *Function name : startWesteros
- *Description   : Function will start westeros renderer by reading
+ *Description   : startWesteros will start the westeros renderer by reading
  *                the platform specific renderer commands from TDK.env file
  *
  *****************************************************************************/
 bool startWesteros()
 {
     ifstream infile(TDK_ENV_FILE);
-    string command;
     if (!infile) {
         DEBUG_PRINT(DEBUG_TRACE,"\nCould not open %s\n",TDK_ENV_FILE);
         return false;
     }
 
-    // Read each command from the file
-    while (getline(infile, command))
-    {
-        // Skip empty lines
-        if (command.empty()) {
-            continue;
-        }
-
-        if (command.find("westeros") != 0)
-        {
-            DEBUG_PRINT(DEBUG_TRACE,"\nExecuting command: %s\n", command.c_str());
-            FILE* pipe = popen(command.c_str(), "r");
-            if (!pipe)
-            {
-                DEBUG_PRINT(DEBUG_TRACE,"\nFailed to execute command: %s\n", command.c_str());
-                continue;
-            }
-            if (pclose(pipe) == -1)
-            {
-                DEBUG_PRINT(DEBUG_TRACE,"\npclose() failed!\n");
-                return false;
-            }
-        }
-        else
-        {
-            pid_t pid = fork();
-            if (pid < 0)
-            {
-                DEBUG_PRINT(DEBUG_TRACE,"\nFork failed!\n");
-                return false;
-            }
-
-            if (pid == 0)
-            {
-                // In the child process
-                // Execute the command
-                // Use "/bin/sh -c" to run the command in a shell
-                execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
-                return true;
-            }
-            else
-            {
-                // In the parent process
-                // Wait for westeros to start
-                sleep(2);
-            }
-
-        }
+    std::string command = std::string("source ") + TDK_ENV_FILE;
+    if (!infile) {
+        printf("\nCould not open the file!\n");
+        return false;
     }
+
+    pid_t pid = fork();
+    if (pid < 0)
+    {
+        printf("\nFork failed!\n");
+	return false;
+    }
+
+    if (pid == 0)
+    {
+        // In the child process
+	// Execute the command
+	// Use "/bin/sh -c" to run the command in a shell
+	printf("\nInitializing westeros\n");
+	execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
+	return true;
+    }
+
+    // In the parent process
+    // Wait for westeros to start
+    sleep(2);
     return true;
 }
 
@@ -105,6 +118,7 @@ std::string WesterosHalAgent::testmodulepre_requisites()
     DEBUG_PRINT(DEBUG_TRACE, "WesterosHal testmodule pre_requisites --> Exit\n");
     if (start_westeros_result)
     {
+	setEnvironmentVariablesFromFile(std::string(TDK_ENV_FILE));
         return "SUCCESS";
     }
     else
