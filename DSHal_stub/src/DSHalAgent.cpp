@@ -167,6 +167,12 @@ bool DSHalAgent::testmodulepost_requisites()
         DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsDisplayTerm Failed\n");
         goto EXIT;
     }
+    ret = dsHostTerm();
+    if (ret != dsERR_NONE)
+    {
+        DEBUG_PRINT(DEBUG_TRACE, "DSHal : dsHostTerm Failed\n");
+        goto EXIT;
+    }
     vpHandle = 0;
     vdHandle = 0;
     apHandle = 0;
