@@ -45,15 +45,10 @@ std::string MfrHalAgent::testmodulepre_requisites ()
     gMFRLibRet = mfr_init ();
     if (mfrERR_NONE != gMFRLibRet)
     {
-        DEBUG_PRINT (DEBUG_TRACE, "Failed to initialize Bluetooth Hal... Quiting..\n");
-        DEBUG_PRINT (DEBUG_TRACE, "MfrHal testmodule pre_requisites --> Exit\n");
+        DEBUG_PRINT (DEBUG_TRACE, "Failed to initialize MfrHal... Quiting..\n");
         returnValue = "FAILURE";
     }
-    else
-    {
-        DEBUG_PRINT (DEBUG_TRACE, "MfrHal testmodule pre_requisites --> Exit\n");
-    }
-
+    DEBUG_PRINT (DEBUG_TRACE, "MfrHal testmodule pre_requisites --> Exit\n");
     return returnValue;
 
 }
@@ -68,10 +63,14 @@ bool MfrHalAgent::testmodulepost_requisites ()
 {
     bool returnValue = true;
     DEBUG_PRINT(DEBUG_TRACE, "MfrHal testmodule post_requisites --> Entry\n");
-    /*
-     * Nothing to be done now
-     */
-    DEBUG_PRINT (DEBUG_TRACE, "MfrHal testmodule pre_requisites --> Exit\n");
+    gMFRLibRet = mfr_term ();
+    if (mfrERR_NONE != gMFRLibRet)
+    {
+        DEBUG_PRINT (DEBUG_TRACE, "Failed to terminate MfrHal... Quiting..\n");
+        returnValue = false;
+    }
+
+    DEBUG_PRINT (DEBUG_TRACE, "MfrHal testmodule post_requisites --> Exit\n");
     return returnValue;
 }
 
