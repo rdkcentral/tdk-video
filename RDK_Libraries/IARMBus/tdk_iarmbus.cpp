@@ -19,6 +19,7 @@
 
 #include <stdio.h>
 #include "libIBus.h"
+#include "libIBusDaemon.h"
 #include "libIARM.h"
 
 IARM_Result_t IARM_Bus_Init(const char *name)
@@ -58,6 +59,48 @@ IARM_Result_t IARM_Bus_Disconnect(void)
 }
 
 IARM_Result_t IARM_Bus_Term(void)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_BusDaemon_RequestOwnership(IARM_Bus_ResrcType_t resrcType)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_Bus_BroadcastEvent(const char *ownerName, IARM_EventId_t eventId, void *data, size_t len)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_BusDaemon_ReleaseOwnership(IARM_Bus_ResrcType_t resrcType)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_Bus_RegisterCall(const char *methodName, IARM_BusCall_t handler)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_Bus_Call(const char *ownerName,  const char *methodName, void *arg, size_t argLen)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_Bus_Call_with_IPCTimeout(const char *ownerName,  const char *methodName, void *arg, size_t argLen, int timeout)
+{
+    printf("\nDUMMY %s\n", __FUNCTION__);
+    return IARM_RESULT_INVALID_PARAM;
+}
+
+IARM_Result_t IARM_Bus_RegisterEvent(IARM_EventId_t maxEventId)
 {
     printf("\nDUMMY %s\n", __FUNCTION__);
     return IARM_RESULT_INVALID_PARAM;

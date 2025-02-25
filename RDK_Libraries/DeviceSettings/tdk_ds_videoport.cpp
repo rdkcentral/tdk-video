@@ -19,8 +19,6 @@
 
 #include "videoOutputPort.hpp"
 #include <iostream>
-#include "videoOutputPortConfig.hpp"
-#include "audioOutputPortConfig.hpp"
 
 using namespace std;
 
@@ -32,12 +30,12 @@ namespace device {
 VideoOutputPort & VideoOutputPort::getInstance(int id)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-	return VideoOutputPortConfig::getInstance().getPort(id);
+	throw std::runtime_error("Dummy function called: getInstance");
 }
 VideoOutputPort & VideoOutputPort::getInstance(const std::string &name)
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-	return VideoOutputPortConfig::getInstance().getPort(name);
+	throw std::runtime_error("Dummy function called: getInstance");
 }
 VideoOutputPort::VideoOutputPort(const int type, const int index, const int id, int audioPortId, const std::string &resolution) :
 										_type(type), _index(index), _id(id),
@@ -89,22 +87,22 @@ VideoOutputPort::~VideoOutputPort()
 const VideoOutputPortType & VideoOutputPort::getType() const
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-	return VideoOutputPortConfig::getInstance().getPortType(_type);
+	throw std::runtime_error("Dummy function called: getInstance");
 }
 AudioOutputPort &VideoOutputPort::getAudioOutputPort()
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-	return AudioOutputPortConfig::getInstance().getPort(_aPortId);
+	throw std::runtime_error("Dummy function called: getInstance");
 }
 const VideoResolution & VideoOutputPort::getResolution() 
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-	return VideoResolution::getInstance(_resolution,true);
+	throw std::runtime_error("Dummy function called: getInstance");
 }
 const VideoResolution & VideoOutputPort::getDefaultResolution() const
 {
 	printf("\nDUMMY %s\n", __FUNCTION__);
-	return VideoResolution::getInstance(_defaultResolution,true);
+	throw std::runtime_error("Dummy function called: getInstance");
 }
 const VideoOutputPort::Display &VideoOutputPort::getDisplay() 
 {
