@@ -640,6 +640,445 @@ void RDK_fwupgradeAgent::rdkfwupdater_RunCommand(IN const Json::Value& req, OUT 
     return;
 }
 
+/*********************************************************************
+ *Function name  : rdkfwupdater_GetServerURL
+ *Description    : This function scans a file for a URL
+ *********************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetServerURL(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetServerURL --->Entry\n");
+    size_t returnValue = 0;
+    char filename[40] = { 0 };
+
+    strcpy(filename,req["filename"].asCString());
+    size_t buffer_size = req["buffer_size"].asInt();
+    char serverurl[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetServerUrlFile(NULL, buffer_size, filename);
+         }
+         else if (req["filename_null_check"].asInt())
+         {
+             returnValue = GetServerUrlFile(serverurl, buffer_size, NULL);
+         }
+         else
+         {
+             returnValue = GetServerUrlFile(serverurl, buffer_size, filename);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Server URL: %s, Return Value: %d Filename: %s", serverurl, returnValue, filename);
+    if (returnValue)
+    {
+       response["result"]= "SUCCESS";
+    }
+    else
+    {
+       response["result"]= "FAILURE";
+    }
+
+    response["details"] = serverurl;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetServerURL --->Exit\n");
+    return;
+}
+
+/**********************************************************************
+ *Function name  : rdkfwupdater_GetTimezone
+ *Description    : This function returns the timezone for the device.
+ **********************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetTimezone(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetTimezone --->Entry\n");
+    char cpuarch_string[10] = { 0 };
+    size_t returnValue = 0;
+
+    strcpy(cpuarch_string,req["cpuarch"].asCString());
+    size_t buffer_size = req["buffer_size"].asInt();
+
+    char strTimezone[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetTimezone(NULL, cpuarch_string, buffer_size);
+         }
+		 else if (req["cpuarch_null_param_check"].asInt())
+		 {
+                    returnValue = GetTimezone(strTimezone, NULL, buffer_size);
+		 }
+         else
+         {
+             returnValue = GetTimezone(strTimezone, cpuarch_string, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "TimeZone: %s, Return Value: %d cpuarch: %s", strTimezone, returnValue, cpuarch_string);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strTimezone;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetTimezone --->Exit\n");
+    return;
+}
+
+/**********************************************************************************************
+ *Function name  : rdkfwupdater_GetAdditionalFwVerInfo
+ *Description    : This function returns the PDRI filename plus Remote Info for the device.
+ **********************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetAdditionalFwVerInfo(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetAdditionalFwVerInfo --->Entry\n");
+    size_t returnValue = 0;	
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strFwInfo[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetAdditionalFwVerInfo(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetAdditionalFwVerInfo(strFwInfo, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "FW info: %s, Return Value: %d Buffer size: %d", strFwInfo, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }    
+    response["details"] = strFwInfo;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetAdditionalFwVerInfo --->Exit\n");
+    return;
+}
+
+/****************************************************************************
+ *Function name  : rdkfwupdater_GetPDRIFileName
+ *Description    : This function returns the PDRI for the device.
+ ****************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetPDRIFileName(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetPDRIFileName --->Entry\n");
+    size_t returnValue = 0;
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strPDRIFilename[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetPDRIFileName(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetPDRIFileName(strPDRIFilename, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "PDRI Filename: %s, Return Value: %d Buffer size: %d", strPDRIFilename, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strPDRIFilename;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetPDRIFileName --->Exit\n");
+    return;
+}
+
+/************************************************************************************************************
+ *Function name  : rdkfwupdater_GetUTCTime
+ *Description    : This function returns a formatted UTC device time. Example: Tue Jul 12 21:56:06 UTC 2022
+ ************************************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetUTCTime(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetUTCTime --->Entry\n");
+    size_t returnValue = 0;
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strUTCTime[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetUTCTime(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetUTCTime(strUTCTime, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "UTC Time: %s, Return Value: %d Buffer size: %d", strUTCTime, returnValue, buffer_size);
+
+    if (returnValue)
+    { 
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strUTCTime;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetUTCTime --->Exit\n");
+    return;
+}
+
+/**************************************************************************
+ *Function name  : rdkfwupdater_GetCapabilities
+ *Description    : This function returns the device capabilities.
+ **************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetCapabilities(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetCapabilities --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strCapabilities[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetCapabilities(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetCapabilities(strCapabilities, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Device Capabilities: %s, Return Value: %d Buffer size: %d", strCapabilities, returnValue, buffer_size);
+
+    if (returnValue)
+    {	 
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+    response["details"] = strCapabilities;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetCapabilities --->Exit\n");
+    return;
+}
+
+/************************************************************************
+ *Function name  : rdkfwupdater_GetPartnerId
+ *Description    : This function returns the partner ID of the device.
+ ************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetPartnerId(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetPartnerId --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strPartnerId[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetPartnerId(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetPartnerId(strPartnerId, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Device PartnerID: %s, Return Value: %d Buffer size: %d", strPartnerId, returnValue, buffer_size);
+
+    if (returnValue)
+    { 
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strPartnerId;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetPartnerId --->Exit\n");
+    return;
+}
+
+/**************************************************************************
+ *Function name  : rdkfwupdater_GetSerialNum
+ *Description    : This function returns the serial number of the device.
+ **************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetSerialNum(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetSerialNum --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strSerialNum[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetSerialNum(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetSerialNum(strSerialNum, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Serial Number: %s, Return Value: %d Buffer size: %d", strSerialNum, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strSerialNum;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetSerialNum --->Exit\n");
+    return;
+}
+
+/**************************************************************************
+ *Function name  : rdkfwupdater_GetAccountID
+ *Description    : This function returns the account ID of the device..
+ **************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetAccountID(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetAccountID --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strAccountID[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetAccountID(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetAccountID(strAccountID, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Account ID: %s, Return Value: %d Buffer size: %d", strAccountID, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strAccountID;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetAccountID --->Exit\n");
+    return;
+}
+
 /**************************************************************************
 Function Name   : cleanup
 Arguments       : NULL
