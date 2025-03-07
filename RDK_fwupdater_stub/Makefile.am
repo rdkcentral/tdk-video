@@ -27,7 +27,7 @@ AM_CXXFLAGS = ${RDK_fwupdater_FLAGS} -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
               -I${top_srcdir}/RDK_fwupdater_stub/include -I${top_srcdir}/agent/include
 
 lib_LTLIBRARIES = librdkfwupgraderstub.la
-librdkfwupgraderstub_la_SOURCES = src/RDK_fwupgraderAgent.cpp src/rdkfwupdater_source/src/deviceutils/deviceutils.c
+librdkfwupgraderstub_la_SOURCES = src/RDK_fwupgraderAgent.cpp src/rdkfwupdater_source/src/deviceutils/deviceutils.c src/rdkfwupdater_source/src/deviceutils/device_api.c
 librdkfwupgraderstub_la_includedir = ${includedir}
 librdkfwupgraderstub_la_LIBADD = -lsecure_wrapper -lfwutils -lparsejson -ldwnlutil -lrdkloggers ${RDK_fwupdater_LIBS}
 librdkfwupgraderstub_la_include_HEADERS = ${top_srcdir}/RDK_fwupdater_stub/include/RDK_fwupgradeAgent.h

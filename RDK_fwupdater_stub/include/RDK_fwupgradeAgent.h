@@ -36,6 +36,7 @@
 //Component specific header files
 extern "C" {
    #include "deviceutils.h"
+   #include "device_api.h"
 }
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
@@ -67,6 +68,15 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_get_system_uptime", PARAMS_BY_NAME, JSON_STRING, "null_param" , JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_get_system_uptime);
 		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_getMetaDataFile", PARAMS_BY_NAME, JSON_STRING, "null_param" , JSON_INTEGER, "directory", JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_getMetaDataFile);
 		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_mergeLists", PARAMS_BY_NAME, JSON_STRING, "list1", JSON_STRING, "list2" , JSON_STRING, "null_list1", JSON_INTEGER, "null_list2", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_mergeLists);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetServerURL", PARAMS_BY_NAME, JSON_STRING, "filename", JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, "filename_null_check", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetServerURL);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetTimezone", PARAMS_BY_NAME, JSON_STRING, "cpuarch", JSON_STRING, "null_param", JSON_INTEGER, "cpuarch_null_param_check", JSON_INTEGER, "buffer_size", JSON_INTEGER,  NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetTimezone);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetAdditionalFwVerInfo", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetAdditionalFwVerInfo);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetPDRIFileName", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetPDRIFileName);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetUTCTime", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetUTCTime);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetCapabilities", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetCapabilities);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetPartnerId", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetPartnerId);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetSerialNum", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetSerialNum);
+		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetAccountID", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetAccountID);
                 }
 
 
@@ -86,8 +96,15 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 		void rdkfwupdater_get_system_uptime(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_getMetaDataFile(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_mergeLists(IN const Json::Value& req, OUT Json::Value& response);
-
-
+		void rdkfwupdater_GetServerURL(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetTimezone(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetAdditionalFwVerInfo(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetPDRIFileName(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetUTCTime(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetCapabilities(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetPartnerId(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetSerialNum(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetAccountID(IN const Json::Value& req, OUT Json::Value& response);
 };
 #endif //__RDKFWUPGRADER_STUB_H__
 
