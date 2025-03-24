@@ -36,6 +36,8 @@
 #include "tinyxml2.h"
 #include <dlfcn.h>
 #include <json/json.h>
+#include <cstdio>
+#include <fstream>
 
 extern "C"
 {
@@ -82,6 +84,7 @@ using namespace tinyxml2;
 #define CHUNK_SIZE                      4096
 #define PROGRESS_BAR_DISPLAY_INTERVAL   5 //seconds 
 #define resolution_count		3
+#define LOG_FILE                        "/opt/TDK/mediapipeline_test_step.log"
 
 char m_play_url[BUFFER_SIZE_LONG] = {'\0'};
 char tcname[BUFFER_SIZE_SHORT] = {'\0'};
@@ -158,7 +161,7 @@ bool avsync_enabled = false;
 bool forward_events = true;
 string audiosink;
 bool ignoreError = false;
-bool checkNewPlay = false;
+bool checkNewPlay = true;
 bool only_audio = false;
 bool only_video = false;
 bool checkEachSecondPlayback = false;
@@ -179,6 +182,10 @@ std::vector<void *> handles;
 bool curlError = false;
 guint bandwidth;
 GstElement *dash_demux;
+FILE *file = NULL;
+bool log_enabled = true;
+bool playbackValidationLog = false;
+bool defaultStart = true;
 
 /*
  * Playbin flags
@@ -272,18 +279,102 @@ typedef struct CustomData {
  */
 static void handleMessage (MessageHandlerData *data, GstMessage *message);
 
-void assert_failure(GstElement* playbin, bool success, const char *str= "Failure occured")
+bool fileExists(const char* filename, bool returnResult = false)
 {
+   std::ifstream file_(filename);
+   if (!file_.good())
+   {
+       if (returnResult)
+       {
+           printf("\n %s not present in DUT", filename);
+	   return false;
+       }
+       if (log_enabled)
+	   fprintf(file,"ERROR : File not found\n %s : No such file present in DUT", filename);
+       printf("ERROR : File not found\n %s : No such file present in DUT", filename);
+       fclose(file);
+       fail_unless(false,"ERROR : File not found");
+   }
+   return true;
+}
+
+void startPlaybackValidationLogging(bool start=true)
+{
+   if (file)
+   {
+       if (start)
+       {
+	   fprintf(file,"\n################################\n");
+           fprintf(file,"# Playback Validation Started\n");
+	   fprintf(file,"################################\n");
+	   playbackValidationLog = true;
+	   log_enabled = true;
+       }
+       else
+       {
+	   fprintf(file,"\n################################\n");
+	   fprintf(file,"# Playback Validation Ended\n");
+	   fprintf(file,"################################\n");
+	   playbackValidationLog = false;
+	   log_enabled = false;
+       }
+   }
+}
+
+void assert_failure(GstElement* playbin, bool success, const char *str= "Failure occured", const char* func= "default function", int line= 0, const char* test_step="Test Step")
+{
+   if (strstr(test_step, "Test Step") != nullptr)
+   {
+       log_enabled = false;
+   }
+   if (log_enabled)
+   {
+       fprintf(file,"TEST STEP : %s  ",test_step);
+       if (!playbackValidationLog)
+	    fprintf(file,"\n");
+   }
    if(success)
+   {
+      if (log_enabled)
+      {
+	  if (playbackValidationLog)
+	  {
+	      fprintf(file," --> SUCCESS | ");
+	  }
+	  else
+	  {
+              fprintf(file,"RESULT : SUCCESS\n\n");
+	  }
+      }
+      log_enabled = true;
       return;
+   }
+
+   if (log_enabled)
+       fprintf(file,"RESULT : FAILURE\n");
    if(playbin)
    {
       gst_element_set_state (playbin, GST_STATE_NULL);
    }
    gst_object_unref (playbin);
+   if (log_enabled)
+   {
+      fprintf(file,"\nFAILURE observed at %s : [%s %d]", func, __FILE__, line);
+      fprintf(file,"\nFAILURE Reason : %s\n",str);
+   }
+   fclose(file);
    fail_unless(false,str);
 }
 
+void terminatePipeline(GstElement* playbin)
+{
+   if (playbin)
+   {
+        assert_failure(playbin, gst_element_set_state (playbin, GST_STATE_NULL), "Failed to set playbin to NULL state",__FUNCTION__,__LINE__,"Set Pipeline to NULL state");
+        gst_object_unref (playbin);
+   }
+}
+    
 /*******************************************************************************************************************************************
 Purpose:                To continue the state of the pipeline and check whether operation is being carried throughout the specified interval
 Parameters:
@@ -474,7 +565,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
                  printf(" Rendered: %" G_GUINT64_FORMAT, rendered_frames);
              }
 
-	     assert_failure (playbin,rendered_frames != 0 , "Video rendered_frames is coming as 0");  
+	     assert_failure (playbin,rendered_frames != 0 , "Video rendered_frames is coming as 0", __FUNCTION__ ,__LINE__);  
             
              if ((rendered_frames <= previous_rendered_frames))
 	     	frame_buffer -= 1;
@@ -689,6 +780,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 
 void PlaybackValidation(MessageHandlerData *data, int seconds)
 {
+    startPlaybackValidationLogging(true);
     if (only_audio)
     {
 	 checkPTS=false;
@@ -735,7 +827,16 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     if (data->pipelineInitiation)
     {
 	printf("\nEntering to Pipeline Initiation\n");
-        assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position");
+        assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position",
+			__FUNCTION__,__LINE__,"Querying Playback Position before starting Playback Validation" );
+	if (log_enabled)
+             fprintf(file, "\n");
+     
+	assert_failure(data->playbin, GST_TIME_AS_SECONDS(data->previousposition) < 10, "Initial position of the pipeline is excessively high",
+	                __FUNCTION__,__LINE__,"Verify Pipeline initiates properly");
+
+	if (log_enabled)
+	     fprintf(file, "\n");
 	data->pipelineInitiation = false;
     }
 
@@ -748,7 +849,10 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     }
 
     // Get pipeline state
-    assert_failure (data->playbin, gst_element_get_state (data->playbin, &(data->cur_state), NULL, 0) == GST_STATE_CHANGE_SUCCESS);
+    assert_failure (data->playbin, gst_element_get_state (data->playbin, &(data->cur_state), NULL, 0) == GST_STATE_CHANGE_SUCCESS, "Failed to obtain playback state of pipeline",
+		    __FUNCTION__,__LINE__,"Querying Pipeline State before starting Playback Validation");
+    if (log_enabled)
+	 fprintf(file, "\n");
     GstBus *bus;
     data->eosDetected = FALSE;
     bus = gst_element_get_bus (data->playbin);
@@ -758,11 +862,18 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     int previous_seconds = 0;
     int second_count = 0;
 
+    int iterator =1;
+
     // loop timer
     auto loopStart = std::chrono::high_resolution_clock::now();
 
+    if (log_enabled)
+	 fprintf(file,"\n");
+
     while(1)
     {
+	 if (log_enabled)
+	      fprintf(file,"Iteration %02d ", iterator);
 	 /* Loop break condition   
 	  * Break after executing the desired number of seconds
 	  */
@@ -772,6 +883,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 
               // Print the duration using printf
               printf("\nBreaking Playback Validation loop after %02lld seconds\n", duration);
+	      if (log_enabled)
+		  fprintf(file,"\nBreaking Playback Validation loop after %02lld seconds\n", duration);
               break;
 	 }
      
@@ -789,10 +902,14 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
              if (ignoreEOS)
 	     {
 	          printf("Not breaking even though EOS is detected");
+		  if (log_enabled)
+		      fprintf(file,"\nNot breaking even though EOS is detected\n");
 	     }
 	     else
 	     {
 	          printf("\nBreaking due to EOS detected\n");
+		  if (log_enabled)
+		      fprintf(file,"\nBreaking due to EOS detected\n");
  	          break;
              }
 	 }
@@ -805,7 +922,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	 if (((checkEachSecondPlayback) && ((second_count > previous_seconds) || (milliSeconds == 0))) || (!checkEachSecondPlayback))
          {
        
-              assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->currentPosition)), "Failed to query the current playback position");
+              assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->currentPosition)), "Failed to query the current playback position",
+			      __FUNCTION__,__LINE__,"Query Playback Position");
               auto currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
               std::tm* timeStruct = std::localtime(&currentTime);
               printf("\nTDK LOG :  %02d:%02d:%02d  -- ", timeStruct->tm_hour, timeStruct->tm_min, timeStruct->tm_sec);
@@ -820,9 +938,24 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
               printf("   Position diff: %.5f seconds", abs(position_diff_seconds));
               if(!ignorePlayJump)
               {
+		  if (abs(position_diff_seconds) > 0.9)
+		  {
+		      char buffer[256];
+		      sprintf(buffer,"Difference in expected position is large \nTDK LOG :  %02d:%02d:%02d  -- Playback position: %" GST_TIME_FORMAT ""
+		                     " Expected Playback position:  %" GST_TIME_FORMAT "    Position diff: %.5f seconds",
+				      timeStruct->tm_hour, timeStruct->tm_min, timeStruct->tm_sec,GST_TIME_ARGS(data->currentPosition),
+				      GST_TIME_ARGS(data->previousposition),abs(position_diff_seconds));
+                      assert_failure (data->playbin, false, buffer, __FUNCTION__,__LINE__,"Playback Position Validation");
+		  }
+		  else
+		  {
+		      assert_failure (data->playbin, true, NULL, __FUNCTION__,__LINE__,"Playback Position Validation");
+		  }
+		  /*
                   if (abs(position_diff_seconds) > 0.9)
                        gst_element_set_state (data->playbin, GST_STATE_NULL);
                   fail_unless( position_diff_seconds < 0.9,"Difference in expected position is large \nTDK LOG :  %02d:%02d:%02d  -- Playback position: %" GST_TIME_FORMAT " Expected Playback position:  %" GST_TIME_FORMAT "    Position diff: %.5f seconds",timeStruct->tm_hour, timeStruct->tm_min, timeStruct->tm_sec,GST_TIME_ARGS(data->currentPosition),GST_TIME_ARGS(data->previousposition),abs(position_diff_seconds));
+		  */
               }
 	      if (data->cur_state == GST_STATE_PLAYING)
               {
@@ -852,7 +985,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
              }
              if (!justPrintPTS)
              {
-                 assert_failure (data->playbin,data->westerosSink.pts_buffer != 0 , "Video is not playing according to video-data->westerosSink.pts check of westerosSink");
+                 assert_failure (data->playbin,data->westerosSink.pts_buffer != 0 , "Video is not playing according to video-data->westerosSink.pts check of westerosSink",
+				 __FUNCTION__,__LINE__,"Video PTS Validation");
              }
              data->westerosSink.old_pts = data->westerosSink.pts;
          }
@@ -862,6 +996,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	  */
 	 if ((use_westerossink_fps) && (second_count > previous_seconds))
          {
+	     fprintf(file,"\n");
              g_object_get (data->westerosSink.sink,"stats",&(data->westerosSink.structure),NULL);
 	     gst_structure_get_uint64(data->westerosSink.structure, "rendered", &(data->westerosSink.rendered_frames));
 	     if (data->westerosSink.structure && (gst_structure_has_field(data->westerosSink.structure, "dropped") || gst_structure_has_field(data->westerosSink.structure, "rendered")))
@@ -872,13 +1007,15 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
                  printf(" Dropped: %" G_GUINT64_FORMAT, data->westerosSink.dropped_frames);
 		 printf(" Rendered: %" G_GUINT64_FORMAT , data->westerosSink.rendered_frames);
 
-		 assert_failure (data->playbin,data->westerosSink.rendered_frames != 0 , "Video rendered_frames is coming as 0");
+		 assert_failure (data->playbin,data->westerosSink.rendered_frames != 0 , "Video rendered_frames is coming as 0",
+				 __FUNCTION__,__LINE__,"Verify Video Frame is Rendered");
 		 if (((data->westerosSink.rendered_frames <= data->westerosSink.previous_rendered_frames)) &&  (data->cur_state == GST_STATE_PLAYING))
                     data->westerosSink.frame_buffer -= 1;
 		 else if (((data->westerosSink.rendered_frames != data->westerosSink.previous_rendered_frames)) &&  (data->cur_state == GST_STATE_PAUSED))
 		    data->westerosSink.frame_buffer -= 1;
 
-		 assert_failure (data->playbin,data->westerosSink.frame_buffer != 0 , "Video frames are not rendered properly");
+		 assert_failure (data->playbin,data->westerosSink.frame_buffer != 0 , "Video frames are not rendered properly",
+				 __FUNCTION__,__LINE__,"Verify Video Frames rendered are incrementing");
 		 data->westerosSink.previous_rendered_frames = data->westerosSink.rendered_frames;
 	     }
 
@@ -889,6 +1026,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	  */
          if ((use_audioSink) && (second_count > previous_seconds))
          {
+	     fprintf(file,"\n");
              g_object_get (data->audioSink.sink,"stats",&(data->audioSink.structure),NULL);
              gst_structure_get_uint64(data->audioSink.structure, "rendered", &(data->audioSink.rendered_frames));
              if (data->audioSink.structure && (gst_structure_has_field(data->audioSink.structure, "dropped") || gst_structure_has_field(data->audioSink.structure, "rendered")))
@@ -905,12 +1043,15 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 		 if ((play_without_audio) && (data->currentPosition/GST_SECOND >= audioEnd))
 		     use_audioSink = false;
 
+		 assert_failure (data->playbin, data->audioSink.rendered_frames != 0 , "Audio rendered_frames is coming as 0",
+                                 __FUNCTION__,__LINE__,"Verify Audio Frame is Rendered");
                  if ((data->audioSink.rendered_frames <= data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PLAYING))
                     data->audioSink.frame_buffer -= 1;
 		 else if ((data->audioSink.rendered_frames != data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PAUSED))
 		    data->audioSink.frame_buffer -= 1;
 
-                 assert_failure (data->playbin,data->audioSink.frame_buffer != 0 , "Audio frames are not rendered properly");
+                 assert_failure (data->playbin,data->audioSink.frame_buffer != 0 , "Audio frames are not rendered properly",
+				 __FUNCTION__,__LINE__,"Verify Audio Frames rendered are incrementing");
              }
 
 	     if ((checkAudioSamplingrate) && (data->cur_state == GST_STATE_PLAYING))
@@ -925,7 +1066,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 			if (audio_sampling_diff <= rate_diff_threshold)
 				audio_sampling_rate_buffer -= 1;
 		 } 
-		 assert_failure (data->playbin,audio_sampling_rate_buffer != 0, "Audio sampling rate was not rendered properly");
+		 assert_failure (data->playbin,audio_sampling_rate_buffer != 0, "Audio sampling rate was not rendered properly",
+				 __FUNCTION__,__LINE__,"Verify Audio Sampling rate");
 
 		 if (sampling_rate == 96)
                      rate_diff_threshold = -5;
@@ -938,6 +1080,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	 if(videoUnderflowReceived && bufferUnderflowTest)
          {
              printf("\nVideo Underflow received breaking from PlaybackValidation");
+	     if (log_enabled)
+		 fprintf(file,"\nVideo Underflow received breaking from PlaybackValidation\n");
              break;
          }
 
@@ -945,6 +1089,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	 if(audio_underflow_received_global && bufferUnderflowTest)
          {
              printf("\nAudio Underflow received breaking from PlaybackValidation");
+	     if (log_enabled)
+		 fprintf(file,"\nAudio Underflow received breaking from PlaybackValidation\n");
              break;
          }
 
@@ -965,6 +1111,10 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
                  data->westerosSink.width = new_width;
                  printf("\nVideo height = %d\nVideo width = %d", data->westerosSink.height, data->westerosSink.width);
 	         printf("\nres-comparison value = %d",resList[resItr]);
+		 if (log_enabled)
+		     fprintf(file,"\n");
+		 assert_failure(data->playbin, data->westerosSink.height == resList[resItr], "Pipeline not playing at expected Resolution",
+				 __FUNCTION__, __LINE__, "Verify Pipeline is playing at expected resolution");
              }
 	     if(ResolutionCount == TOTAL_RESOLUTIONS_COUNT)
              {
@@ -975,14 +1125,23 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 
          // Seconds Counter
 	 if (second_count > previous_seconds)
+	 {
 	     previous_seconds += 1;
+	     fprintf(file, "\n");
+	 }
 
          // Sleeping for  100 milliseconds
 	 MilliSleep(100);
 	 milliSeconds += 100;
+
+	 iterator++;
+	 fprintf(file, "\n");
      }
 
      printf("\nExiting from PlaybackValidation, currentPosition is %lld\n",(data->currentPosition)/GST_SECOND);
+     if (log_enabled)
+         fprintf(file, "\nExiting from PlaybackValidation, currentPosition is %lld\n",(data->currentPosition)/GST_SECOND);
+     startPlaybackValidationLogging(false);
 }
 
 /*
@@ -1009,11 +1168,15 @@ void setflags()
 	if (getenv ("TDK_NATIVE_AUDIO") != NULL)
 	{
 	    flags |= GST_PLAY_FLAG_NATIVE_AUDIO;
+	    if (log_enabled)
+		fprintf(file,"\nEnabled NATIVE_AUDIO flag for playbin\n");
 	    printf("\nEnabled NATIVE_AUDIO flag for playbin\n");
         }
 	if (getenv ("TDK_NATIVE_VIDEO") != NULL)
         {
             flags |= GST_PLAY_FLAG_NATIVE_VIDEO;
+	    if (log_enabled)
+                fprintf(file,"\nEnabled NATIVE_VIDEO flag for playbin\n");
             printf("\nEnabled NATIVE_VIDEO flag for playbin\n");
         }
 }
@@ -1462,6 +1625,8 @@ Purpose:               To flush the pipeline using seek
 void flushPipeline(MessageHandlerData *data)
 {
     seekOperation = true;
+    if (log_enabled)
+	fprintf(file, "\nFlushing pipeline\n");    
     printf("\nFlushing Pipeline after switch\n");
     assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->currentPosition)),
                                          "Failed to query the current playback position");
@@ -1471,7 +1636,8 @@ void flushPipeline(MessageHandlerData *data)
                                    GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
     Sleep(2);
     audio_underflow_received = false;
-    assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position");
+    assert_failure (data->playbin,gst_element_query_position (data->playbin, GST_FORMAT_TIME, &(data->previousposition)), "Failed to query the current playback position",
+		    __FUNCTION__,__LINE__, "Query playback position after flush");
     return;
 }
 
@@ -1680,10 +1846,18 @@ static void play_set_relative_volume (GstElement *playbin)
   printf ("Previous volume : %.0f%% \n", volume * 100);
 
   printf  ("Setting volume to %f \n", volume_set);
+
+  if (log_enabled)
+  {
+      fprintf(file, "Previous volume : %.0f%% \n", volume * 100);
+      fprintf(file, "Setting volume to %f \n", volume_set);
+  }      
   
   set_volume = volume_set;
 
   printf ("Volume setted : %.0f%% \n", set_volume * 100);
+  if (log_enabled)
+      fprintf(file, "Volume setted : %.0f%% \n", set_volume * 100);
 
   gst_stream_volume_set_volume (GST_STREAM_VOLUME (playbin),
       GST_STREAM_VOLUME_FORMAT_CUBIC, set_volume);
@@ -1692,8 +1866,25 @@ static void play_set_relative_volume (GstElement *playbin)
       GST_STREAM_VOLUME_FORMAT_CUBIC);
  
   printf ("Volume: %.0f%% \n", get_volume * 100);
+  if (log_enabled)
+       fprintf(file, "Volume: %.0f%% \n", get_volume * 100);
 
-  assert_failure (playbin,set_volume == get_volume,"Failed to set the given volume");
+  GstElement* audio_sink = NULL;
+  g_object_get(playbin, "audio-sink", &audio_sink, NULL);
+  if (audio_sink)
+  {
+       if (g_object_class_find_property(G_OBJECT_GET_CLASS(audio_sink), "volume"))
+       {
+           double sink_volume;
+           g_object_get(G_OBJECT(audio_sink), "volume", &sink_volume, NULL);
+	   printf("\n\nVolume from audiosink = %.0f\n", sink_volume);
+	   printf("\nExpected volume = %0.f\n\n", set_volume);
+	   assert_failure (playbin, sink_volume == set_volume, "audio-sink doesn't return the expected volume", __FUNCTION__, __LINE__, "Verify if volume is properly set in audio-sink");
+       }
+       g_object_unref(audio_sink);
+  }
+
+  assert_failure (playbin,set_volume == get_volume,"Failed to set the given volume", __FUNCTION__, __LINE__, "Verify if volume is set successfully");
 }
 
 /*************************************************** Appsrc reading start *******************************************/
@@ -1955,7 +2146,6 @@ bool curlRead(gpointer Data)
   return true;
 }
 
-
 //Below section is where appsrc feeding is done
 static gboolean read_data (MessageHandlerData * data)
 {
@@ -1971,10 +2161,14 @@ static gboolean read_data (MessageHandlerData * data)
   if ((bufferUnderflowTest) && (total_bytes_fed >= BYTES_THRESHOLD))
   {
      printf("\n reached BYTES_THRESHOLD %lld \n",BYTES_THRESHOLD);
+     if (log_enabled)
+	 fprintf(file, "\n reached BYTES_THRESHOLD %lld \n",BYTES_THRESHOLD);
      printf("\n data->terminate = %d\n",data->terminate);
      if (data->terminate)
      {
 	 printf ("\nEmitting EOS");
+	 if (log_enabled)
+             fprintf(file, "\n Emitting EOS\n");
 	 g_signal_emit_by_name (data->app.appsrc, "end-of-stream", &ret);
      }
      return FALSE;
@@ -1999,6 +2193,7 @@ static gboolean read_data (MessageHandlerData * data)
           data->app.data, data->app.length, data->app.offset, len, NULL, NULL));
 
   float progress_percentage = ((float)data->app.offset / data->app.length) * 100;
+
   if (abs(progress_percentage - previous_progress_percentage) > 10)
   {
     displayProgressBar("Appsrc Data Push ",progress_percentage);
@@ -2024,17 +2219,32 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
     GstElement *playsink;
     GstStateChangeReturn state_change;
     std::string readFile;
+    const char* filePrefix = "file:";
 
+    if (log_enabled)
+    {
+        fprintf (file,"\n########################\n");
+        fprintf (file,"# Setup Pipeline Start\n");
+        fprintf (file,"########################\n");
+    }
     /*
      * Create the playbin element
      */
     data->playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
-    fail_unless (data->playbin != NULL, "Failed to create 'playbin' element");
+    assert_failure(data->playbin, data->playbin != NULL, "Failed to create 'playbin' element",__FUNCTION__,__LINE__,"Create Playbin Instance");
     /*
      * Set the url received from argument as the 'uri' for playbin
      */
     assert_failure (data->playbin, m_play_url != NULL, "Playback url should not be NULL");
+    if (log_enabled)
+        fprintf(file, "URL is set to %s\n\n", m_play_url);
    
+    if (strncmp(m_play_url, filePrefix, strlen(filePrefix)) == 0)
+    {
+	const char* file_path = m_play_url + strlen(filePrefix);
+	fileExists(file_path);
+    }
+
     if (force_appsrc)
 	use_appsrc = true;
 
@@ -2053,11 +2263,10 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
     
     if (use_appsrc)
     {
-	const char* filePrefix = "file:";
 	size_t maxBytesToRead = ReadSize * 1024 * 1024;
 	if (strncmp(m_play_url, filePrefix, strlen(filePrefix)) == 0) 
         {
-             const char* file_path = m_play_url + strlen(filePrefix);
+	     const char* file_path = m_play_url + strlen(filePrefix);
              long file_size = GetFileSize(file_path);
              printf ("\nFile Size is %ld bytes",file_size);
              if ((file_size > 104857600) && (!force_appsrc))
@@ -2125,7 +2334,7 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
      * Set westeros-sink
      */
     data->westerosSink.sink = gst_element_factory_make(WESTEROS_SINK, NULL);
-    fail_unless (data->westerosSink.sink != NULL, "Failed to create 'westerossink' element");
+    assert_failure (data->playbin, data->westerosSink.sink != NULL, "Failed to create 'westerossink' element",__FUNCTION__,__LINE__,"Create Westeros Instance");
 
     if (forceAudioSink)
     {
@@ -2174,8 +2383,14 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
     if (!play_after_setup)
 	return;
 
+    if (log_enabled)
+    {
+        fprintf (file,"\n###################################\n");
+        fprintf (file,"# Setting Pipeline to PLAYING State\n");
+        fprintf (file,"###################################\n");
+    }
     GST_FIXME( "Setting to Playing State\n");
-    assert_failure (data->playbin, gst_element_set_state (data->playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    assert_failure (data->playbin, gst_element_set_state (data->playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE,"Failed to set pipeline to playing state",__FUNCTION__,__LINE__,"Setting pipeline to playing state");
     GST_FIXME( "Set to Playing State\n");
 
 
@@ -2194,12 +2409,12 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
         } while (state_change == GST_STATE_CHANGE_ASYNC);
         printf ("\n\n\nPipeline set to : %s  state \n\n\n", gst_element_state_get_name(data->cur_state));
         WaitForOperation;
-	assert_failure (data->playbin, data->cur_state == GST_STATE_PLAYING, "Pipeline is not set to playing state");
+	assert_failure (data->playbin, data->cur_state == GST_STATE_PLAYING, "Pipeline is not set to playing state", __FUNCTION__,__LINE__,"Verifying if pipeline is successfully set to PLAYING state");
     }	
     /*
      * Check if the first frame received flag is set
      */
-    assert_failure (data->playbin, (only_audio) || (firstFrameReceived == true), "Failed to receive first video frame signal");
+    assert_failure (data->playbin, (only_audio) || (firstFrameReceived == true), "Failed to receive first video frame signal", __FUNCTION__,__LINE__,"Verify if first frame signal is received");
     audio_underflow_received =  false;
     videoUnderflowReceived =  false;
 
@@ -2207,6 +2422,16 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
         PlaybackValidation(data,5);
     else
 	PlaySeconds(data->playbin,5);
+
+    if (!only_audio)
+    {
+         g_object_get (data->westerosSink.sink, "video-height", &height, NULL);
+         g_object_get (data->westerosSink.sink, "video-width", &width, NULL);
+
+         printf("\nVideo height = %d\nVideo width = %d", height, width);
+	 if (log_enabled)
+	     fprintf(file, "\nVideo height = %d\nVideo width = %d", height, width);
+    }
 }
 
 /********************************************************************************************************************
@@ -2222,7 +2447,7 @@ GST_START_TEST (test_init_shutdown)
      * Create the playbin element
      */
     playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
-    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+    assert_failure(playbin, playbin != NULL, "Failed to create 'playbin' element",__FUNCTION__,__LINE__,"Create Playbin Instance");
     /*
      * Set the url received from argument as the 'uri' for playbin
      */
@@ -2239,21 +2464,14 @@ GST_START_TEST (test_init_shutdown)
      * Set westros-sink
      */
     westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
-    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+    assert_failure (playbin, westerosSink != NULL, "Failed to create 'westerossink' element",__FUNCTION__,__LINE__,"Create Westeros Instance");
 
     /*
      * Link the westeros-sink to playbin
      */
     g_object_set (playbin, "video-sink", westerosSink, NULL);
 
-    if (playbin)
-    {
-       gst_element_set_state (playbin, GST_STATE_NULL);
-    }
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (playbin);
+    terminatePipeline(playbin);
 }
 GST_END_TEST;
 
@@ -2273,7 +2491,7 @@ GST_START_TEST (test_playback_latency)
      * Create the playbin element
      */
     playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
-    fail_unless (playbin != NULL, "Failed to create 'playbin' element");
+    assert_failure(playbin, playbin != NULL, "Failed to create 'playbin' element",__FUNCTION__,__LINE__,"Create Playbin Instance");
     /*
      * Set the url received from argument as the 'uri' for playbin
      */
@@ -2290,15 +2508,16 @@ GST_START_TEST (test_playback_latency)
      * Set video-sink
      */
     westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
-    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
+    assert_failure (playbin, westerosSink != NULL, "Failed to create 'westerossink' element",__FUNCTION__,__LINE__,"Create westerossink instance");
     g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
     g_object_set (playbin, "video-sink", westerosSink, NULL);
  
-    assert_failure (playbin,gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    assert_failure (playbin,gst_element_set_state (playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set pipeline to playing state", __FUNCTION__,__LINE__,
+		    "Set Pipeline to PLAYING state" );
     do{
         state_change = gst_element_get_state (playbin, &cur_state, NULL, 10000000);
     } while (state_change == GST_STATE_CHANGE_ASYNC);
-    assert_failure (playbin, cur_state == GST_STATE_PLAYING , "Failed to set to playing state");
+    assert_failure (playbin, cur_state == GST_STATE_PLAYING , "Failed to set to playing state",__FUNCTION__,__LINE__, "Verifying if pipeline is successfully set to PLAYING state");
     printf ("\n********Current state is: %s \n", gst_element_state_get_name(cur_state));
 
     clock_t start_time = clock();
@@ -2307,9 +2526,14 @@ GST_START_TEST (test_playback_latency)
     auto start_latency = std::chrono::high_resolution_clock::now();
     while ((clock() - start_time) / CLOCKS_PER_SEC < max_loop_time)
     {
-	assert_failure (playbin,gst_element_query_position (playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
+	bool ret_value = gst_element_query_position(playbin, GST_FORMAT_TIME, &currentPosition);
+
+	if (!ret_value)
+	    assert_failure (playbin,ret_value, "Failed to query the current playback position",__FUNCTION__,__LINE__,"Get Pipeline Position");
+
 	if ( (int)(currentPosition/GST_SECOND) >= 1)
 	{
+	     assert_failure (playbin,ret_value, "Failed to query the current playback position",__FUNCTION__,__LINE__,"Get Pipeline Position");
 	     stop_latency = std::chrono::high_resolution_clock::now();
 	     //Since playback already happended for 1 second, reduce from stop_latency
 	     stop_latency -= std::chrono::seconds(1);
@@ -2317,9 +2541,11 @@ GST_START_TEST (test_playback_latency)
         }
     }
 
-    assert_failure (playbin,firstFrameReceived == true, "Failed to receive first video frame signal");  
+    assert_failure (playbin,firstFrameReceived == true, "Failed to receive first video frame signal",__FUNCTION__,__LINE__,"Verify if first frame signal is received");  
     auto New_latency = std::chrono::duration_cast<std::chrono::milliseconds>(stop_latency - start_latency);
     printf("\nTime measured: %.3lld milliseconds.\n", New_latency.count());
+    if (log_enabled)
+        fprintf(file, "\nTime measured: %.3lld milliseconds.\n", New_latency.count());
 
     int latency_int = New_latency.count();
     /*
@@ -2342,14 +2568,7 @@ GST_START_TEST (test_playback_latency)
 
     Sleep(2);
 
-    if (playbin)
-    {
-       gst_element_set_state (playbin, GST_STATE_NULL);
-    }
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (playbin);
+    terminatePipeline(playbin);
 }
 GST_END_TEST;    
    
@@ -2385,6 +2604,8 @@ GST_START_TEST (test_generic_playback)
     g_object_get (data.westerosSink.sink, "video-width", &width, NULL);
 
     printf("\nVideo height = %d\nVideo width = %d", height, width);
+    if (log_enabled)
+	fprintf(file,"\nVideo height = %d\nVideo width = %d", height, width);
 
     int n_audio;
     g_object_get (data.playbin, "n-audio", &n_audio, NULL);
@@ -2407,7 +2628,7 @@ GST_START_TEST (test_generic_playback)
 	     resolution.pop_back();
              char resolution_value_string[150];
 	     sprintf(resolution_value_string,"\nPipeline is not playing at expected resolution\nObtained video-height as %d and video-width as %d",height,width);
-	     assert_failure (data.playbin,to_string(height) == resolution,resolution_value_string);
+	     assert_failure (data.playbin,to_string(height) == resolution,resolution_value_string, __FUNCTION__,__LINE__, "Verify if pipeline is playin expected resolution");
 	     if (checkNewPlay)
 		 PlaybackValidation(&data,play_timeout);
 	     else
@@ -2425,7 +2646,8 @@ GST_START_TEST (test_generic_playback)
 
     if (ResolutionSwitchTest)
     {
-	 assert_failure (data.playbin,ResolutionCount == TOTAL_RESOLUTIONS_COUNT,"\nNot able to play all resolutions\n");
+	 assert_failure (data.playbin,ResolutionCount == TOTAL_RESOLUTIONS_COUNT,"\nNot able to play all resolutions\n", __FUNCTION__,__LINE__,
+			  "Verify if pipeline played all resolutions");
     }
     if (useProcForFPS)
     {
@@ -2439,13 +2661,14 @@ GST_START_TEST (test_generic_playback)
     if (true == checkAVStatus)
     {
         is_av_playing = check_for_AV_status();
-        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
+        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV",  __FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
     GST_LOG("DETAILS: SUCCESS, Video playing successfully \n");
 
     if (data.playbin)
     {
-       assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE,"Failed to set to NULL state");
+       assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE,"Failed to set to NULL state", __FUNCTION__,__LINE__,
+		       "Set Pipeline to NULL state");
     }
     if (ChannelChangeTest)
     {
@@ -2462,12 +2685,15 @@ GST_START_TEST (test_generic_playback)
        data.terminate = FALSE;
 
        printf("\nLoading Second Channel\n");
+       if (log_enabled)
+	   fprintf(file,"\nLoading second URL : %s \n\n", channel_url);
 
        /*
         * Set playbin to PLAYING
         */
        GST_LOG( "Setting Second Channel to Playing State\n");
-       assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE,"Failed to set to playing state");
+       assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE,"Failed to set to playing state",
+		       __FUNCTION__,__LINE__,"Set Pipeline to PLAYING state");
        GST_LOG( "Second Channel Set to Playing State\n");
        
        bus = gst_element_get_bus (data.playbin);
@@ -2493,11 +2719,13 @@ GST_START_TEST (test_generic_playback)
        /*
         * Verify that ERROR/EOS messages are not received
         */
-       assert_failure (data.playbin,FALSE == data.terminate, "Unexpected error or End of Stream received\n");
+       assert_failure (data.playbin,FALSE == data.terminate, "Unexpected error or End of Stream received\n", __FUNCTION__,__LINE__,
+		       "Verify no errors were observed in pipeline while loading second url");
        /*
         * Verify that STREAM_START message is received
         */
-       assert_failure (data.playbin,TRUE == data.streamStart, "Unable to obtain message indicating start of a new stream\n");
+       assert_failure (data.playbin,TRUE == data.streamStart, "Unable to obtain message indicating start of a new stream\n", __FUNCTION__,__LINE__,
+		       "Verify STREAM_START message is received");
        /*
         * Check for AV status if its enabled
         */
@@ -2517,15 +2745,14 @@ GST_START_TEST (test_generic_playback)
        else
             PlaySeconds(data.playbin,SecondChannelTimeout);
 
-       if (data.playbin)
-       {
-          gst_element_set_state (data.playbin, GST_STATE_NULL);
-       }
+       assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE,"Failed to set to NULL state", __FUNCTION__,__LINE__,
+                       "Set Pipeline to NULL state");
        gst_object_unref(bus);
     }
     /*
      * Cleanup after use
      */
+
     gst_object_unref (data.playbin);
 }
 GST_END_TEST;
@@ -2542,14 +2769,6 @@ GST_START_TEST (test_play_pause_pipeline)
 
     SetupPipeline(&data);
     
-    if (!only_audio)
-    {
-         g_object_get (data.westerosSink.sink, "video-height", &height, NULL);
-         g_object_get (data.westerosSink.sink, "video-width", &width, NULL);
-    
-         printf("\nVideo height = %d\nVideo width = %d", height, width);
-    }
-
     if (checkNewPlay)
         PlaybackValidation(&data,play_timeout);
     else
@@ -2560,7 +2779,7 @@ GST_START_TEST (test_play_pause_pipeline)
     if (true == checkAVStatus)
     {
         is_av_playing = check_for_AV_status();
-        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
+        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV", __FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
     printf ("\nDETAILS: SUCCESS, Playback is successfull\n");
 
@@ -2571,13 +2790,16 @@ GST_START_TEST (test_play_pause_pipeline)
     /*
      * Set pipeline to PAUSED
      */
-    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.previousposition), "Failed to query the current playback position");
-    gst_element_set_state (data.playbin, GST_STATE_PAUSED);
+    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.previousposition), "Failed to query the current playback position",
+		    __FUNCTION__,__LINE__,"Querying Playback Position" ); 
+    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE,"Failed to set pipeline to PAUSED state",
+		    __FUNCTION__,__LINE__,"Setting pipeline to PAUSED state");
     do{
         state_change = gst_element_get_state (data.playbin, &data.cur_state, NULL, 10000000);
     } while (state_change == GST_STATE_CHANGE_ASYNC);
     printf ("\n********Current state is: %s \n", gst_element_state_get_name(data.cur_state));
-    assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED);
+    assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED, "Pipeline is not set to PAUSED state",
+		    __FUNCTION__,__LINE__,"Verify Pipeline is set to PAUSED State");
     printf ("\nDETAILS: SUCCESS, Current state is: %s \n", gst_element_state_get_name(data.cur_state));
 
     if (checkNewPlay)
@@ -2585,32 +2807,28 @@ GST_START_TEST (test_play_pause_pipeline)
     else
         PlaySeconds(data.playbin,play_timeout);
 
-    assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
+    assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS,"Failed to obatin pipeline state",
+		    __FUNCTION__,__LINE__,"Get Pipeline State");
     if ((data.cur_state != GST_STATE_PLAYING))
     {
-	assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.previousposition), "Failed to query the current playback position");    
-        assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "unable to pause");
+	assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.previousposition), "Failed to query the current playback position",
+			__FUNCTION__,__LINE__,"Querying Playback Position");    
+        assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PLAYING state",
+			__FUNCTION__,__LINE__,"Setting pipeline to PLAYING state");
         do{
              state_change = gst_element_get_state (data.playbin, &data.cur_state, NULL, 10000000);
         } while (state_change == GST_STATE_CHANGE_ASYNC);
 	printf ("\n********Current state is: %s \n", gst_element_state_get_name(data.cur_state));
     }
 
-    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.previousposition), "Failed to query the current playback position");
+    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.previousposition), "Failed to query the current playback position",
+		    __FUNCTION__,__LINE__,"Querying Playback Position");
     if (checkNewPlay)
         PlaybackValidation(&data,play_timeout);
     else
         PlaySeconds(data.playbin,play_timeout);
 
-    if (data.playbin)
-    {
-       gst_element_set_state(data.playbin, GST_STATE_NULL);
-    }
-
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -2631,16 +2849,13 @@ GST_START_TEST (test_playback_duration)
     SetupPipeline(&data);
 
     gint64 duration = -1;
-    gst_element_query_duration(data.playbin, GST_FORMAT_TIME, &duration);
+    assert_failure (data.playbin, gst_element_query_duration(data.playbin, GST_FORMAT_TIME, &duration), "Failed to query playback duration",
+		    __FUNCTION__,__LINE__,"Querying Playback Duration");
 
-    assert_failure(data.playbin, (duration != -1), "Failed to query pipeline duration");
+    assert_failure(data.playbin, (duration != -1), "Obtained duration is not valid",
+		    __FUNCTION__,__LINE__,"Verify playback duration");
    
-    if (data.playbin)
-    {
-       gst_element_set_state(data.playbin, GST_STATE_NULL);
-    }
-    gst_object_unref (data.playbin);
-
+    terminatePipeline(data.playbin);
     g_print("Duration: %" G_GINT64_FORMAT ":%02" G_GINT64_FORMAT ".%03" G_GINT64_FORMAT "\n",
         GST_TIME_AS_SECONDS(duration) / 60,  // Minutes
         GST_TIME_AS_SECONDS(duration) % 60,  // Seconds
@@ -2702,7 +2917,8 @@ GST_START_TEST (test_buffer_underflow)
              PlaySeconds(data.playbin,videoEnd);
     }
 
-    assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive buffer underflow signal");
+    assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive buffer underflow signal",
+		    __FUNCTION__,__LINE__,"Verify buffer underflow signal received");
 
     printf ("\nDETAILS: SUCCESS, Received buffer underflow signal as expected\n");
 
@@ -2718,17 +2934,20 @@ GST_START_TEST (test_buffer_underflow)
      */
     bufferUnderflowTest = false;
 
-    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "unable to pause");
+    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set pipeline to PAUSED state",
+		    __FUNCTION__,__LINE__,"Set Pipeline to PAUSED state");
     do{
        //Waiting for state change
        state_change = gst_element_get_state (data.playbin, &data.cur_state, NULL, 10000000);
     } while (state_change == GST_STATE_CHANGE_ASYNC);
 
-    assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
-    assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED);
+    assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS, "Failed to get playback state",
+		    __FUNCTION__,__LINE__,"Obtain pipeline state");
+    assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED, "Pipeline is not set to PAUSED state", __FUNCTION__,__LINE__, "Verify Pipeline is set to PAUSED state");
     printf("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
     GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
-    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.previousposition)), "Failed to query the current playback position");
+    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.previousposition)), "Failed to query the current playback position",
+		    __FUNCTION__,__LINE__,"Query playback position");
     if (checkNewPlay)
         PlaybackValidation(&data,5);
     else
@@ -2745,14 +2964,15 @@ GST_START_TEST (test_buffer_underflow)
     seekSeconds = seekPosition/GST_SECOND;
     assert_failure (data.playbin,gst_element_seek (data.playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
                                    GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, seekPosition,
-                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
+                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek",
+		    __FUNCTION__,__LINE__,"Seek to videoStart Position");
 
     start = std::chrono::steady_clock::now();
     while(!seeked)
     {
        //Check if seek happened
-       assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),
-                                         "Failed to query the current playback position");
+       assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),"Failed to query the current playback position",
+		       __FUNCTION__,__LINE__,"Query playback position");
        //Added GST_SECOND buffer time between currentPosition and seekPosition
        if (abs( data.currentPosition - seekPosition) <= (GST_SECOND))
        {
@@ -2762,14 +2982,16 @@ GST_START_TEST (test_buffer_underflow)
            break;
     }
 
-    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n");
+    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n", __FUNCTION__,__LINE__, "Verify is seek is successfull");
     //Convert time to seconds
     data.currentPosition /= GST_SECOND;
     seekPosition /= GST_SECOND;
     printf("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data.currentPosition, seekPosition);
+    if (log_enabled)
+	fprintf(file, "\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data.currentPosition, seekPosition);
 
     state_change = gst_element_get_state (data.playbin, &data.cur_state, NULL, GST_SECOND);
-    assert_failure (data.playbin,state_change != GST_STATE_CHANGE_FAILURE, "Failed to get current playbin state");
+    assert_failure (data.playbin,state_change != GST_STATE_CHANGE_FAILURE, "Failed to get current playbin state", __FUNCTION__,__LINE__, "Obtain pipeline state");
 
     if ((data.cur_state == GST_STATE_PAUSED)  && (state_change != GST_STATE_CHANGE_ASYNC))
     {
@@ -2778,7 +3000,8 @@ GST_START_TEST (test_buffer_underflow)
          * Set playbin to PLAYING
          */
          GST_FIXME( "Setting to Playing State\n");
-         assert_failure (data.playbin,gst_element_set_state(data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "unable to set to play");
+         assert_failure (data.playbin,gst_element_set_state(data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to playing state",
+			 __FUNCTION__,__LINE__, "Set Pipeline to PLAYING state");
          GST_FIXME( "Set to Playing State\n");
          do{
               //Waiting for state change
@@ -2786,8 +3009,10 @@ GST_START_TEST (test_buffer_underflow)
          } while (state_change == GST_STATE_CHANGE_ASYNC);
 
          printf("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
-	 assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
-         assert_failure (data.playbin, data.cur_state == GST_STATE_PLAYING);
+	 assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS, "Failed to get current playbin state",
+			 __FUNCTION__,__LINE__, "Obtain Pipeline State");
+         assert_failure (data.playbin, data.cur_state == GST_STATE_PLAYING, "Pipeline not set to PLAYING state",
+			 __FUNCTION__,__LINE__, "Verify if pipeline is successfully set to PLAYING state");
          GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
     }
 
@@ -2804,16 +3029,11 @@ EXIT :
     if (true == checkAVStatus)
     {
         is_av_playing = check_for_AV_status();
-        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
+        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV", 
+			__FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
-    if (data.playbin)
-    {
-       gst_element_set_state(data.playbin, GST_STATE_NULL);
-    }
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (data.playbin);
+
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -2839,7 +3059,8 @@ GST_START_TEST (test_EOS)
     if (true == checkAVStatus)
     {
         is_av_playing = check_for_AV_status();
-        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
+        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV",
+			__FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
     printf ("DETAILS: SUCCESS, Video playing successfully \n");
 
@@ -2847,7 +3068,10 @@ GST_START_TEST (test_EOS)
      * Polling the bus for messages
      */
     bus = gst_element_get_bus (data.playbin);
-    assert_failure (data.playbin,bus != NULL,"Failed to get bus");
+    assert_failure (data.playbin,bus != NULL,"Failed to get bus", __FUNCTION__,__LINE__, "Get Playbin bus");
+
+    if (log_enabled)
+	 fprintf(file, "\nWaiting for pipeline to play video and emit EOS message\n");
     /* 
      * Wait for receiving EOS event
      */
@@ -2865,19 +3089,11 @@ GST_START_TEST (test_EOS)
     }while(!received_EOS);
 
     gst_object_unref(bus);
-    assert_failure (data.playbin,received_EOS == true, "Failed to recieve EOS message");
+    assert_failure (data.playbin,received_EOS == true, "Failed to recieve EOS message", __FUNCTION__,__LINE__, "Verify EOS message received");
     printf ("EOS Received\n");
     gst_message_unref (message);
 
-
-    if (data.playbin)
-    {
-       gst_element_set_state(data.playbin, GST_STATE_NULL);
-    }
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -2902,32 +3118,38 @@ GST_START_TEST (test_frameDrop)
 
 
     pipeline = gst_element_factory_make ("playbin", "source");
-    fail_unless (pipeline != NULL, "Failed to create 'pipeline' element");
+    assert_failure(pipeline, pipeline != NULL, "Failed to create 'playbin' element",__FUNCTION__,__LINE__,"Create Playbin Instance");
 
     g_object_get (pipeline, "flags", &flags, NULL);
     setflags();
     g_object_set (pipeline, "flags", flags, NULL); 
 
     westerosSink = gst_element_factory_make(WESTEROS_SINK, NULL);
-    fail_unless (westerosSink != NULL, "Failed to create 'westerossink' element");
-
+    assert_failure (pipeline, westerosSink != NULL, "Failed to create 'westerossink' element",__FUNCTION__,__LINE__,"Create Westeros Instance");
 
     g_object_set (pipeline, "video-sink",westerosSink, NULL);
     g_object_set (pipeline, "uri", m_play_url, NULL);
 
-
     g_signal_connect( westerosSink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
 
-
+    if (log_enabled)
+    {
+        fprintf (file,"\n#################################\n");
+        fprintf (file,"# Setting Pipeline to PLAYING State\n");
+        fprintf (file,"###################################\n");
+    }
     GST_FIXME( "Setting to Playing State\n");
-    assert_failure (pipeline,gst_element_set_state (pipeline, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    assert_failure (pipeline,gst_element_set_state (pipeline, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE ,"Failed to set to PLAYING state",
+		    __FUNCTION__,__LINE__,"Set Pipeline to PLAYING state");
     GST_FIXME( "Set to Playing State\n");
 
     WaitForOperation;
 
-    assert_failure (pipeline,firstFrameReceived == true, "Failed to receive first video frame signal");
+    assert_failure (pipeline,firstFrameReceived == true, "Failed to receive first video frame signal",
+		    __FUNCTION__,__LINE__,"Verify if first frame signal is received");
 
-    assert_failure (pipeline,gst_element_query_position (pipeline, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position");
+    assert_failure (pipeline,gst_element_query_position (pipeline, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position",
+		    __FUNCTION__,__LINE__,"Query playback position");
     
     previous_position = (currentPosition/GST_SECOND);
     startPosition = currentPosition;
@@ -2968,12 +3190,12 @@ GST_START_TEST (test_frameDrop)
              frame_buffer -= 1;
 	if (frame_buffer == 0)
 	     gst_object_unref(bus);
-        assert_failure (pipeline,frame_buffer != 0 , "frames are not rendered properly");
+        assert_failure (pipeline,frame_buffer != 0 , "frames are not rendered properly", __FUNCTION__,__LINE__," Verify frames are rendered properly");
 
 	runLoop = gst_element_query_position (pipeline, GST_FORMAT_TIME, &currentPosition);
 	if (!runLoop)
 	    gst_object_unref(bus);
-        assert_failure (pipeline,runLoop, "Failed to query the current playback position");
+        assert_failure (pipeline,runLoop, "Failed to query the current playback position", __FUNCTION__,__LINE__,"Obtain pipeline position");
 	runLoop = false;
 
         difference = int(abs((currentPosition/GST_SECOND) - (startPosition/GST_SECOND)));
@@ -2989,7 +3211,8 @@ GST_START_TEST (test_frameDrop)
 	{
 	    if (rendered_frames < previous_rendered_frames)
 	        gst_object_unref(bus);	    
-            assert_failure (pipeline,rendered_frames > previous_rendered_frames, "Frames not rendered properly");
+            assert_failure (pipeline,rendered_frames > previous_rendered_frames, "Frames not incremented as playback progresses",
+			    __FUNCTION__,__LINE__,"Verify if rendered frames are incremented as playback progresses");
 	}
 
 
@@ -3000,7 +3223,8 @@ GST_START_TEST (test_frameDrop)
 	{
 	    if (jump_buffer==0)
                 gst_object_unref(bus);
-            assert_failure (pipeline, jump_buffer != 0 , "Playback is not happening at the expected rate");
+            assert_failure (pipeline, jump_buffer != 0 , "Playback is not happening at the expected rate",
+			    __FUNCTION__,__LINE__,"Verify if playback is progressing at 1x playback rate");
 	}
 
 
@@ -3010,6 +3234,8 @@ GST_START_TEST (test_frameDrop)
             if (GST_MESSAGE_EOS == GST_MESSAGE_TYPE(message))
             {
                 printf("\nEOS Received:Exiting\n");
+		if (log_enabled)
+		    fprintf(file, "\nEOS Received:Exiting\n");
                 break;
             }
         }
@@ -3047,7 +3273,8 @@ GST_START_TEST (test_frameDrop)
     }while(runLoop);
 
     gst_object_unref (bus);
-    assert_failure (pipeline,gst_element_set_state (pipeline, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Unable to pause");
+    assert_failure (pipeline,gst_element_set_state (pipeline, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PAUSED state",
+		    __FUNCTION__,__LINE__,"Set Pipeline to PAUSED state");
     Sleep(1);
 
     if (checkTotalFrames)
@@ -3059,28 +3286,22 @@ GST_START_TEST (test_frameDrop)
         expected_rendered_frames = fps * play_timeout;
     }
     printf("\nExpected rendered frames : %d", expected_rendered_frames);
-
-
+    if (log_enabled)
+	 fprintf(file, "\nExpected rendered frames : %d", expected_rendered_frames);
 
     if ((int)rendered_frames < expected_rendered_frames)
     {
          dropped_frames = expected_rendered_frames - rendered_frames;
 	 printf("\n\ndropped_frames : %d", dropped_frames);
+	 if (log_enabled)
+	     fprintf(file, "\n\ndropped_frames : %d", dropped_frames);
 	 sleep(2);
 	 if (dropped_frames)
-	     assert_failure(pipeline,dropped_frames < MIN_FRAMES_DROP,"\nExpected number of frames not rendered\n");
+	     assert_failure(pipeline,dropped_frames < MIN_FRAMES_DROP,"\nExpected number of frames not rendered\n", __FUNCTION__,__LINE__,"Verify all frames are rendered");
     }
     printf ("\nExecution was Success\n");
 
-
-
-
-    if (pipeline)
-    {
-       gst_element_set_state(pipeline, GST_STATE_NULL);
-    }
-
-    gst_object_unref (pipeline);
+    terminatePipeline(pipeline);
 }
 GST_END_TEST;
 
@@ -3120,8 +3341,11 @@ GST_START_TEST (test_audio_change)
     }
 
     getStreamProperties(&data);
-    assert_failure (data.playbin,1 < data.n_audio,"Stream has only 1 audio stream. Audio Change requires minimum of two audio streams");
+    assert_failure (data.playbin,1 < data.n_audio,"Stream has only 1 audio stream. Audio Change requires minimum of two audio streams",
+		    __FUNCTION__, __LINE__, "Verify if URL has two audio streams");
     printf("Current Audio is %d\n", data.current_audio);
+    if (log_enabled)
+	fprintf(file, "\nCurrent Audio is %d\n", data.current_audio);
     writeToFile = true;
     g_signal_emit_by_name (data.playbin, "get-audio-tags", data.current_audio, &tags);
     if (tags)
@@ -3145,7 +3369,8 @@ GST_START_TEST (test_audio_change)
 	     if (with_pause)
 	     {
 		 printf("\nPausing pipeline before switching audio");
-                 gst_element_set_state (data.playbin, GST_STATE_PAUSED);
+                 assert_failure(data.playbin, gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set pipeline to PAUSED state",
+				__FUNCTION__, __LINE__, "Set Pipeline to PAUSED state") ;
 		 WaitForOperation;
 		 seekOperation = false;
 		 if (checkNewPlay)
@@ -3155,6 +3380,8 @@ GST_START_TEST (test_audio_change)
 	     }
              printf("\nSwitching to audio stream %d\n", index);
              printf("\nSetting current-audio to %d\n",index);
+	     if (log_enabled)
+		 fprintf(file, "\nSwitching to audio stream %d\n", index);
              g_object_set (data.playbin, "current-audio", index, NULL);
              // Waiting for audio switch
              g_object_get (data.playbin, "current-audio", &data.current_audio, NULL);
@@ -3170,14 +3397,18 @@ GST_START_TEST (test_audio_change)
 	     if (with_pause)
              {
                  printf("\nSet pipeline to playing state\n");
-                 gst_element_set_state (data.playbin, GST_STATE_PLAYING);
+                 assert_failure(data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING)  !=  GST_STATE_CHANGE_FAILURE, "Failed to set pipeline to PLAYING state",
+                                __FUNCTION__, __LINE__, "Set Pipeline to PLAYING state") ;;
              }
-	     assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)), "Failed to query the current playback position");
+	     assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)), "Failed to query the current playback position",
+			     __FUNCTION__, __LINE__, "Query playback position");
              if (Flush_Pipeline)
              {
                  flushPipeline(&data);
              }
              printf("\nSUCCESS : Switched to audio stream %d, Playing for %d seconds\n",index,play_timeout);
+	     if (log_enabled)
+		 fprintf(file, "\nSUCCESS : Switched to audio stream %d, Playing for %d seconds\n",index,play_timeout);
          }
 	 if (checkNewPlay)
              PlaybackValidation(&data,play_timeout);
@@ -3201,20 +3432,13 @@ GST_START_TEST (test_audio_change)
     if (true == checkAVStatus)
     {
         is_av_playing = check_for_AV_status();
-        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
+        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV", __FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
     GST_LOG("DETAILS: SUCCESS, Video playing successfully for all audio streams\n");
 
 
-    if (data.playbin)
-    {
-       assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    }
-    /*
-     * Cleanup after use
-     */
+    terminatePipeline(data.playbin);
     fclose(filePointer);
-    gst_object_unref (data.playbin);
 }
 GST_END_TEST;
 
@@ -3268,7 +3492,8 @@ GST_START_TEST (test_audio_underflow)
                   printf ("\nvideo frames");
                   printf(" Rendered: %" G_GUINT64_FORMAT, data.westerosSink.rendered_frames);
 	          printf("\n");
-                  assert_failure(data.playbin, data.westerosSink.previous_rendered_frames == data.westerosSink.rendered_frames,"Video is not stopped as expected");
+                  assert_failure(data.playbin, data.westerosSink.previous_rendered_frames == data.westerosSink.rendered_frames,"Video is not stopped as expected",
+				 __FUNCTION__, __LINE__, "Verify audio frames are incremented as stream progresses");
                   data.westerosSink.previous_rendered_frames  = data.westerosSink.rendered_frames;
               };
          }
@@ -3291,7 +3516,8 @@ GST_START_TEST (test_audio_underflow)
              PlaySeconds(data.playbin,audioEnd);
     }
 
-    assert_failure (data.playbin,audio_underflow_received_global == true, "Failed to receive buffer underflow signal");
+    assert_failure (data.playbin,audio_underflow_received_global == true, "Failed to receive buffer underflow signal",
+		    __FUNCTION__, __LINE__, "Verify if audio underflow signal is received");
     	
     printf ("\nDETAILS: SUCCESS, Received buffer underflow signal as expected\n");
 
@@ -3301,7 +3527,8 @@ GST_START_TEST (test_audio_underflow)
 	
     bufferUnderflowTest = false;
 
-    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "unable to pause");
+    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to PAUSE the pipeline",
+		    __FUNCTION__, __LINE__, "Set Pipeline to PAUSED state");
     do{
        //Waiting for state change
        state_change = gst_element_get_state (data.playbin, &data.cur_state, NULL, 10000000);
@@ -3311,14 +3538,17 @@ GST_START_TEST (test_audio_underflow)
     assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED);
     printf("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
     GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
-    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.previousposition)), "Failed to query the current playback position");
+    assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.previousposition)), "Failed to query the current playback position",
+		    __FUNCTION__, __LINE__, "Query Playback Position");
     if (checkNewPlay)
         PlaybackValidation(&data,5);
     else
         PlaySeconds(data.playbin,5);
     
-    assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
-    assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED);
+    assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS, "Failed to get pipeline state",
+		    __FUNCTION__, __LINE__, "Get Pipeline state");
+    assert_failure (data.playbin, data.cur_state == GST_STATE_PAUSED, "Pipeline is not set to PAUSED state",
+		    __FUNCTION__, __LINE__, "Verify if Pipeline is PAUSED");
     printf("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
     GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
 
@@ -3333,14 +3563,15 @@ GST_START_TEST (test_audio_underflow)
     seekSeconds = seekPosition/GST_SECOND;
     assert_failure (data.playbin,gst_element_seek (data.playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
                                    GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, seekPosition,
-                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
+                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek",
+		    __FUNCTION__, __LINE__, "Seek to audioStart Position");
 
     start = std::chrono::steady_clock::now();
     while(!seeked)
     {
        //Check if seek happened
        assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),
-                                         "Failed to query the current playback position");
+                                         "Failed to query the current playback position", __FUNCTION__, __LINE__, "Query playback position");
        //Added GST_SECOND buffer time between currentPosition and seekPosition
        if (abs( data.currentPosition - seekPosition) <= (GST_SECOND))
        {
@@ -3350,14 +3581,15 @@ GST_START_TEST (test_audio_underflow)
            break;
     }
 
-    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n");
+    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n", __FUNCTION__, __LINE__, "Verify if seek is successfull");
     //Convert time to seconds
     data.currentPosition /= GST_SECOND;
     seekPosition /= GST_SECOND;
-	printf("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data.currentPosition, seekPosition);
+    printf("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data.currentPosition, seekPosition);
 
     state_change = gst_element_get_state (data.playbin, &data.cur_state, NULL, GST_SECOND);
-    assert_failure (data.playbin,state_change != GST_STATE_CHANGE_FAILURE, "Failed to get current playbin state");
+    assert_failure (data.playbin,state_change != GST_STATE_CHANGE_FAILURE, "Failed to get current playbin state",
+		    __FUNCTION__, __LINE__, "Query playbin state");
 
     if ((data.cur_state == GST_STATE_PAUSED)  && (state_change != GST_STATE_CHANGE_ASYNC))
     {
@@ -3366,7 +3598,8 @@ GST_START_TEST (test_audio_underflow)
          * Set playbin to PLAYING
          */
          GST_FIXME( "Setting to Playing State\n");
-         assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "unable to pause");
+         assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PAUSED state",
+			 __FUNCTION__, __LINE__, "Set Pipeline to PAUSED state");
          GST_FIXME( "Set to Playing State\n");
          do{
               //Waiting for state change
@@ -3374,8 +3607,10 @@ GST_START_TEST (test_audio_underflow)
          } while (state_change == GST_STATE_CHANGE_ASYNC);
 
          printf("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
-	 assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
-         assert_failure (data.playbin, data.cur_state == GST_STATE_PLAYING);
+	 assert_failure (data.playbin, gst_element_get_state (data.playbin, &data.cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS, "Failed to get pipeline state",
+			 __FUNCTION__, __LINE__, "Get Pipeline state");
+         assert_failure (data.playbin, data.cur_state == GST_STATE_PLAYING, "Failed to set pipeline to PLAYING state",
+			 __FUNCTION__, __LINE__, "Verify if Pipeline is set to PLAYING state");
          GST_LOG("\n********Current state: %s\n",gst_element_state_get_name(data.cur_state));
     }
 
@@ -3393,15 +3628,10 @@ EXIT :
     if (true == checkAVStatus)
     {
         is_av_playing = check_for_AV_status();
-        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV");
-    }
-    if (data.playbin)
-    {
-       gst_element_set_state(data.playbin, GST_STATE_NULL);
+        assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV",__FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
 
-    gst_object_unref (data.playbin);
-
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3411,24 +3641,19 @@ GST_END_TEST;
  ********************************************************************************************************************/
 GST_START_TEST(test_only_audio)
 {
-	MessageHandlerData data;
-	checkPTS = false;
-	use_westerossink_fps = false;
-	only_audio = true;
+    MessageHandlerData data;
+    checkPTS = false;
+    use_westerossink_fps = false;
+    only_audio = true;
 
-   	SetupPipeline(&data);
+    SetupPipeline(&data);
 
-	if (checkNewPlay)
-            PlaybackValidation(&data,play_timeout);
-        else
-            PlaySeconds(data.playbin,play_timeout);
+    if (checkNewPlay)
+        PlaybackValidation(&data,play_timeout);
+    else
+        PlaySeconds(data.playbin,play_timeout);
 
-	if (data.playbin)
-    	{
-       		assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    	}
-	
-	gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3446,8 +3671,15 @@ GST_START_TEST (test_video_bitrate)
     g_object_set (data.playbin, "connection_speed", connection_speed, NULL);
     printf("\nConnection Speed: %" G_GUINT64_FORMAT "\n", connection_speed);
 
+    if (log_enabled)
+    {
+        fprintf (file,"\n#################################\n");
+        fprintf (file,"# Setting Pipeline to PLAYING State\n");
+        fprintf (file,"###################################\n");
+    }
     GST_FIXME( "Setting to Playing State\n");
-    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PLAYING state",
+		    __FUNCTION__,__LINE__, "Set pipeline to PLAYING state");
     GST_FIXME( "Set to Playing State\n");
     WaitForOperation;
 
@@ -3465,15 +3697,10 @@ GST_START_TEST (test_video_bitrate)
     printf("\nExpected Video height = %d",expected_height);
     char resolution_value_string[130];
     sprintf(resolution_value_string,"\nPipeline is not playing at expected resolution\nObtained video-height as %d | Expected video-height as %d",height,expected_height);
-    assert_failure (data.playbin, expected_height == height ,resolution_value_string);
+    assert_failure (data.playbin, expected_height == height ,resolution_value_string, __FUNCTION__,__LINE__, "Verify Video is playing at expected resolution");
     printf("\nSUCCESS : Pipeline restricted to expected resolution for full duration of playback\n");
 
-    if (data.playbin)
-    {
-        assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    }
-
-    gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3498,25 +3725,29 @@ GST_START_TEST (test_seek_EOS)
 
     if (seek_with_pause)
     {
-	gst_element_set_state (data.playbin, GST_STATE_PAUSED);
+	assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PAUSED state",
+                    __FUNCTION__,__LINE__, "Set pipeline to PAUSED state");
         do{
              //Waiting for state change
              state_change = gst_element_get_state (data.playbin, &cur_state, NULL, 10000000);
         } while (state_change == GST_STATE_CHANGE_ASYNC);
-        assert_failure (data.playbin, gst_element_get_state (data.playbin, &cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
-        assert_failure (data.playbin, cur_state == GST_STATE_PAUSED);
+        assert_failure (data.playbin, gst_element_get_state (data.playbin, &cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS, "Failed to get pipeline state",
+			__FUNCTION__,__LINE__, "Obtain pipeline state");
+        assert_failure (data.playbin, cur_state == GST_STATE_PAUSED, "Failed to set pipeline to PAUSED state", __FUNCTION__,__LINE__,  "Verify if pipeline is set to PAUSED state");
         printf("\nSTATE CHANGED FROM PLAYING TO PAUSED\n");
     }
 
     gst_element_get_state (data.playbin, &cur_state, NULL, (GST_SECOND));
     bus = gst_element_get_bus (data.playbin);
-    assert_failure (data.playbin,bus != NULL,"Failed to get bus");
+    assert_failure (data.playbin,bus != NULL,"Failed to get bus", __FUNCTION__,__LINE__,  "Get Playbin bus");
 
     gint64 duration = -1;
 
-    gst_element_query_duration(data.playbin, GST_FORMAT_TIME, &duration);
+    assert_failure (data.playbin, gst_element_query_duration(data.playbin, GST_FORMAT_TIME, &duration), "Playback Duration query failed", __FUNCTION__,__LINE__,
+		    "Obtain playback duration");
 
-    assert_failure(data.playbin, (duration != -1), "Failed to query pipeline duration");
+    assert_failure(data.playbin, (duration != -1), "Failed to query pipeline duration", __FUNCTION__,__LINE__,
+		    "Verify obtained duration is valid");
 
     g_print("Duration: %" G_GINT64_FORMAT ":%02" G_GINT64_FORMAT ".%03" G_GINT64_FORMAT "\n",
         GST_TIME_AS_SECONDS(duration) / 60,  // Minutes
@@ -3535,14 +3766,15 @@ GST_START_TEST (test_seek_EOS)
     //Seek call
     assert_failure (data.playbin,gst_element_seek (data.playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
                                    GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, data.seekPosition,
-                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek");
+                                   GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek",
+		    __FUNCTION__,__LINE__,"Seek to EOS position");
 
     start = std::chrono::steady_clock::now();
     while((!received_EOS) || (!seeked))
     {
        //Check if seek happened
        assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),
-                                         "Failed to query the current playback position");
+                                         "Failed to query the current playback position", __FUNCTION__,__LINE__, "Query playback duration");
        //Added GST_SECOND buffer time between currentPosition and seekPosition
        if (abs( data.currentPosition - data.seekPosition) <= (GST_SECOND))
        {
@@ -3550,13 +3782,15 @@ GST_START_TEST (test_seek_EOS)
 	   //Reset to playing state
 	   if (seek_with_pause)
            {
-	       gst_element_set_state (data.playbin, GST_STATE_PLAYING);
+	       assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PLAYING state",
+                    __FUNCTION__,__LINE__, "Set pipeline to PLAYING state");
                do{
                    //Waiting for state change
                    state_change = gst_element_get_state (data.playbin, &cur_state, NULL, 10000000);
                } while (state_change == GST_STATE_CHANGE_ASYNC);
-               assert_failure (data.playbin, gst_element_get_state (data.playbin, &cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS);
-               assert_failure (data.playbin, cur_state == GST_STATE_PLAYING);
+               assert_failure (data.playbin, gst_element_get_state (data.playbin, &cur_state, NULL, 0) == GST_STATE_CHANGE_SUCCESS,"Failed to get pipeline state",
+			       __FUNCTION__,__LINE__, "Obtain pipeline state");
+               assert_failure (data.playbin, cur_state == GST_STATE_PLAYING, "Failed to set pipeline to PLAYING state", __FUNCTION__,__LINE__, "Verify pipeline is set to PLAYING state");
                printf("\nSTATE CHANGED FROM PAUSED TO PLAYING\n");
 	       seek_with_pause = false;
 	   }
@@ -3572,7 +3806,7 @@ GST_START_TEST (test_seek_EOS)
        if (std::chrono::steady_clock::now() - start > std::chrono::seconds(operation_timeout))
            break;
     }
-    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n");
+    assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull\n", __FUNCTION__,__LINE__, "Verify if seek is successfull");
     printf ("\nSEEK SUCCESSFULL : Current Position : %" G_GINT64_FORMAT " SEEK POSITION : %" G_GINT64_FORMAT "\n",data.currentPosition, data.seekPosition);
 
     gst_object_unref(bus);
@@ -3581,19 +3815,12 @@ GST_START_TEST (test_seek_EOS)
     {
 	char eos_error_string[150];
 	sprintf(eos_error_string,"Failed to recieve EOS message within %d seconds of reaching EOS",operation_timeout);
-        assert_failure (data.playbin,received_EOS == true, eos_error_string);
+        assert_failure (data.playbin,received_EOS == true, eos_error_string, __FUNCTION__,__LINE__, "Verify if EOS message is received");
     }
 
     printf ("\nEOS Received with pipeline in %s state\n",gst_element_state_get_name(cur_state));
 
-    if (data.playbin)
-    {
-       gst_element_set_state(data.playbin, GST_STATE_NULL);
-    }
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3610,7 +3837,8 @@ GST_START_TEST (test_appsrc_underflow)
     force_appsrc = true;
     SetupPipeline(&data,false);
 
-    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE);
+    assert_failure (data.playbin, gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE, "Failed to set pipeline to PLAYING state",
+		    __FUNCTION__, __LINE__, "Set pipeline to PLAYING state");
 
     data.app.offset = 0;
     printf("\nSetting data.terminate as false\n");
@@ -3621,14 +3849,18 @@ GST_START_TEST (test_appsrc_underflow)
     PlaybackValidation(&data,play_timeout);
 
     if (video_underflow_test)
-	 assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive buffer underflow signal");
+	 assert_failure (data.playbin,videoUnderflowReceived == true, "Failed to receive video buffer underflow signal",
+			 __FUNCTION__, __LINE__, "Verify if video buffer underflow signal is received");
     if (audio_underflow_test)
-	 assert_failure (data.playbin,audio_underflow_received_global == true, "Failed to receive buffer underflow signal");
+	 assert_failure (data.playbin,audio_underflow_received_global == true, "Failed to receive audio buffer underflow signal",
+			 __FUNCTION__, __LINE__, "Verify if audio buffer underflow signal is received");
     if (checkSignalTest)
          goto EXIT;
 
     BYTES_THRESHOLD *= 2;
     printf ("\nUpdating bytestThreshold to %lld",BYTES_THRESHOLD);
+    if (log_enabled)
+	 fprintf(file, "\nUpdating bytestThreshold to %lld",BYTES_THRESHOLD);
     printf ("\nPushing buffers with updated bytesThreshold\n");
     videoUnderflowReceived = false;
     audio_underflow_received_global = false;
@@ -3639,13 +3871,7 @@ GST_START_TEST (test_appsrc_underflow)
     PlaybackValidation(&data,play_timeout);
 
 EXIT:
-    if (data.playbin)
-    {
-        assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    }
-
-    gst_object_unref (data.playbin);
-
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3684,18 +3910,12 @@ GST_START_TEST (test_color_depth)
     assert_failure (data.playbin,bit_depth != 0,"bit depth is not given");
 
     printf("\nBit_Depth_Got = %d\n", Bit_depth_got);
+    if (log_enabled)
+	 fprintf(file, "\nBit_Depth_Got = %d\n", Bit_depth_got);
     
-    assert_failure (data.playbin,(bit_depth == Bit_depth_got), "Given bit_depth was not matched");
+    assert_failure (data.playbin,(bit_depth == Bit_depth_got), "Expected Bit Depth not received", __FUNCTION__, __LINE__, "Verify Bit Depth Received");
 
-    if (data.playbin)
-    {
-	    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    }
-
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 
 }
 GST_END_TEST;
@@ -3749,16 +3969,7 @@ GST_START_TEST (test_audio_volume)
 	    }
     }
 
-    if (data.playbin)
-    {
-        assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    }
-
-    /*
-     * Cleanup after use
-     */
-    gst_object_unref (data.playbin);
-
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3815,8 +4026,14 @@ GST_START_TEST(test_bitrate_switch)
 
         // Print the parsed height and bandwidth
         printf("\nHeight: %u, Bandwidth: %u\n", height_str, bandwidth_str);
+	if (log_enabled)
+	    fprintf(file, "\nHeight: %u, Bandwidth: %u\n", height_str, bandwidth_str);
 	if (height_before > 0)
+        {
             printf("Height before flush: %u, Bandwidth to set: %u\n", height_before, bandwidth);
+	    if (log_enabled)
+		fprintf(file, "Height before flush: %u, Bandwidth to set: %u\n", height_before, bandwidth);
+	}
 	height_before = height_str;
 
         // Set the current bandwidth in the data structure
@@ -3824,6 +4041,8 @@ GST_START_TEST(test_bitrate_switch)
 
         // Simulate flush operation
 	g_object_set(G_OBJECT(dash_demux), "max-bitrate", data.current_bandwidth, NULL);
+	if (log_enabled)
+	    fprintf(file, "Setting max-bitrate to %d", data.current_bandwidth);
         flushPipeline(&data);
 	if (checkNewPlay)
             PlaybackValidation(&data,play_timeout);
@@ -3843,19 +4062,15 @@ GST_START_TEST(test_bitrate_switch)
        	else 
 	{
 	    printf("FAILURE: Height changed after flush. Before: %u, After: %u\n", height_before, height_after);
-	    assert_failure (data.playbin, false, "Resolution is not obtained as expected");
+	    assert_failure (data.playbin, false, "Resolution is not obtained as expected",__FUNCTION__, __LINE__, "Verify if expected resolution is played");
         }
 	i++;
 	if (i > resolution_count)
 	    break;
 	
     }
-    if (data.playbin)
-    {
-	    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_NULL) !=  GST_STATE_CHANGE_FAILURE);
-    }
 
-    gst_object_unref (data.playbin);
+    terminatePipeline(data.playbin);
 }
 GST_END_TEST;
 
@@ -3864,6 +4079,7 @@ GST_END_TEST;
 static Suite *
 media_pipeline_suite (void)
 {
+    file = fopen(LOG_FILE, "a");
     Suite *gstPluginsSuite = suite_create ("playbin_plugin_test");
     TCase *tc_chain = tcase_create ("general");
     /*
@@ -4156,10 +4372,14 @@ void setEnvironmentVariable(const char* varName, const char* varValue)
         if (setenv(varName, varValue, 1) != 0)
 	{
             printf("Error setting environment variable: %s\n", varName);
+	    if (log_enabled)
+                fprintf(file, "Error setting environment variable: %s\n", varName);
         }
 	else
 	{
             printf("Set environment variable: %s=%s\n", varName, varValue);
+	    if (log_enabled)
+                fprintf(file, "Set environment variable: %s=%s\n", varName, varValue);
         }
     }
 }
@@ -4294,6 +4514,8 @@ std::string WesterosProcessID(bool debug = true)
     else
     {
         printf("\nWesteros not running\n");
+	if (log_enabled)
+            fprintf(file, "\nWesteros not running\n");
 	return "NIL";
     }
 }
@@ -4385,6 +4607,8 @@ bool parseResult(const std::string& jsonResponse)
 	else
 	{
 	    printf("\nERROR : Unable to parse json response");
+	    if (log_enabled)
+	        fprintf(file, "\nERROR : Unable to parse json response");
 	    return false;
 	}
     }
@@ -4498,10 +4722,14 @@ void handle_LDPRELOAD(const std::string &inputStr)
         if (!handle)
 	{
             std::cerr << "Failed to load: " << libPath << " | Error: " << dlerror() << "\n";
+	    if (log_enabled)
+		fprintf(file, "Failed to load: %s ", libPath.c_str());
         }
 	else
 	{
             printf("\nLoaded: %s",libPath.c_str());
+	    if (log_enabled)
+	        fprintf(file, "\nLoaded: %s\n",libPath.c_str());
             handles.push_back(handle);
         }
     }
@@ -4515,7 +4743,11 @@ void closeLibs()
 {
     // Close libraries before exiting
     if (!handles.empty())
+    {
 	printf("Closing libs");
+	if (log_enabled)
+	    fprintf(file, "\nClosing libs");
+    }
     for (void *handle : handles)
     {
         if (handle)
@@ -4536,6 +4768,8 @@ bool startWesteros()
     std::string command = "source " + GetTDKEnvPath();
     if (!infile) {
         printf("\nCould not open the file!\n");
+	if (log_enabled)
+            fprintf(file, "\nCould not open the file %s!\n", GetTDKEnvPath().c_str());
         return false;
     }
 
@@ -4552,12 +4786,28 @@ bool startWesteros()
 	// Execute the command
 	// Use "/bin/sh -c" to run the command in a shell
 	printf("\nInitializing westeros\n");
+	fprintf(file, "\nInitializing westeros\n");
 	execl("/bin/sh", "sh", "-c", command.c_str(), (char*) nullptr);
 	return true;
     }
    
     //Return true from parent process
     return true;
+}
+
+void printTest(int argc, char **argv)
+{
+    if (log_enabled)
+    {
+	fprintf(file,"\n%s",std::string(188,'#').c_str());
+        fprintf (file,"\n# TestCase Name: %s \n", tcname);
+        fprintf (file,"# Command invoked -> \n");
+        for (int i=0; i <argc; i++)
+        {
+            fprintf (file," %s ", argv[i]);
+        }
+	fprintf(file,"\n%s\n\n",std::string(188,'#').c_str());
+    }
 }
 
 int main (int argc, char **argv)
@@ -4571,7 +4821,16 @@ int main (int argc, char **argv)
     bool startWesterosConfig = false;
     bool createDisplayConfig = false;
     bool displayCreated = false;
+    file = fopen(LOG_FILE, "w");
 
+    gst_check_init (&argc, &argv);
+    if (argc >= 1)
+    {
+        strcpy (tcname, argv[1]);
+    }
+
+    printTest(argc, argv);
+    
     /*
      * Get TDK path
      */
@@ -4583,7 +4842,13 @@ int main (int argc, char **argv)
     {
 	if (access(GetTDKEnvPath().c_str(), F_OK) == 0)
 	{
-	    if (!(setVariables()))
+	     if (log_enabled)
+             {
+                 fprintf(file , "\n##################################################################\n");
+                 fprintf(file ,   "####################  Setting up Pre-requisites ##################\n");
+                 fprintf(file ,   "##################################################################\n");
+             }
+	     if (!(setVariables()))
 		goto exit;
 	}
 	else
@@ -4602,14 +4867,11 @@ int main (int argc, char **argv)
     }
     if (argc == 2)
     {
-    	strcpy (tcname, argv[1]);
-
     	GST_INFO ("\nArg 2: TestCase Name: %s \n", tcname);
     	printf ("\nArg 2: TestCase Name: %s \n", tcname);
     }
     else if (argc >= 3)
     {
-        strcpy (tcname, argv[1]);
 	if (strcmp ("test_channel_change_playback", tcname) == 0)
 	{
       	    strcpy(channel_url,argv[3]);
@@ -4806,6 +5068,10 @@ int main (int argc, char **argv)
                 {
                     checkNewPlay = true;
                 }
+		if (strcmp ("validateFullPlayback=no", argv[arg]) == 0)
+                {
+                    checkNewPlay = false;
+                }
 		if (strcmp ("checkEachSecondPlayback", argv[arg]) == 0)
 		{
 		    checkEachSecondPlayback = true;
@@ -4851,11 +5117,13 @@ int main (int argc, char **argv)
 		if (strcmp ("startWesteros=yes", argv[arg]) == 0)
 		{
 		    startWesterosConfig = true;
+		    defaultStart = false;
 		}
 		if (strcmp ("createDisplay=yes", argv[arg]) == 0)
                 {
                     createDisplayConfig = true;
 		    startWesterosConfig = false;
+		    defaultStart = false;
                 }
             }
 
@@ -4879,7 +5147,28 @@ int main (int argc, char **argv)
         returnValue = 0;
 	goto exit;
     }
-    gst_check_init (&argc, &argv);
+
+    if (defaultStart)
+    {
+        bool RDKShell_exists = fileExists("/etc/WPEFramework/plugins/RDKShell.json", true);
+	if (RDKShell_exists)
+	{
+	    printf("\nRDKShell is present in device\nCreating display - 'test'\n");
+	    if (log_enabled)
+		fprintf(file, "\nRDKShell is present in device\nCreating display - 'test'\n");
+	    createDisplayConfig = true;
+            startWesterosConfig = false;
+	}
+	else
+	{
+	    printf("\nRDKShell is not present in device\nProceeding to create display using westeros renderer\n");
+	    if (log_enabled)
+		fprintf(file, "\nRDKShell is not present in device\nProceeding to create display using westeros renderer\n");
+	    createDisplayConfig = false;
+            startWesterosConfig = true;
+        }
+    }
+
     g_log_set_handler (NULL, (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
       log_handler, NULL);
     g_log_set_handler ("GStreamer", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
@@ -4890,6 +5179,7 @@ int main (int argc, char **argv)
       log_handler, NULL);
     g_log_set_handler ("GLib", (GLogLevelFlags) (G_LOG_LEVEL_WARNING|G_LOG_LEVEL_CRITICAL),
       log_handler, NULL);
+
     if (createDisplayConfig)
     {
 	if(!RDKShellStatus())
@@ -4897,7 +5187,9 @@ int main (int argc, char **argv)
 	     if (curlError)
 		  goto exit;
              printf("\nRDKShell is deactivated\n");
+             fprintf(file,"\nRDKShell is deactivated\n");
              printf("Activating RDKShell\n");
+             fprintf(file,"Activating RDKShell\n");
              if (activateRDKShell())
              {
                   printf("\nActivate RDKShell success\n");
@@ -4906,6 +5198,7 @@ int main (int argc, char **argv)
 		  if (!RDKShellStatus())
 		  {
 		       printf("\nERROR : Unable to activate RDKShell plugin");
+		       fprintf(file,"\nERROR : Unable to activate RDKShell plugin");
 		       goto exit;
 		  }
              }
@@ -4914,29 +5207,43 @@ int main (int argc, char **argv)
 	 {
 	     printf("\nAlready a display \"test\" is running in DUT");
 	     printf("\nRe-using display");
+	     if (log_enabled)
+	         fprintf(file, "\nAlready a display \"test\" is running in DUT\nRe-using display\n");
 	 }
 	 else
 	 {
-	     printf("\nCreating RDKShell Display :");
+	     printf("\nCreating RDKShell Display");
+	     if (log_enabled)
+	         fprintf(file,"\nCreating RDKShell Display");
              if (!createDisplay())
              {
 	          printf("\nERROR : Unable to create Display\n");
+		  if (log_enabled)
+	              fprintf(file, "\nERROR : Unable to create Display\n");
                   goto exit;
              }
              else
              {
+		  printf("\nSUCCESS : RDKShell display created successfully\n");
+		  if (log_enabled)
+                      fprintf(file, "\nSUCCESS : RDKShell display created successfully\n");
 	          displayCreated = true;
 	     }
 	 }
 
          // Set WAYLAND_DISPLAY to "test" as RDKShell creates a window with displayName as "test"
          printf("\nSetting WAYLAND_DISPLAY to \"test\"");
+         fprintf(file, "\nSetting WAYLAND_DISPLAY to \"test\"");
          setenv("WAYLAND_DISPLAY", "test", 1);
          if (strcmp(getenv ("WAYLAND_DISPLAY"), "test") == 0)
+	 {
              printf("\nWAYLAND_DISPLAY successfully set to \"test\"\n\n");
+             fprintf(file, "\nWAYLAND_DISPLAY successfully set to \"test\"\n\n");
+	 }
          else
          {
              printf("\nUnable to set WAYLAND_DISPLAY to \"test\"\n\n");
+             fprintf(file, "\nUnable to set WAYLAND_DISPLAY to \"test\"\n\n");
              goto exit;
          }
     }
@@ -4948,6 +5255,7 @@ int main (int argc, char **argv)
         if (WesterosProcessID() == "NIL")
 	{
 	    printf("\nERROR : Unable to start westeros compositor\n");
+	    fprintf(file, "\nERROR : Unable to start westeros compositor\n");
 	    goto exit;
 	}
 	else
@@ -4955,26 +5263,50 @@ int main (int argc, char **argv)
 	    westerosStarted = true;
 	}
     }
+    if (log_enabled)
+    {
+        fprintf(file , "\n##################################################################\n");
+        fprintf(file ,   "################# Pre-requisites successfully set ################\n");
+        fprintf(file ,   "##################################################################\n");
+    }
+    fclose(file);
     testSuite = media_pipeline_suite ();
     returnValue =  gst_check_run_suite (testSuite, "playbin_plugin_test", __FILE__);
 exit:
+    if (!file)
+        file = fopen(LOG_FILE, "a");
+    if ( ((startWesterosConfig && westerosStarted) || (createDisplayConfig && displayCreated)) && log_enabled)
+    {
+	fprintf(file , "\n##################################################################\n");
+        fprintf(file ,   "################# Executing Post-requisites ######################\n");
+        fprintf(file ,   "##################################################################\n");
+    }
     if (startWesterosConfig && westerosStarted)
     {
 	std::string command = "kill -9 " + WesterosProcessID(false);
-        printf("Deinitializing westeros\n");
+	printf("Deinitializing westeros\n");
+	if (log_enabled)
+            fprintf(file, "Deinitializing westeros\n");
         executeCmndInDUT(command,false);
     }
     if (createDisplayConfig && displayCreated)
     {
-        printf("Destroying RDKShell Display :");
+	printf("Destroying RDKShell Display");
+	if (log_enabled)
+            fprintf(file, "Destroying RDKShell Display");
 	if (!destroyDisplay())
 	{
 	    printf("ERROR: Unable to destroy RDKShell display\n");
+	    if (log_enabled)
+		fprintf(file, "ERROR: Unable to destroy RDKShell display\n");
 	    //Add destroying display failure to number of failures
 	    returnValue += 1;
 	}
     }
     closeLibs();
+    if (log_enabled)
+	fprintf(file , "\n################## End of Execution ##############################\n");
+    fclose(file);
     return returnValue;
 }
 
