@@ -186,6 +186,8 @@ FILE *file = NULL;
 bool log_enabled = true;
 bool playbackValidationLog = false;
 bool defaultStart = true;
+bool enable_last_sample = false;
+gint64 buffer_PTS = 0;
 
 /*
  * Playbin flags
@@ -316,7 +318,6 @@ void startPlaybackValidationLogging(bool start=true)
 	   fprintf(file,"# Playback Validation Ended\n");
 	   fprintf(file,"################################\n");
 	   playbackValidationLog = false;
-	   log_enabled = false;
        }
    }
 }
@@ -1193,7 +1194,7 @@ bool getstreamingstatus(char* script)
     FILE* pipe = popen(script, "r");
     if (!pipe)
     {
-            GST_ERROR("Error in opening pipe \n");
+	    printf("Error in opening pipe \n");
             return false;
     }
     while (!feof(pipe)) 
@@ -1204,7 +1205,7 @@ bool getstreamingstatus(char* script)
         }
     }
     pclose(pipe);
-    GST_LOG("Script Output: %s %s\n", script, result);
+    printf("Script Output: %s %s\n", script, result);
     if (strstr(result, "SUCCESS") != NULL)
     {
     	return true;
@@ -2370,6 +2371,12 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
      */
     firstFrameReceived= false;
 
+    if (enable_last_sample)
+    {
+        g_object_set(data->westerosSink.sink, "enable-last-sample", TRUE, NULL);
+        printf ("\n Last Sample Enabled\n");
+    }
+
     g_signal_connect(data->westerosSink.sink, "buffer-underflow-callback", G_CALLBACK(bufferUnderflowCallback), &videoUnderflowReceived);
 
     data->pipelineInitiation = true;
@@ -2663,7 +2670,8 @@ GST_START_TEST (test_generic_playback)
         is_av_playing = check_for_AV_status();
         assert_failure (data.playbin,is_av_playing == true, "Video is not playing in TV",  __FUNCTION__,__LINE__, "Verify video playback using proc entry");
     }
-    GST_LOG("DETAILS: SUCCESS, Video playing successfully \n");
+
+    printf("DETAILS: SUCCESS, Video playing successfully \n");
 
     if (data.playbin)
     {
@@ -4075,6 +4083,108 @@ GST_START_TEST(test_bitrate_switch)
 GST_END_TEST;
 
 
+GST_START_TEST (test_video_PTS_sync)
+{
+    GstMessage *message;
+    GstBus *bus;
+    MessageHandlerData data;
+    enable_last_sample = true;
+    GstSample *sample = NULL;
+    GstBuffer *buffer = NULL;
+    GstStateChangeReturn state_change;
+
+    SetupPipeline(&data,false);
+
+
+    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PLAYING) !=  GST_STATE_CHANGE_FAILURE ,"Failed to set to PLAYING state",
+		    __FUNCTION__,__LINE__,"Set Pipeline to PLAYING state");
+    if (log_enabled)
+	    fprintf (file,"\nPipeline is setting to Playing state\n");
+
+
+    //WaitForOperation;
+
+    gint64 Current_Position = 0;
+    do
+    {
+       state_change = gst_element_get_state (data.playbin, &(data.cur_state), NULL, 10000000);
+    } while (state_change == GST_STATE_CHANGE_ASYNC);
+    printf ("\n\n\nPipeline set to : %s  state \n\n\n", gst_element_state_get_name(data.cur_state));
+
+    play_timeout = play_timeout - 5;
+
+    if (checkNewPlay)
+        PlaybackValidation(&data,play_timeout);
+    else
+        PlaySeconds(data.playbin,play_timeout);
+
+    data.eosDetected = false;
+    bus = gst_element_get_bus (data.playbin);
+    do
+    {
+        message = gst_bus_pop_filtered (bus,(GstMessageType)GST_MESSAGE_EOS);
+        if (message != NULL)
+        {
+            if (GST_MESSAGE_EOS == GST_MESSAGE_TYPE(message))
+            {
+		if (log_enabled)
+		    fprintf(file, "\nEOS Received:Exiting\n");
+                data.eosDetected = true;
+		assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position",
+		    __FUNCTION__,__LINE__,"Query playback position");
+                //gint64 Current_Position = 0;
+                Current_Position = (data.currentPosition);
+                printf ("\n CURRENT POSITION : %lld\n", Current_Position);
+
+                break;
+            }
+        }
+    }while (!data.eosDetected);
+
+    gst_object_unref (bus);
+
+    assert_failure (data.playbin,received_EOS == true, "Failed to recieve EOS message", __FUNCTION__,__LINE__, "Verify EOS message received");
+    printf ("EOS Received\n");
+    if (log_enabled)
+	    fprintf (file,"\nFailed to recieve the EOS maessage\n");
+
+    assert_failure (data.playbin,gst_element_set_state (pipeline, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PAUSED state",
+		    __FUNCTION__,__LINE__,"Set Pipeline to PAUSED state");
+    if (log_enabled)
+            fprintf (file,"\nPipeline setting to paused state \n");
+
+
+    //  Fetch Video PTS from last-sample
+    gint64 video_pts_last_sample = 0;
+    g_object_get(data.westerosSink.sink, "last-sample", &sample, NULL);
+    if (sample)
+    {
+        buffer = gst_sample_get_buffer(sample);
+        if (buffer)
+            video_pts_last_sample = GST_BUFFER_PTS(buffer);
+        printf ("\n Video PTS from last sample : %lld\n", video_pts_last_sample);
+        gst_sample_unref(sample);
+    }
+
+    gint64 PTS_Valid =0;
+
+    PTS_Valid = ((Current_Position/GST_SECOND) - (video_pts_last_sample/GST_SECOND));
+
+    printf ("\nDifference between PTS Value and Playback position : %lld \n", PTS_Valid);
+
+    assert_failure (data.playbin, PTS_Valid < GST_SECOND, "PTS value from the last-sample is not alligned with the playback position", 
+		    __FUNCTION__,__LINE__,"PTS value from the last-sample is not alligned with the playback position");
+    if (log_enabled)
+            fprintf (file,"\nPTS value from the last-sample is not alligned with the playback position\n");
+
+
+
+    terminatePipeline(data.playbin);
+}
+GST_END_TEST;
+
+
+
 
 static Suite *
 media_pipeline_suite (void)
@@ -4337,6 +4447,12 @@ media_pipeline_suite (void)
     {
        seek_with_pause = true;
        tcase_add_test (tc_chain, test_seek_EOS);
+       GST_INFO ("tc %s run successfull\n", tcname);
+       GST_INFO ("SUCCESS\n");
+    }
+    else if (strcmp ("test_video_PTS_sync", tcname) == 0)
+    {
+       tcase_add_test (tc_chain, test_video_PTS_sync);
        GST_INFO ("tc %s run successfull\n", tcname);
        GST_INFO ("SUCCESS\n");
     }
@@ -4850,6 +4966,7 @@ int main (int argc, char **argv)
              }
 	     if (!(setVariables()))
 		goto exit;
+	     strcpy (TDK_PATH, getenv ("TDK_PATH"));
 	}
 	else
 	{
@@ -4913,6 +5030,7 @@ int main (int argc, char **argv)
 	    (strcmp ("test_channel_change_playback", tcname) == 0) ||
 	    (strcmp ("test_audio_duration", tcname) == 0) || 
 	    (strcmp ("test_bitrate_switch_down", tcname) == 0) || 
+	    (strcmp ("test_video_PTS_sync", tcname) == 0) ||
 	    (strcmp ("test_bitrate_switch_up", tcname) ==0))
 	{
 	    strcpy(m_play_url,argv[2]);
