@@ -77,6 +77,13 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetPartnerId", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetPartnerId);
 		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetSerialNum", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetSerialNum);
 		    this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetAccountID", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetAccountID);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetOsClass", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetOsClass);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetModelNum", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetModelNum);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetBuildType", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "BuildType_null_param_check", JSON_INTEGER, "buffer_size", JSON_INTEGER,  NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetBuildType);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetFirmwareVersion", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetFirmwareVersion);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetEstbMac", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetEstbMac);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetRemoteInfo", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetRemoteInfo);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetRemoteVers", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetRemoteVers);
                 }
 
 
@@ -105,6 +112,13 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 		void rdkfwupdater_GetPartnerId(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_GetSerialNum(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_GetAccountID(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetOsClass(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetModelNum(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetBuildType(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetFirmwareVersion(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetEstbMac(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetRemoteInfo(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetRemoteVers(IN const Json::Value& req, OUT Json::Value& response);
 };
 #endif //__RDKFWUPGRADER_STUB_H__
 

@@ -1080,6 +1080,348 @@ void RDK_fwupgradeAgent::rdkfwupdater_GetAccountID(IN const Json::Value& req, OU
 }
 
 /**************************************************************************
+ *Function name  : rdkfwupdater_GetOsClass
+ *Description    : This function returns the OsClass of the device.
+ **************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetOsClass(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetOsClass --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strOsClass[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetOsClass(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetOsClass(strOsClass, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "OsClass: %s, Return Value: %d Buffer size: %d", strOsClass, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strOsClass;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetOsClass --->Exit\n");
+    return;
+}
+
+/**************************************************************************
+ *Function name  : rdkfwupdater_GetModelNum
+ *Description    : This function returns the model number of the device.
+ **************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetModelNum(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetModelNum --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strModelNum[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetModelNum(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetModelNum(strModelNum, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Model no.: %s, Return Value: %d Buffer size: %d", strModelNum, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strModelNum;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetModelNum --->Exit\n");
+    return;
+}
+
+/*********************************************************************************************
+ *Function name  : rdkfwupdater_GetBuildType
+ *Description    : This function returns the gets the build type of the device in lowercase.
+ *********************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetBuildType(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetBuildType --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+
+    char strBuildType[buffer_size] = {0};
+    BUILDTYPE eBuildType = static_cast<BUILDTYPE>(0);
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+            returnValue = GetBuildType(NULL, buffer_size, &eBuildType);
+         }
+	 else if (req["BuildType_null_param_check"].asInt())
+	 {
+            returnValue = GetBuildType(strBuildType, buffer_size, NULL);
+	 }
+         else
+         {
+            returnValue = GetBuildType(strBuildType, buffer_size, &eBuildType);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "BuildType: %s, Return Value: %d eBuildType: %d", strBuildType, returnValue, eBuildType);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strBuildType;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetBuildType --->Exit\n");
+    return;
+}
+
+/****************************************************************************
+ *Function name  : rdkfwupdater_GetFirmwareVersion
+ *Description    : This function returns the firmware version of the device.
+ ****************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetFirmwareVersion(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetFirmwareVersion --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strFWVersion[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetFirmwareVersion(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetFirmwareVersion(strFWVersion, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Firmware Ver.: %s, Return Value: %d Buffer size: %d", strFWVersion, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strFWVersion;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetFirmwareVersion --->Exit\n");
+    return;
+}
+
+/****************************************************************************
+ *Function name  : rdkfwupdater_GetEstbMac
+ *Description    : This function returns the eSTB MAC address of the device.
+ ****************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetEstbMac(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetEstbMac --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strEstbMac[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetEstbMac(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetEstbMac(strEstbMac, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "STB MAC ADDR.: %s, Return Value: %d Buffer size: %d", strEstbMac, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strEstbMac;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetEstbMac --->Exit\n");
+    return;
+}
+
+/***********************************************************************
+ *Function name  : rdkfwupdater_GetRemoteInfo
+ *Description    : This function returns the remote info of the device
+ ***********************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetRemoteInfo(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetRemoteInfo  --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strRemoteInfo[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetRemoteInfo(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetRemoteInfo(strRemoteInfo, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Remote Info: %s, Return Value: %d Buffer size: %d", strRemoteInfo, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strRemoteInfo;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetRemoteInfo --->Exit\n");
+    return;
+}
+
+/*******************************************************************************
+ *Function name  : rdkfwupdater_GetRemoteVers
+ *Description    : This function returns the peripheral versions of the device
+ *******************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetRemoteVers(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetRemoteVers  --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strRemoteVers[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetRemoteVers(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetRemoteVers(strRemoteVers, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Remote Version Info: %s, Return Value: %d Buffer size: %d", strRemoteVers, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strRemoteVers;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetRemoteVers --->Exit\n");
+    return;
+}
+
+/**************************************************************************
 Function Name   : cleanup
 Arguments       : NULL
 Description     : This function will be used to the close things cleanly.
