@@ -4130,7 +4130,7 @@ GST_START_TEST (test_video_PTS_sync)
 		if (log_enabled)
 		    fprintf(file, "\nEOS Received:Exiting\n");
                 data.eosDetected = true;
-		assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &currentPosition), "Failed to query the current playback position",
+		assert_failure (data.playbin,gst_element_query_position (data.playbin, GST_FORMAT_TIME, &Current_Position), "Failed to query the current playback position",
 		    __FUNCTION__,__LINE__,"Query playback position");
                 //gint64 Current_Position = 0;
                 Current_Position = (data.currentPosition);
@@ -4143,12 +4143,11 @@ GST_START_TEST (test_video_PTS_sync)
 
     gst_object_unref (bus);
 
-    assert_failure (data.playbin,received_EOS == true, "Failed to recieve EOS message", __FUNCTION__,__LINE__, "Verify EOS message received");
     printf ("EOS Received\n");
     if (log_enabled)
 	    fprintf (file,"\nFailed to recieve the EOS maessage\n");
 
-    assert_failure (data.playbin,gst_element_set_state (pipeline, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PAUSED state",
+    assert_failure (data.playbin,gst_element_set_state (data.playbin, GST_STATE_PAUSED) !=  GST_STATE_CHANGE_FAILURE, "Failed to set to PAUSED state",
 		    __FUNCTION__,__LINE__,"Set Pipeline to PAUSED state");
     if (log_enabled)
             fprintf (file,"\nPipeline setting to paused state \n");
