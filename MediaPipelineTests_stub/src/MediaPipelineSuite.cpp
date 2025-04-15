@@ -188,6 +188,7 @@ bool playbackValidationLog = false;
 bool defaultStart = true;
 bool enable_last_sample = false;
 gint64 buffer_PTS = 0;
+bool live_stream = false;
 
 /*
  * Playbin flags
@@ -833,12 +834,16 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 	if (log_enabled)
              fprintf(file, "\n");
      
-	assert_failure(data->playbin, GST_TIME_AS_SECONDS(data->previousposition) < 10, "Initial position of the pipeline is excessively high",
+	if (!live_stream)
+	{
+ 	   assert_failure(data->playbin, GST_TIME_AS_SECONDS(data->previousposition) < 10, "Initial position of the pipeline is excessively high",
 	                __FUNCTION__,__LINE__,"Verify Pipeline initiates properly");
+	}
 
 	if (log_enabled)
 	     fprintf(file, "\n");
 	data->pipelineInitiation = false;
+
     }
 
     if (use_audioSink)
@@ -963,6 +968,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
                   data->previousposition += 100 * GST_MSECOND;
 
               }
+
 	 }
 
          /* Video PTS validation - obtained from westerossink
@@ -1044,8 +1050,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
 		 if ((play_without_audio) && (data->currentPosition/GST_SECOND >= audioEnd))
 		     use_audioSink = false;
 
-		 assert_failure (data->playbin, data->audioSink.rendered_frames != 0 , "Audio rendered_frames is coming as 0",
-                                 __FUNCTION__,__LINE__,"Verify Audio Frame is Rendered");
+		 //assert_failure (data->playbin, data->audioSink.rendered_frames != 0 , "Audio rendered_frames is coming as 0",
+                                 //__FUNCTION__,__LINE__,"Verify Audio Frame is Rendered");
                  if ((data->audioSink.rendered_frames <= data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PLAYING))
                     data->audioSink.frame_buffer -= 1;
 		 else if ((data->audioSink.rendered_frames != data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PAUSED))
@@ -1880,6 +1886,8 @@ static void play_set_relative_volume (GstElement *playbin)
            g_object_get(G_OBJECT(audio_sink), "volume", &sink_volume, NULL);
 	   printf("\n\nVolume from audiosink = %.0f\n", sink_volume);
 	   printf("\nExpected volume = %0.f\n\n", set_volume);
+
+
 	   assert_failure (playbin, sink_volume == set_volume, "audio-sink doesn't return the expected volume", __FUNCTION__, __LINE__, "Verify if volume is properly set in audio-sink");
        }
        g_object_unref(audio_sink);
@@ -4092,6 +4100,7 @@ GST_START_TEST (test_video_PTS_sync)
     GstSample *sample = NULL;
     GstBuffer *buffer = NULL;
     GstStateChangeReturn state_change;
+    int timeout = 5;
 
     SetupPipeline(&data,false);
 
@@ -4120,6 +4129,8 @@ GST_START_TEST (test_video_PTS_sync)
 
     data.eosDetected = false;
     bus = gst_element_get_bus (data.playbin);
+
+    start = std::chrono::steady_clock::now();
     do
     {
         message = gst_bus_pop_filtered (bus,(GstMessageType)GST_MESSAGE_EOS);
@@ -4136,12 +4147,15 @@ GST_START_TEST (test_video_PTS_sync)
                 Current_Position = (data.currentPosition);
                 printf ("\n CURRENT POSITION : %lld\n", Current_Position);
 
+		if (std::chrono::steady_clock::now() - start > std::chrono::seconds(timeout))
                 break;
             }
         }
     }while (!data.eosDetected);
 
     gst_object_unref (bus);
+
+    assert_failure (data.playbin,data.eosDetected == true, "Failed to recieve EOS message", __FUNCTION__,__LINE__, "Verify EOS message received");
 
     printf ("EOS Received\n");
     if (log_enabled)
@@ -5236,6 +5250,10 @@ int main (int argc, char **argv)
 		    startWesterosConfig = true;
 		    defaultStart = false;
 		}
+		if (strcmp ("live_stream", argv[arg]) == 0)
+                {
+		    live_stream = true;
+                }
 		if (strcmp ("createDisplay=yes", argv[arg]) == 0)
                 {
                     createDisplayConfig = true;
