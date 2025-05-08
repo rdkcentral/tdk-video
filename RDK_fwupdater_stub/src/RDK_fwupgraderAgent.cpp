@@ -1422,6 +1422,503 @@ void RDK_fwupgradeAgent::rdkfwupdater_GetRemoteVers(IN const Json::Value& req, O
 }
 
 /**************************************************************************
+ *Function name  : rdkfwupdater_GetExperience
+ *Description    : This function returns the the experience of the device
+ **************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetExperience(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetExperience  --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strExperience[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetExperience(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetExperience(strExperience, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Experience: %s, Return Value: %d Buffer size: %d", strExperience, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strExperience;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetExperience --->Exit\n");
+    return;
+}
+
+/****************************************************************************
+ *Function name  : rdkfwupdater_GetRdmManifestVersion
+ *Description    : This function returns gets the remote info of the device
+ ****************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetRdmManifestVersion(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetRdmManifestVersion  --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strRdmManifestVersion[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetRdmManifestVersion(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetRdmManifestVersion(strRdmManifestVersion, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "RdmManifest Ver.: %s, Return Value: %d Buffer size: %d", strRdmManifestVersion, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strRdmManifestVersion;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetRdmManifestVersion --->Exit\n");
+    return;
+}
+
+/*************************************************************************************************
+ *Function name  : rdkfwupdater_GetFileContents
+ *Description    : This function gets the contents of a file into a dynamically allocated buffer
+ *************************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetFileContents(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetFileContents --->Entry\n");
+    size_t returnValue = 0;
+    char filename[40] = { 0 };
+
+    strcpy(filename,req["filename"].asCString());
+    char *strFileContents = NULL;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetFileContents(NULL, filename);
+         }
+         else if (req["filename_null_check"].asInt())
+         {
+             returnValue = GetFileContents(&strFileContents, NULL);
+         }
+         else
+         {
+             returnValue = GetFileContents(&strFileContents, filename);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "File contents: %s, Return Value: %d Filename: %s", strFileContents, returnValue, filename);
+    if (returnValue)
+    {
+       response["result"]= "SUCCESS";
+    }
+    else
+    {
+       response["result"]= "FAILURE";
+    }
+
+    if (strFileContents != NULL)
+    {
+       response["details"] = strFileContents;
+    }
+    else
+    {
+       response["details"] = "NULL";
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetFileContents --->Exit\n");
+    return;
+}
+
+
+/********************************************************************************************
+ *Function name  : rdkfwupdater_GetServURL
+ *Description    : This function gets the correct XCONF URL based upon device configuration
+ ********************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetServURL(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetServURL --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strServurl[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetServURL(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetServURL(strServurl, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Server URL: %s, Return Value: %d", strServurl, returnValue);
+    if (returnValue)
+    {
+       response["result"]= "SUCCESS";
+    }
+    else
+    {
+       response["result"]= "FAILURE";
+    }
+
+    response["details"] = strServurl;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetServURL --->Exit\n");
+    return;
+}
+
+/******************************************************************************************************
+ *Function name  : rdkfwupdater_GetTR181Url
+ *Description    : This function returns gets a specific URL from tr181 associated with code downloads
+ ******************************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetTR181Url(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetTR181Url --->Entry\n");
+    size_t returnValue = 0;
+
+    size_t buffer_size = req["buffer_size"].asInt();
+	int URLEnumType = req["eURL_enum"].asInt();
+
+    char strURL[buffer_size] = {0};
+	TR181URL eURL = static_cast<TR181URL>(URLEnumType);
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+            returnValue = GetTR181Url(eURL, NULL, buffer_size);
+         }
+         else
+         {
+            returnValue = GetTR181Url(eURL, strURL, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "URL: %s, Return Value: %d eURL: %d", strURL, returnValue, eURL);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strURL;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetTR181Url --->Exit\n");
+    return;
+}
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_isStateRedSupported
+ *Description    : This function verifies the state red support is present or not
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isStateRedSupported(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isStateRedSupported --->Entry\n");
+    int returnValue = 0;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		returnValue = isStateRedSupported();
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "IsStateRed Supported: %d", returnValue );
+
+    if (returnValue == 0 || returnValue == 1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isStateRedSupported  --->Exit\n");
+    return;
+}
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_isInStateRed
+ *Description    : This function checks either device is in state red or not
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isInStateRed(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isInStateRed --->Entry\n");
+    int returnValue = 0;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		returnValue = isInStateRed();
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Device's RED State status is : %d", returnValue );
+
+    if (returnValue == 0 || returnValue == 1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isInStateRed  --->Exit\n");
+    return;
+}
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_isPDRIEnable
+ *Description    : This function checks either pdri upgrade required or not
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isPDRIEnable(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isPDRIEnable --->Entry\n");
+    int returnValue = 0;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		returnValue = isPDRIEnable();
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "PDRI Enable status : %d", returnValue );
+
+    if (returnValue == 0 || returnValue == 1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isPDRIEnable  --->Exit\n");
+    return;
+}
+
+/****************************************************************************
+ *Function name  : rdkfwupdater_GetPDRIVersion
+ *Description    : This function returns the PDRI version for the device.
+ ****************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetPDRIVersion(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetPDRIVersion --->Entry\n");
+    bool returnValue = 0;
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strPDRIVersion[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetPDRIVersion(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetPDRIVersion(strPDRIVersion, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "PDRI Version: %s, Return Value: %d Buffer size: %d", strPDRIVersion, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strPDRIVersion;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetPDRIVersion --->Exit\n");
+    return;
+}
+
+/**************************************************************************************************************
+ *Function name  : rdkfwupdater_getCurrentSysTimeSec
+ *Description    : This function Use for to get current system time
+ **************************************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_getCurrentSysTimeSec(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_getCurrentSysTimeSec --->Entry\n");
+    time_t returnValue = 0;
+	char details[30] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		returnValue = getCurrentSysTimeSec();
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    if (returnValue)
+    {
+		DEBUG_PRINT(DEBUG_TRACE, "Current system time: %lu", returnValue);
+		sprintf(details, "%lu", returnValue);
+        response["result"]= "SUCCESS";
+		response["details"] = details;
+		DEBUG_PRINT(DEBUG_LOG, "getCurrentSysTimeSec call is SUCCESS");
+    }
+    else
+    {
+		DEBUG_PRINT(DEBUG_TRACE, "Error value: %d", returnValue);
+        response["result"]= "FAILURE";
+		response["details"] = "System time not retrieved" + returnValue;
+		DEBUG_PRINT(DEBUG_ERROR, "getCurrentSysTimeSec call is FAILURE");
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_getCurrentSysTimeSec --->Exit\n");
+    return;
+}
+
+/*******************************************************************************************
+ *Function name  : rdkfwupdater_isOCSPEnable
+ *Description    : This function verifies the whether OCSP enable or disable in the device
+ ********************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isOCSPEnable(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isOCSPEnable --->Entry\n");
+    int returnValue = 0;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		returnValue = isOCSPEnable();
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "OCSP Enabled status: %d", returnValue );
+
+    if (returnValue == 1 || returnValue == -1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isOCSPEnable  --->Exit\n");
+    return;
+}
+
+/**************************************************************************
 Function Name   : cleanup
 Arguments       : NULL
 Description     : This function will be used to the close things cleanly.
