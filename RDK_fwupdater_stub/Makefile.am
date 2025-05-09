@@ -23,11 +23,18 @@ AM_CPPFLAGS = -g -Wall -std=c++0x -DGCC4_XXX \
 
 AM_CXXFLAGS = ${RDK_fwupdater_FLAGS} -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
 	      -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/deviceutils \
+	      -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/cedmInterface \
+	      -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/include \
 	      -DRDK_LOGGER -DIARM_ENABLED -DRFC_API_ENABLED \
               -I${top_srcdir}/RDK_fwupdater_stub/include -I${top_srcdir}/agent/include
 
+AM_CPPFLAGS += -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/cedmInterface \
+	       -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/include \
+	       -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/deviceutils \
+	       -I${top_srcdir}/RDK_fwupdater_stub/src/rdkfwupdater_source/src/rfcInterface
+
 lib_LTLIBRARIES = librdkfwupgraderstub.la
-librdkfwupgraderstub_la_SOURCES = src/RDK_fwupgraderAgent.cpp src/rdkfwupdater_source/src/deviceutils/deviceutils.c src/rdkfwupdater_source/src/deviceutils/device_api.c
+librdkfwupgraderstub_la_SOURCES = src/RDK_fwupgraderAgent.cpp src/rdkfwupdater_source/src/deviceutils/deviceutils.c src/rdkfwupdater_source/src/deviceutils/device_api.c src/rdkfwupdater_source/src/device_status_helper.c
 librdkfwupgraderstub_la_includedir = ${includedir}
 librdkfwupgraderstub_la_LIBADD = -lsecure_wrapper -lfwutils -lparsejson -ldwnlutil -lrdkloggers ${RDK_fwupdater_LIBS}
 librdkfwupgraderstub_la_include_HEADERS = ${top_srcdir}/RDK_fwupdater_stub/include/RDK_fwupgradeAgent.h

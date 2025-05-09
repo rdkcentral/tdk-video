@@ -37,6 +37,8 @@
 extern "C" {
    #include "deviceutils.h"
    #include "device_api.h"
+   #include "device_status_helper.h"
+   #include "rfcinterface.h"
 }
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
@@ -84,6 +86,17 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetEstbMac", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetEstbMac);
 			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetRemoteInfo", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetRemoteInfo);
 			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetRemoteVers", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetRemoteVers);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetExperience", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetExperience);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetRdmManifestVersion", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetRdmManifestVersion);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetFileContents", PARAMS_BY_NAME, JSON_STRING, "filename", JSON_STRING, "null_param", JSON_INTEGER, "filename_null_check", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetFileContents);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetServURL", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetServURL);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetTR181Url", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, "eURL_enum", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetTR181Url);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isStateRedSupported", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isStateRedSupported);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isInStateRed", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isInStateRed);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isPDRIEnable", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isPDRIEnable);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetPDRIVersion", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetPDRIVersion);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_getCurrentSysTimeSec", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_getCurrentSysTimeSec);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isOCSPEnable", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isOCSPEnable);
                 }
 
 
@@ -119,6 +132,17 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 		void rdkfwupdater_GetEstbMac(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_GetRemoteInfo(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_GetRemoteVers(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetExperience(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetRdmManifestVersion(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetFileContents(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetServURL(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetTR181Url(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isStateRedSupported(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isInStateRed(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isPDRIEnable(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetPDRIVersion(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_getCurrentSysTimeSec(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isOCSPEnable(IN const Json::Value& req, OUT Json::Value& response);
 };
 #endif //__RDKFWUPGRADER_STUB_H__
 
