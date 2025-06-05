@@ -506,6 +506,20 @@ AC_ARG_ENABLE([mfrhal],
            [echo "mfrhal component is not enabled"])
 AM_CONDITIONAL([MFRHAL], [test x$MFRHAL = xtrue])
 
+AC_ARG_ENABLE([fncsPackage],
+         AS_HELP_STRING([--enable-fncsPackage],[enable fncsPackage (default is no)]),
+         [
+           case "${enableval}" in
+              yes) fncspackage=true
+                   SUBDIR_DEFAULT=" MediaPipelineTests_stub FireboltCompliance_Validation "
+                   SUBDIR_HYBRID=" "
+                   SUBDIR_CLIENT=" ";;
+             no) fncsPackage=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-fncsPackage ]) ;;
+             esac
+            ],
+           [echo "fncsPackage component is not enabled"])
+AM_CONDITIONAL([fncsPackage], [test x$fncsPackage = xtrue])
 
 AC_ARG_ENABLE([trace],
               AS_HELP_STRING([--enable-trace],[enable trace (default is no)]),
