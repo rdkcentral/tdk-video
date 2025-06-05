@@ -39,6 +39,7 @@ extern "C" {
    #include "device_api.h"
    #include "device_status_helper.h"
    #include "rfcinterface.h"
+   Rfc_t rfc_list = { 0 };
 }
 
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>
@@ -97,6 +98,14 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetPDRIVersion", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetPDRIVersion);
 			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_getCurrentSysTimeSec", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_getCurrentSysTimeSec);
 			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isOCSPEnable", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isOCSPEnable);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_GetInstalledBundles", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, "buffer_size", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_GetInstalledBundles);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_getRFCSettings", PARAMS_BY_NAME, JSON_STRING, "null_param", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_getRFCSettings);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_read_RFCProperty", PARAMS_BY_NAME, JSON_STRING, "rfctype", JSON_STRING, "rfckey", JSON_STRING, "data_size", JSON_INTEGER, "null_param", JSON_INTEGER, "type_null_param", JSON_INTEGER, "key_null_param", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_read_RFCProperty);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_write_RFCProperty", PARAMS_BY_NAME, JSON_STRING, "rfctype", JSON_STRING, "rfckey", JSON_STRING, "rfcdata", JSON_STRING, "dataType", JSON_INTEGER, "null_param", JSON_INTEGER, "type_null_param", JSON_INTEGER, "key_null_param", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_write_RFCProperty);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isMtlsEnabled", PARAMS_BY_NAME, JSON_STRING, "devicename", JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isMtlsEnabled);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isIncremetalCDLEnable", PARAMS_BY_NAME, JSON_STRING, "filename", JSON_STRING, "null_param", JSON_INTEGER, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isIncremetalCDLEnable);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isMmgbleNotifyEnabled", PARAMS_BY_NAME, JSON_STRING, NULL), &RDK_fwupgradeAgent::rdkfwupdater_isMmgbleNotifyEnabled);
+			this->bindAndAddMethod(Procedure("TestMgr_rdkfwupdater_isThrottleEnabled", PARAMS_BY_NAME, JSON_STRING, "devicename", JSON_STRING, "rebootflag", JSON_STRING, "appmode", JSON_INTEGER, "devname_null_param", JSON_INTEGER, "reboot_null_param", JSON_INTEGER,  NULL), &RDK_fwupgradeAgent::rdkfwupdater_isThrottleEnabled);
                 }
 
 
@@ -143,6 +152,14 @@ class RDK_fwupgradeAgent : public RDKTestStubInterface , public AbstractServer<R
 		void rdkfwupdater_GetPDRIVersion(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_getCurrentSysTimeSec(IN const Json::Value& req, OUT Json::Value& response);
 		void rdkfwupdater_isOCSPEnable(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_GetInstalledBundles(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_getRFCSettings(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_read_RFCProperty(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_write_RFCProperty(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isMtlsEnabled(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isIncremetalCDLEnable(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isMmgbleNotifyEnabled(IN const Json::Value& req, OUT Json::Value& response);
+		void rdkfwupdater_isThrottleEnabled(IN const Json::Value& req, OUT Json::Value& response);
 };
 #endif //__RDKFWUPGRADER_STUB_H__
 
