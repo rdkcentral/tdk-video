@@ -1918,6 +1918,406 @@ void RDK_fwupgradeAgent::rdkfwupdater_isOCSPEnable(IN const Json::Value& req, OU
     return;
 }
 
+/****************************************************************************
+ *Function name  : rdkfwupdater_GetInstalledBundles
+ *Description    : This function returns the bundles installed on a device
+ ****************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_GetInstalledBundles(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetInstalledBundles --->Entry\n");
+    bool returnValue = 0;
+    size_t buffer_size = req["buffer_size"].asInt();
+    char strBundles[buffer_size] = {0};
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+         if (req["null_param"].asInt())
+         {
+             returnValue = GetInstalledBundles(NULL, buffer_size);
+         }
+         else
+         {
+             returnValue = GetInstalledBundles(strBundles, buffer_size);
+         }
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Installed bundles: %s, Return Value: %d Buffer size: %d", strBundles, returnValue, buffer_size);
+
+    if (returnValue)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = strBundles;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_GetInstalledBundles --->Exit\n");
+    return;
+}
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_getRFCSettings
+ *Description    : This function returns the RFC setting values
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_getRFCSettings(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_getRFCSettings --->Entry\n");
+    char output[200] = { 0 };
+    int returnValue = 0;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		if (!req["null_param"].asInt())
+		{
+			returnValue = getRFCSettings(&rfc_list);
+			sprintf(output, "rfc throttle: %s,rfc topspeed: %s,rfc IncrementalCDL: %s,rfc mtls: %s", rfc_list.rfc_throttle,rfc_list.rfc_topspeed,rfc_list.rfc_incr_cdl,rfc_list.rfc_mtls );
+		}
+		else
+		{
+			returnValue = getRFCSettings(NULL);
+		}
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, " getRFCSettings API return value: %d", returnValue );
+
+    if (returnValue != -1)
+    {
+        response["result"]= "SUCCESS";
+		response["details"] = output;
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+		response["details"] = "getRFCSettings call failed";
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_getRFCSettings  --->Exit\n");
+    return;
+}
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_read_RFCProperty
+ *Description    : This function returns the RFC data
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_read_RFCProperty(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_read_RFCProperty --->Entry\n");
+    char output[200] = { 0 };
+    char strRfctype[50] = { 0 }, strKey[50] = { 0 };
+    int returnValue = 0;
+
+    strcpy(strRfctype,req["rfctype"].asCString());
+    strcpy(strKey,req["rfckey"].asCString());
+    size_t data_size = req["data_size"].asInt();
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		if (req["null_param"].asInt())
+		{
+			returnValue = read_RFCProperty(strRfctype, strKey, NULL, data_size);
+		}
+		else if(req["type_null_param"].asInt())
+		{
+			returnValue = read_RFCProperty(NULL, strKey, output, data_size);
+		}
+		else if(req["key_null_param"].asInt())
+		{
+			returnValue = read_RFCProperty(strRfctype, NULL, output, data_size);
+		}
+		else
+		{
+			returnValue = read_RFCProperty(strRfctype, strKey, output, data_size);
+		}
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, " read_RFCProperty API return value: %d", returnValue );
+
+    if (returnValue != -1)
+    {
+        response["result"]= "SUCCESS";
+		response["details"] = output;
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+		response["details"] = "read_RFCProperty call failed";
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_read_RFCProperty  --->Exit\n");
+    return;
+}
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_write_RFCProperty
+ *Description    : This function writing rfc data
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_write_RFCProperty(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_write_RFCProperty --->Entry\n");
+    char strRfctype[50] = { 0 }, strKey[50] = { 0 }, strData[20] = { 0 };
+    int returnValue = 0;
+
+    strcpy(strRfctype,req["rfctype"].asCString());
+    strcpy(strKey,req["rfckey"].asCString());
+    strcpy(strData,req["rfcdata"].asCString());
+
+    int dataType = req["dataType"].asInt();
+    RFCVALDATATYPE edataType = static_cast<RFCVALDATATYPE>(dataType);
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		if (req["null_param"].asInt())
+		{
+			returnValue = write_RFCProperty(strRfctype, strKey, NULL, edataType);
+		}
+		else if(req["type_null_param"].asInt())
+		{
+			returnValue = write_RFCProperty(NULL, strKey, strData, edataType);
+		}
+		else if(req["key_null_param"].asInt())
+		{
+			returnValue = write_RFCProperty(strRfctype, NULL, strData, edataType);
+		}
+		else
+		{
+			returnValue = write_RFCProperty(strRfctype, strKey, strData, edataType);
+		}
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, " write_RFCProperty API return value: %d", returnValue );
+
+    if (returnValue != -1)
+    {
+        response["result"]= "SUCCESS";
+		response["details"] = returnValue;
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+		response["details"] = "write_RFCProperty call failed";
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_write_RFCProperty  --->Exit\n");
+    return;
+}
+
+
+/**********************************************************************************
+ *Function name  : rdkfwupdater_isMtlsEnabled
+ *Description    : This function checks whether the Mtls is enabled or not
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isMtlsEnabled(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isMtlsEnabled --->Entry\n");
+    int returnValue = 0;
+    char strDeviceName[20] = { 0 };
+
+    strcpy(strDeviceName,req["devicename"].asCString());
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+        returnValue = isMtlsEnabled(strDeviceName);
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "MTLS status : %d", returnValue );
+
+    if (returnValue == 0 || returnValue == 1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isMtlsEnabled  --->Exit\n");
+    return;
+}
+
+/**************************************************************************************
+ *Function name  : rdkfwupdater_isIncremetalCDLEnable
+ *Description    : This function checks whether the IncremetalCDL is enabled or not
+ **********************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isIncremetalCDLEnable(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isIncremetalCDLEnable --->Entry\n");
+    int returnValue = 0;
+    char strFileName[20] = { 0 };
+
+    strcpy(strFileName,req["filename"].asCString());
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		if (req["null_param"].asInt())
+		{
+			returnValue = isIncremetalCDLEnable(NULL);
+		}
+		else
+		{
+			returnValue = isIncremetalCDLEnable(strFileName);
+		}
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "IncremetalCDLEnable status : %d, Filename: %s", returnValue, strFileName );
+
+    if (returnValue == 0 || returnValue == 1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isIncremetalCDLEnable  --->Exit\n");
+    return;
+}
+
+/*************************************************************************************
+ *Function name  : rdkfwupdater_isMmgbleNotifyEnabled
+ *Description    : This function checks whether the ManageNotify is enabled or not
+ *************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isMmgbleNotifyEnabled(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isMmgbleNotifyEnabled --->Entry\n");
+    int returnValue = 0;
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+        returnValue = isMmgbleNotifyEnabled();
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "ManageNotify Enabled status : %d", returnValue );
+
+    if (returnValue == 0 || returnValue == 1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isMmgbleNotifyEnabled  --->Exit\n");
+    return;
+}
+
+/*************************************************************************************
+ *Function name  : rdkfwupdater_isThrottleEnabled
+ *Description    : This function checks whether the Throttle is enabled or not
+ *************************************************************************************/
+void RDK_fwupgradeAgent::rdkfwupdater_isThrottleEnabled(IN const Json::Value& req, OUT Json::Value& response)
+{
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isThrottleEnabled  --->Entry\n");
+    int returnValue = 0;
+    char strDeviceName[20] = { 0 }, strRebootflag[20] = { 0 };
+
+    strcpy(strDeviceName,req["devicename"].asCString());
+    strcpy(strRebootflag,req["rebootflag"].asCString());
+    int appMode = req["appmode"].asInt();
+
+    signal(SIGSEGV,signalHandler);
+    if (setjmp(jumpBuffer) == 0)
+    {
+		if (req["devname_null_param"].asInt())
+		{
+			returnValue = isThrottleEnabled(NULL, strRebootflag, appMode);
+		}
+		else if(req["reboot_null_param"].asInt())
+		{
+			returnValue = isThrottleEnabled(strDeviceName, NULL, appMode);
+		}
+		else
+		{
+			returnValue = isThrottleEnabled(strDeviceName, strRebootflag, appMode);
+		}
+    }
+    else
+    {
+        DEBUG_PRINT(DEBUG_LOG, "Observed crash during test execution\n");
+        response["result"]= "FAILURE";
+        response["details"] = "Observed crash during test execution";
+        return;
+    }
+
+    DEBUG_PRINT(DEBUG_TRACE, "Throttle Enabled status : %d", returnValue );
+
+    if (returnValue == 1 || returnValue == -1)
+    {
+        response["result"]= "SUCCESS";
+    }
+    else
+    {
+        response["result"]= "FAILURE";
+    }
+
+    response["details"] = returnValue;
+    DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_isThrottleEnabled  --->Exit\n");
+    return;
+}
+
+
 /**************************************************************************
 Function Name   : cleanup
 Arguments       : NULL
