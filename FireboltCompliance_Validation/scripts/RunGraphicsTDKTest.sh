@@ -180,7 +180,7 @@ if [ "$TEST" == "Essos" ]; then
     else
        unset WAYLAND_DISPLAY
     fi
-    ./Essos_TDKTestApp -d -t=$TIMEOUT
+    Essos_TDKTestApp -d -t=$TIMEOUT
 elif [ "$TEST" == "Westeros" ];
 then
     sleep 3
