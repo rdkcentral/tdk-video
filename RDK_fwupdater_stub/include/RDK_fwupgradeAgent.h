@@ -36,7 +36,10 @@
 //Component specific header files
 extern "C" {
    #include "deviceutils.h"
+   // Avoid conflicting strcasestr declaration from device_api.h
+#define strcasestr __ignore_conflict_strcasestr__
    #include "device_api.h"
+#undef strcasestr
    #include "device_status_helper.h"
    #include "rfcinterface.h"
    Rfc_t rfc_list = { 0 };
