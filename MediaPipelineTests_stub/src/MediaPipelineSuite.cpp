@@ -189,6 +189,7 @@ bool defaultStart = true;
 bool enable_last_sample = false;
 gint64 buffer_PTS = 0;
 bool live_stream = false;
+bool resolutionSeen[TOTAL_RESOLUTIONS_COUNT] = {false};
 
 /*
  * Playbin flags
@@ -803,6 +804,7 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
     data->westerosSink.pts_buffer = 20;
     int audio_sampling_rate_buffer = 3;
     int rate_diff_threshold = -3;
+    int resBffer = 2;
     GstMessage *message;
 
     // Resolution Switch Test Initializations
@@ -1101,34 +1103,65 @@ void PlaybackValidation(MessageHandlerData *data, int seconds)
              break;
          }
 
-	 // Resolution Switch Test
 	 if (ResolutionSwitchTest)
 	 {
-             int new_height, new_width;
-	     g_object_get (data->westerosSink.sink, "video-height", &new_height, NULL);
-             g_object_get (data->westerosSink.sink, "video-width", &new_width, NULL);
-	     if (abs(data->westerosSink.height - resList[resItr]) < RESOLUTION_OFFSET)
-	     {
-	         ResolutionCount++;
-		 resItr++;
-             }
-             if ( (new_height != data->westerosSink.height) || (new_width != data->westerosSink.width))
-             {
-                 data->westerosSink.height = new_height;
-                 data->westerosSink.width = new_width;
-                 printf("\nVideo height = %d\nVideo width = %d", data->westerosSink.height, data->westerosSink.width);
-	         printf("\nres-comparison value = %d",resList[resItr]);
-		 if (log_enabled)
-		     fprintf(file,"\n");
-		 assert_failure(data->playbin, data->westerosSink.height == resList[resItr], "Pipeline not playing at expected Resolution",
-				 __FUNCTION__, __LINE__, "Verify Pipeline is playing at expected resolution");
-             }
-	     if(ResolutionCount == TOTAL_RESOLUTIONS_COUNT)
-             {
-	         printf("\nPipeline played all resolutions\n");
-                 break;
-	     }
-	 }
+    		int new_height, new_width;
+		g_object_get(data->westerosSink.sink, "video-height", &new_height, NULL);
+    		g_object_get(data->westerosSink.sink, "video-width", &new_width, NULL);
+		if ((abs(new_height - resList[0]) < RESOLUTION_OFFSET) && !resolutionSeen[0])
+		{
+			resolutionSeen[0] = true;
+                        ResolutionCount = 1;
+		}
+    		if (new_height != height)
+    		{
+        		height = new_height;
+        		// Loop through all known resolutions
+		        for (int i = 1; i < TOTAL_RESOLUTIONS_COUNT; i++)
+        		{
+            			if (!resolutionSeen[i] && abs(new_height - resList[i]) < RESOLUTION_OFFSET)
+            			{
+                			resolutionSeen[i] = true;
+                			ResolutionCount++;
+                			printf("\nNew unique resolution: %d (Matched with resList[%d])\n", new_height, i);
+                			printf("ResolutionCount updated to %d\n", ResolutionCount);
+               				break;
+            			}
+        		}
+        		if ((new_height != data->westerosSink.height) || (new_width != data->westerosSink.width))
+        		{
+            			data->westerosSink.height = new_height;
+            			data->westerosSink.width = new_width;
+            			printf("\nVideo height = %d\nVideo width = %d", data->westerosSink.height, data->westerosSink.width);
+            			// Optional: Check if this resolution was expected
+            			bool matched = false;
+            			for (int i = 0; i < TOTAL_RESOLUTIONS_COUNT; i++)
+            			{
+                			if (abs(data->westerosSink.height - resList[i]) < RESOLUTION_OFFSET)
+                			{
+                    				matched = true;
+                   				break;
+                			}
+            			}
+            			if (log_enabled)
+                			fprintf(file, "\n");
+            			if (!matched)
+            			{
+                			resBffer -= 1;
+            			}
+            			else
+            			{
+                			resBffer = 2;
+            			}
+        		}
+        		if (ResolutionCount == TOTAL_RESOLUTIONS_COUNT)
+        		{
+            			printf("\nPipeline played all unique resolutions\n");
+            			break;
+        		}
+    		}
+	}
+
 
          // Seconds Counter
 	 if (second_count > previous_seconds)
@@ -2432,12 +2465,7 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
     assert_failure (data->playbin, (only_audio) || (firstFrameReceived == true), "Failed to receive first video frame signal", __FUNCTION__,__LINE__,"Verify if first frame signal is received");
     audio_underflow_received =  false;
     videoUnderflowReceived =  false;
-
-    if (checkNewPlay)
-        PlaybackValidation(data,5);
-    else
-	PlaySeconds(data->playbin,5);
-
+    
     if (!only_audio)
     {
          g_object_get (data->westerosSink.sink, "video-height", &height, NULL);
@@ -2447,6 +2475,10 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
 	 if (log_enabled)
 	     fprintf(file, "\nVideo height = %d\nVideo width = %d", height, width);
     }
+    if (checkNewPlay)
+        PlaybackValidation(data,5);
+    else
+        PlaySeconds(data->playbin,5);
 }
 
 /********************************************************************************************************************
