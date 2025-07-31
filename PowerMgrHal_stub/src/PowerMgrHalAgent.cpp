@@ -354,7 +354,7 @@ void PowerMgrHalAgent::PowerMgrHal_GetTemperature(IN const Json::Value& req, OUT
     char details[100];
     string temp_state;
 
-    PWRMgr_ThermalState_t state;
+    mfrTemperatureState_t state;
     float current_Temp = 0;
     float current_WifiTemp = 0;
     int ret = PLAT_API_GetTemperature(&state, &current_Temp, &current_WifiTemp);
