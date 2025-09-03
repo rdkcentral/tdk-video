@@ -80,10 +80,6 @@ bool iarmMgrStatus(char *ownerName )
         {
 		strcpy(appName,DAEMON_EXE);	
 	}
-	else if (strcmp(ownerName, IARM_BUS_IRMGR_NAME)  == 0)
-        {
-		strcpy(appName,IRMGR_EXE);
-	}
 	else if (strcmp(ownerName, IARM_BUS_PWRMGR_NAME)  == 0)
         {
 		strcpy(appName,PWRMGR_EXE);
@@ -508,14 +504,7 @@ void IARMBUSAgent::get_LastReceivedEventDetails(IN const Json::Value& req, OUT J
 
 	DEBUG_PRINT(DEBUG_TRACE,"Event Mgr: %s Event Name: %s\n", g_ManagerName, LastEvent);
 
-	if(strcmp(LastEvent,"IARM_BUS_IRMGR_EVENT_IRKEY")==0)
-	{
-		gEventdata << "Event Details: " << "KeyCode: " << std::hex << LastKeyCode << ", KeyType: " << std::hex << LastKeyType;
-		response["details"]=gEventdata.str().c_str();
-		gEventdata.str("");
-		response["result"]="SUCCESS";
-	}
-	else if((strcmp(LastEvent,"IARM_BUS_PWRMGR_EVENT_MODECHANGED")==0))
+	if((strcmp(LastEvent,"IARM_BUS_PWRMGR_EVENT_MODECHANGED")==0))
 	{
                 response["details"]="Event Details: Power mode change event";
 		response["result"]="SUCCESS";
@@ -585,10 +574,7 @@ void fill_LastReceivedKey(const char *EvtHandlerName, char *gLastEvent ,double k
 		DEBUG_PRINT(DEBUG_LOG, "Registered for more than one event: %d \n ", gRegisteredEventCount);
 		char TempEventSummary[200] ;
 
-		if(strcmp(LastEvent , "IARM_BUS_IRMGR_EVENT_IRKEY") == 0)
-			sprintf(TempEventSummary, "%s, %s, %x, %x, %lf::", EvtHandlerName, LastEvent, LastKeyType, LastKeyCode, LastKeyTime);
-		else
-			sprintf(TempEventSummary, "%s, %s, %lf::", EvtHandlerName, LastEvent, LastKeyTime);
+		sprintf(TempEventSummary, "%s, %s, %lf::", EvtHandlerName, LastEvent, LastKeyTime);
 
 		strcat( gEventSummary, TempEventSummary);
 		gEventSummaryCount++;
@@ -650,80 +636,6 @@ void _PWRMGRevtHandler(const char *owner, IARM_EventId_t eventId, void *data, si
 		}
 	}
 	
-	DEBUG_PRINT(DEBUG_LOG,"Exiting %s function", __func__);
-}
-
-/***************************************************************************
-
- * Function Name : _IRevtHandler
- * Description 	: This function is the event handler call back function for handling the 
- different type of IR events.
- * @param[in]-owner - owner(manager) for that event.
- *	    - eventId - id of the event whose call back is called
- *	    - data - event data
- *	    - len - size of data.
- ***************************************************************************** */
-
-
-void _IRevtHandler(const char *owner, IARM_EventId_t eventId, void *data, size_t len)
-{
-	DEBUG_PRINT(DEBUG_ERROR,"Entered _IRevtHandler\n");
-
-	struct timespec clock_at_recv_event;
-
-	if(clock_gettime( CLOCK_MONOTONIC, &clock_at_recv_event) == -1)
-	{
-		DEBUG_PRINT(DEBUG_ERROR,"Failed to get current time\n");
-	} else {
-		DEBUG_PRINT(DEBUG_LOG,"Got event received time\n");
-	}
-
-	DEBUG_PRINT(DEBUG_LOG,"owner : %s, eventId : %d ", owner, eventId);
-
-	if (strcmp(owner, IARM_BUS_IRMGR_NAME)  == 0) 
-	{
-		switch (eventId) 
-		{
-			case IARM_BUS_IRMGR_EVENT_IRKEY:
-				{
-					IRMgr_EventData_tp *irEventData = (IRMgr_EventData_tp*)data;
-					int keyCode = irEventData->data.irkey.keyCode;
-					int keyType = irEventData->data.irkey.keyType;
-					
-					double keyTime = 0.0;
-
-					/*Convert Received and Expected data to Hexa format for comparision*/
-					char TempRecvKeyCode[10], TempRecvKeyType[10], TempExpectedKeyCode[10],TempExpectedKeyType[10];
-					sprintf(TempRecvKeyCode, "%x",irEventData->data.irkey.keyCode);
-					sprintf(TempRecvKeyType, "%x",irEventData->data.irkey.keyType);
-					sprintf(TempExpectedKeyCode, "%x", ExpectedKeyCode);
-					sprintf(TempExpectedKeyType, "%x", ExpectedKeyType);
-					DEBUG_PRINT(DEBUG_LOG,"Received : %s, %s \n\n", TempRecvKeyCode, TempRecvKeyType);
-					DEBUG_PRINT(DEBUG_LOG,"Expected Data: %s, %s \n\n", TempExpectedKeyCode, TempExpectedKeyType);
-					
-					/* Verify the reeived event */
-					if ( (strcmp(TempRecvKeyCode, TempExpectedKeyCode) == 0) && (strcmp(TempRecvKeyType,TempExpectedKeyType) == 0))
-					{
-						keyTime = ((double)(clock_at_recv_event.tv_sec - irEventData->data.irkey.clock_when_event_sent.tv_sec) + (double)(clock_at_recv_event.tv_nsec - irEventData->data.irkey.clock_when_event_sent.tv_nsec)) / (double)BILLION;
-						DEBUG_PRINT(DEBUG_LOG, "Time taken for sending of IR key 0x%x type 0x%x was %lf seconds\r\n",keyCode, keyType, keyTime);
-
-						DEBUG_PRINT(DEBUG_LOG,"Test Bus Client Get IR Key (%x, %x) From IR Manager\r\n", keyCode, keyType);
-						strcpy(LastEvent , "IARM_BUS_IRMGR_EVENT_IRKEY");
-						fill_LastReceivedKey(__func__, LastEvent,keyTime,keyCode,keyType);
-					} else {
-						DEBUG_PRINT(DEBUG_LOG,"Recevived Unexpected IR Key (%x, %x) From IR Manager\r\n", keyCode, keyType);
-					}
-				}
-				break;
-			default:
-				{
-					DEBUG_PRINT(DEBUG_ERROR,"Unindentified event\n");
-				}
-				break;
-		}
-
-	}
-
 	DEBUG_PRINT(DEBUG_LOG,"Exiting %s function", __func__);
 }
 
@@ -906,40 +818,6 @@ void _evtHandler(const char *owner, IARM_EventId_t eventId, void *data, size_t l
 
 					strcpy(LastEvent , "IARM_BUS_PWRMGR_EVENT_MODECHANGED");
 					fill_LastReceivedKey(__func__,LastEvent, keyTime);
-				}
-				break;
-			default:
-				{
-					DEBUG_PRINT(DEBUG_ERROR,"Unindentified event\n");
-				}
-				break;
-		}
-	}
-	else if (strcmp(owner, IARM_BUS_IRMGR_NAME)  == 0) 
-	{
-		switch (eventId) 
-		{
-			case IARM_BUS_IRMGR_EVENT_IRKEY:
-				{
-					IRMgr_EventData_tp *irEventData = (IRMgr_EventData_tp*)data;
-					int keyCode = irEventData->data.irkey.keyCode;
-					int keyType = irEventData->data.irkey.keyType;
-					
-					double keyTime = 0.0;
-
-					DEBUG_PRINT(DEBUG_LOG,"irEventData: %p", data);
-
-					if ( ExpectedKeyCode == irEventData->data.irkey.keyCode && ExpectedKeyType == irEventData->data.irkey.keyType)
-					{
-
-						keyTime = ((double)(clock_at_recv_event.tv_sec - irEventData->data.irkey.clock_when_event_sent.tv_sec) + (double)(clock_at_recv_event.tv_nsec - irEventData->data.irkey.clock_when_event_sent.tv_nsec)) / (double)BILLION;
-						DEBUG_PRINT(DEBUG_LOG, "Time taken for sending of IR key 0x%x type 0x%x was %lf seconds\r\n",keyCode, keyType, keyTime);
-						DEBUG_PRINT(DEBUG_LOG,"Test Bus Client Get IR Key (%x, %x) From IR Manager\r\n", keyCode, keyType);
-						strcpy(LastEvent , "IARM_BUS_IRMGR_EVENT_IRKEY");
-						fill_LastReceivedKey(__func__,LastEvent,keyTime,keyCode,keyType);
-					} else {
-						DEBUG_PRINT(DEBUG_LOG,"Recevived Unexpected IR Key (%x, %x) From IR Manager\r\n", keyCode, keyType);
-					}
 				}
 				break;
 			default:
@@ -1307,16 +1185,7 @@ void IARMBUSAgent::IARMBUSAgent_BroadcastEvent(IN const Json::Value& req, OUT Js
 
 	DEBUG_PRINT(DEBUG_ERROR,"Broadcast event id: %d from %s\n", eventId, ownerName);
 
-	if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-	{	
-		IARM_Bus_IRMgr_EventData_t eventData;
-		eventData.data.irkey.keyType = req["keyType"].asInt();
-		eventData.data.irkey.keyCode = req["keyCode"].asInt();
-		DEBUG_PRINT(DEBUG_LOG,"calling IARM_Bus_BroadcastEvent from IARMBUSAgent_BroadcastEvent \n");
-		/*Calling IARMBUS API IARM_Bus_BroadcastEvent  */
-		retval=IARM_Bus_BroadcastEvent(ownerName,(IARM_EventId_t)eventId,(void*)&eventData,sizeof(eventData));
-	}
-	else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+        if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
 	{
 		IARM_Bus_PWRMgr_EventData_t eventData;
 		eventData.data.state.newState = (IARM_Bus_PWRMgr_PowerState_t)req["newState"].asInt();
@@ -1395,44 +1264,7 @@ void IARMBUSAgent::IARMBUSAgent_BusCall(IN const Json::Value& req, OUT Json::Val
 
 	DEBUG_PRINT(DEBUG_ERROR,"BusCall method: %s owner: %s\n", methodName, ownerName);
 
-	if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-	{	
-		char *RepeatInterval=(char*)malloc(sizeof(char)*5);
-		IARM_Bus_IRMgr_SetRepeatInterval_Param_t param_Set;
-		param_Set.timeout=(unsigned int)req["set_timeout"].asInt();
-		IARM_Bus_IRMgr_GetRepeatInterval_Param_t param_Get;
-		DEBUG_PRINT(DEBUG_LOG,"IR-calling IARM_Bus_Call from IARM_Bus_Call \n");
-		/*Calling IARMBUS API IARM_Bus_Call  */
-		if(strcmp(methodName,"GetRepeatInterval")==0)
-		{		
-			retval=IARM_Bus_Call(ownerName,methodName,(void*)&param_Get,sizeof(param_Get));
-			if(retval==0)
-			{
-				sprintf(RepeatInterval,"%d",param_Get.timeout);
-				response["details"]= RepeatInterval;
-				DEBUG_PRINT(DEBUG_LOG,"IR-Current RepeatInterval is :%s\n",RepeatInterval);
-			}
-		}
-		else
-		{	
-			retval=IARM_Bus_Call(ownerName,methodName,(void*)&param_Set,sizeof(param_Set));
-			if(retval==0)
-			{
-				sprintf(RepeatInterval,"%d",param_Set.timeout);
-				response["details"]= RepeatInterval;
-				DEBUG_PRINT(DEBUG_LOG,"SetRepeatInterval:%s\n",response["details"].asCString()) ;
-			}	
-		}
-		/*Checking the return value of API*/
-		/*Filling json response with SUCCESS status*/	
-		response["result"]=getResult(retval,resultDetails);
-		if(retval!=0)
-		{
-			response["details"]=resultDetails;
-		}
-                free(RepeatInterval);
-	}
-	else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+        if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
 	{
 		IARM_Bus_PWRMgr_GetPowerState_Param_t param_Get;
 		IARM_Bus_PWRMgr_SetPowerState_Param_t param_Set;
@@ -1877,10 +1709,7 @@ void fill_LastReceivedKey_Perf(const char *EvtHandlerName, char *gLastEvent ,dou
 		DEBUG_PRINT(DEBUG_LOG, "Registered for more than one event : %d \n ", gRegisteredEventCount);
 		char TempEventSummary[200] ;
 
-		if(strcmp(LastEvent , "IARM_BUS_IRMGR_EVENT_IRKEY") == 0)
-			sprintf(TempEventSummary, "%s, %s, %x, %x, %lf::", EvtHandlerName, LastEvent, LastKeyType_Perf, LastKeyCode_Perf, LastKeyTime);
-		else
-			sprintf(TempEventSummary, "%s, %s, %lf::", EvtHandlerName, LastEvent, LastKeyTime);
+                sprintf(TempEventSummary, "%s, %s, %lf::", EvtHandlerName, LastEvent, LastKeyTime);
 
 		strcat( gEventSummary, TempEventSummary);
 		gEventSummaryCount++;
@@ -1944,41 +1773,6 @@ void _evtHandler_Perf(const char *owner, IARM_EventId_t eventId, void *data, siz
 				}
 				break;
 		}
-	}
-	else if (strcmp(owner, IARM_BUS_IRMGR_NAME)  == 0) 
-	{
-		switch (eventId) 
-		{
-			case IARM_BUS_IRMGR_EVENT_IRKEY:
-				{
-					IRMgr_EventData_tp *irEventData = (IRMgr_EventData_tp*)data;
-					int keyCode = irEventData->data.irkey.keyCode;
-					int keyType = irEventData->data.irkey.keyType;
-					double keyTime = 0.0;
-
-					DEBUG_PRINT(DEBUG_LOG,"irEventData : %p", data);
-
-					if ( ExpectedKeyCode == irEventData->data.irkey.keyCode && ExpectedKeyType == irEventData->data.irkey.keyType)
-					{
-
-						keyTime = ((double)(clock_at_recv_event.tv_sec - irEventData->data.irkey.clock_when_event_sent.tv_sec) + (double)(clock_at_recv_event.tv_nsec - irEventData->data.irkey.clock_when_event_sent.tv_nsec)) / (double)BILLION;
-						DEBUG_PRINT(DEBUG_LOG, "Time taken for sending of IR key 0x%x type 0x%x was %lf seconds\r\n",keyCode, keyType, keyTime);
-						DEBUG_PRINT(DEBUG_LOG,"Test Bus Client Get IR Key (%x, %x) From IR Manager\r\n", keyCode, keyType);
-						strcpy(LastEvent , "IARM_BUS_IRMGR_EVENT_IRKEY");
-						fill_LastReceivedKey_Perf(__func__,LastEvent,keyTime,keyCode,keyType);
-					} else {
-						DEBUG_PRINT(DEBUG_LOG,"Recevived Unexpected IR Key (%x, %x) From IR Manager\r\n", keyCode, keyType);
-					}
-					
-				}
-				break;
-			default:
-				{
-					DEBUG_PRINT(DEBUG_ERROR,"Unindentified event\n");
-				}
-				break;
-		}
-
 	}
 	else if (strcmp(owner, IARM_BUS_DAEMON_NAME) == 0) {
 		switch (eventId) {
@@ -2065,12 +1859,7 @@ void _evtHandlerRept1(const char *owner, IARM_EventId_t eventId, void *data, siz
 	DEBUG_PRINT(DEBUG_LOG,"owner : %s, eventId : %d \n", owner, eventId);
 
 	/* Register Corresponding Event Hander for the Event*/
-	if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-	{	
-		DEBUG_PRINT(DEBUG_LOG,"Registered for for IR Key Events ... \n");
-		_IRevtHandler(owner, eventId, data, len);
-	}
-	else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+	if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
 	{
 		DEBUG_PRINT(DEBUG_LOG,"Registered for PWRMGR Events ... \n");
 		/*Calling IARMBUS API IARM_Bus_RegisterEventHandler */
@@ -2107,12 +1896,7 @@ void _evtHandlerRept2(const char *owner, IARM_EventId_t eventId, void *data, siz
 	DEBUG_PRINT(DEBUG_LOG,"owner : %s, eventId : %d ", owner, eventId);
 
 	/* Register Corresponding Event Hander for the Event*/
-	if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-	{	
-		DEBUG_PRINT(DEBUG_LOG,"Registered for for IR Key Events ... \n");
-		_IRevtHandler(owner, eventId, data, len);
-	}
-	else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+	if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
 	{
 		DEBUG_PRINT(DEBUG_LOG,"Registered for PWRMGR Events ... \n");
 		/*Calling IARMBUS API IARM_Bus_RegisterEventHandler */
@@ -2149,12 +1933,7 @@ void _evtHandlerRept3(const char *owner, IARM_EventId_t eventId, void *data, siz
 	DEBUG_PRINT(DEBUG_LOG,"owner : %s, eventId : %d ", owner, eventId);
 
 	/* Register Corresponding Event Hander for the Event*/
-	if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-	{	
-		DEBUG_PRINT(DEBUG_LOG,"Registered for for IR Key Events ... \n");
-		_IRevtHandler(owner, eventId, data, len);
-	}
-	else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+	if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
 	{
 		DEBUG_PRINT(DEBUG_LOG,"Registered for PWRMGR Events ... \n");
 		/*Calling IARMBUS API IARM_Bus_RegisterEventHandler */
@@ -2300,48 +2079,7 @@ void IARMBUSAgent::InvokeEventTransmitterApp(IN const Json::Value& req, OUT Json
 
 	if(idChild == 0)
 	{
-		if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-		{	
-			DEBUG_PRINT(DEBUG_LOG,"Condition matched... Owner name as IRMgr\n");
-			//std::cout<<"\n KeyCode :"<< req.get("keyCode","").asString() <<" KeyType: \n"<<req.get("keyType","").asString();
-			//DEBUG_PRINT(DEBUG_LOG,"\n KeyCode : %s, KeyType: %s \n",req.get("keyCode","").asString() ,req.get("keyType","").asString());
-			//std::string kC=req.get("keyCode","").asString();
-			//std::string kT=req.get("keyType","").asString();
-			//std::cout<<kC<<kT;
-			
-			//int keyType = (unsigned int) atoi(kT.c_str());
-			int keyType = (unsigned int) req["keyType"].asInt();
-			//printf("**************************************");
-			//int keyCode = (unsigned int) atoi(kC.c_str());
-			int keyCode = (unsigned int)req["keyCode"].asInt();
-			//printf("**************************************");
-			//std::cout<<"\n KeyCode : "<< keyCode <<" KeyType: \n"<<keyType;
-			ExpectedKeyCode = keyCode;
-			ExpectedKeyType = keyType;
-			DEBUG_PRINT(DEBUG_LOG,"ExpectedKeyCode : %d, ExpectedKeyType: %d \n", keyCode, keyType);
-         		std::string skeyCode;          // string which will contain the result
-         		std::string skeyType;          // string which will contain the result
-         		std::string seventId;          // string which will contain the result
- 
-         		std::ostringstream convert;   // stream used for the conversion
-         		std::ostringstream convert2;   // stream used for the conversion
-         		std::ostringstream convert3;   // stream used for the conversion
- 
-         		convert << keyCode;      // insert the textual representation of 'Number' in the characters in the stream
-         		convert2 << keyType;      // insert the textual representation of 'Number' in the characters in the stream
-         		convert3 << eventId;      // insert the textual representation of 'Number' in the characters in the stream
- 
-         		skeyCode = convert.str(); // set 'Result' to the contents of the stream
-         		skeyType = convert2.str(); // set 'Result' to the contents of the stream
-         		seventId = convert3.str(); // set 'Result' to the contents of the stream
- 
-			DEBUG_PRINT(DEBUG_LOG,"ExpectedKeyCode : %d, ExpectedKeyType: %d \n", keyCode, keyType);
-			DEBUG_PRINT(DEBUG_LOG,"appName : %s, ownerName : %s,  eventId : %s, keyType: %s, keyCode: %s \n", appname,ownerName,seventId.c_str(),skeyType.c_str(),skeyCode.c_str());
- 			DEBUG_PRINT(DEBUG_LOG,"KeyCode : %d, KeyType: %d \n", keyCode, keyType);
- 			// Parameters to execl must be strings
- 			execl(path.c_str(), appname, "-o", ownerName, "-i", seventId.c_str(),"-t", skeyType.c_str(), "-c", skeyCode.c_str(), (char *)NULL);
-		}
-		else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+		if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
 		{
 			int newState = (unsigned int) req["newState"].asInt();
         		std::string snewState;          // string which will contain the result
@@ -2412,26 +2150,7 @@ void IARMBUSAgent::GetLastReceivedEventPerformanceDetails(IN const Json::Value& 
 
         DEBUG_PRINT(DEBUG_LOG,"**lasttime %lf lastev %s\n",LastKeyTime,LastEvent);
         
-	if(strcmp(LastEvent,"IARM_BUS_IRMGR_EVENT_IRKEY")==0)
-	{
-		DEBUG_PRINT(DEBUG_LOG,"lastcode %d lasttype %d lasttime %lf lastev %s\n",LastKeyCode,LastKeyType,LastKeyTime,LastEvent);
-		strcat(details,LastEvent);
-		sprintf(KeyCodedetails1,"%d" , LastKeyCode);
-                sprintf(KeyTypedetails1,"%d" , LastKeyType);
-                sprintf(KeyTimedetails1,"%lf" , LastKeyTime);
-
-		strcat(details,KeyCodedetails);
-                strcat(details,KeyCodedetails1);
-                strcat(details,KeyTypedetails);
-		strcat(details,KeyTypedetails1);
-		strcat(details,KeyTimedetails);
-		strcat(details,KeyTimedetails1);
-		strcpy(KeyCodedetails1,details);
-		response["details"]=KeyCodedetails1;
-		response["result"]="SUCCESS";
-	
-	}
-	else if((strcmp(LastEvent,"IARM_BUS_PWRMGR_EVENT_MODECHANGED")==0)||
+	if((strcmp(LastEvent,"IARM_BUS_PWRMGR_EVENT_MODECHANGED")==0)||
 			(strcmp(LastEvent,"IARM_BUS_EVENT_RESOURCEAVAILABLE")==0)|| 
 			(strcmp(LastEvent,"IARM_BUS_EVENT_RESOLUTIONCHANGE")==0))
 	{

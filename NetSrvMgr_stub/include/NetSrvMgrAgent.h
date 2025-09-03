@@ -29,7 +29,6 @@
 
 #include "wifiSrvMgrIarmIf.h"
 #include "libIBus.h"
-#include "irMgr.h"
 #include "libIBusDaemon.h"
 #include "netsrvmgrIarm.h"
 #include <jsonrpccpp/server/connectors/tcpsocketserver.h>

@@ -30,7 +30,6 @@
 #include "libIBusDaemon.h"
 #include "libIARM.h"
 #include "libIBus.h"
-#include "irMgr.h"
 #include "pwrMgr.h"
 #include "sysMgr.h"
 #include "mfrMgr.h"
@@ -53,7 +52,6 @@
 #define PRE_REQ_CHECK "pre_requisite_chk.txt"
 #define DAEMON_EXE "IARMDaemonMain"
 #define PWRMGR_EXE "pwrMgrMain"
-#define IRMGR_EXE "irMgrMain"
 #define MFRMGR_EXE "mfrMgrMain"
 #define SYSMGR_EXE "sysMgrMain"
 

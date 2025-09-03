@@ -18,7 +18,6 @@
 */
 #include "libIBus.h"
 #include "rdktestagentintf.h"
-#include "irMgr.h"
 #include "pwrMgr.h"
 #include "dummytestmgr.h"
 #include "keyeventdata.h"
@@ -109,25 +108,7 @@ int main(int argc,char **argv)
         DEBUG_PRINT(DEBUG_TRACE,"[gen_single_event pid=%d] IARM_Bus_Connect status = %d\n",getpid(),retCode);
         if (IARM_RESULT_SUCCESS == retCode)
         {
-            if(strcmp(ownerName,IARM_BUS_IRMGR_NAME)==0)
-            {
-                /*Event Data for BUS,IR,PWR events*/
-                IRMgr_EventData_tp eventData_ir;
-
-                /*Broadcasting IR IRKey event*/
-                eventData_ir.data.irkey.keyType = type;
-                eventData_ir.data.irkey.keyCode = code;
-
-                DEBUG_PRINT(DEBUG_TRACE,"[gen_single_event pid=%d] Broadcasting IR event %d %d\n",getpid(),type,code);
-
-                if( clock_gettime( CLOCK_MONOTONIC, &eventData_ir.data.irkey.clock_when_event_sent) == -1)
-                {
-                        DEBUG_PRINT(DEBUG_ERROR, "[gen_single_event pid=%d] clock gettime error",getpid());
-                }
-
-                retCode = IARM_Bus_BroadcastEvent(IARM_BUS_IRMGR_NAME, IARM_BUS_IRMGR_EVENT_IRKEY, (void*)&eventData_ir, sizeof(eventData_ir));
-            }
-            else if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
+            if(strcmp(ownerName,IARM_BUS_PWRMGR_NAME)==0)
             {
                 _IARM_Bus_PWRMgr_EventData_tp eventData_pwr;
                 /*Broadcasting PWR event*/

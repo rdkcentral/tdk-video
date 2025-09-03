@@ -1016,7 +1016,7 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_BroadcastEvent (IN const Json::Value
             	    break;
         	}
 	    }
-	    else*/
+	    else
             if (0 == strcmp(owner, IARM_BUS_IRMGR_NAME)) {
 		switch (eventId) {
                     case IARM_BUS_IRMGR_EVENT_IRKEY: {
@@ -1034,7 +1034,6 @@ void NetSrvMgrAgent::NetSrvMgrAgent_WifiMgr_BroadcastEvent (IN const Json::Value
                     break;
                 }
 	    }
-	    /*
 	    else if (0 == strcmp(owner, IARM_BUS_NM_SRV_MGR_NAME)) {
 		switch (eventId) {
                     case IARM_BUS_NETWORK_MANAGER_EVENT_SWITCH_TO_PRIVATE: {

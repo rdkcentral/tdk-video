@@ -24,7 +24,6 @@
 #include "libIBus.h"
 #include "libIBusDaemon.h"
 #include "pwrMgr.h"
-#include "irMgr.h"
 #include "sysMgr.h"
 #include <time.h>
 #include <sys/time.h>
@@ -86,19 +85,6 @@ int main(int argc, char *argv[] )
                         rcEventData.height=2;
                         retCode = IARM_Bus_BroadcastEvent(IARM_BUS_DAEMON_NAME, IARM_BUS_EVENT_RESOLUTIONCHANGE, (void*) &rcEventData, sizeof(rcEventData));
                         DEBUG_PRINT("Broadcasting Daemon ResolutionChange Event (id: %d) status=%d\n", IARM_BUS_EVENT_RESOLUTIONCHANGE, retCode);
-
-                        /*Broadcasting IRKey event*/
-                        IARM_Bus_IRMgr_EventData_t eventData_ir0;
-                        eventData_ir0.data.irkey.keyType = 0x00008000;
-                        eventData_ir0.data.irkey.keyCode = 0x00000033;
-                        retCode = IARM_Bus_BroadcastEvent(IARM_BUS_IRMGR_NAME, IARM_BUS_IRMGR_EVENT_IRKEY, (void*)&eventData_ir0, sizeof(eventData_ir0));
-                        DEBUG_PRINT("Broadcasting Digit3 Key Press IR Event (id: %d) status=%d\n", IARM_BUS_IRMGR_EVENT_IRKEY,retCode);
-
-                        IARM_Bus_IRMgr_EventData_t eventData_ir1;
-                        eventData_ir1.data.irkey.keyType = 0x00008100;
-                        eventData_ir1.data.irkey.keyCode = 0x00000033;
-                        retCode = IARM_Bus_BroadcastEvent(IARM_BUS_IRMGR_NAME, IARM_BUS_IRMGR_EVENT_IRKEY, (void*)&eventData_ir1, sizeof(eventData_ir1));
-                        DEBUG_PRINT("Broadcasting Digit3 Key Release IR Event (id: %d) status=%d\n", IARM_BUS_IRMGR_EVENT_IRKEY,retCode);
 
                         /*Broadcasting PWR event*/
                         IARM_Bus_PWRMgr_EventData_t eventData_pwr;

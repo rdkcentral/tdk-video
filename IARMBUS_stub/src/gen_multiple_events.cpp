@@ -17,7 +17,6 @@
  * limitations under the License.
 */
 #include "libIBus.h"
-#include "irMgr.h"
 #include "pwrMgr.h"
 #include "rdktestagentintf.h"
 #include "IARMBUSAgent.h"
@@ -116,18 +115,6 @@ int main(int argc,char **argv)
                DEBUG_PRINT(DEBUG_ERROR, "[gen_multiple_events pid=%d] clock gettime error",getpid());
             }
             retCode = IARM_Bus_BroadcastEvent(IARM_BUS_PWRMGR_NAME,IARM_BUS_PWRMGR_EVENT_MODECHANGED,(void*)&eventData_pwr, sizeof(eventData_pwr));
-            DEBUG_PRINT(DEBUG_LOG,"[gen_multiple_events pid=%d] IARM_Bus_BroadcastEvent ret status = %d\n",getpid(), retCode);
-          
-            IRMgr_EventData_tp eventData_ir;
-            /*Broadcasting IRKey event*/
-            eventData_ir.data.irkey.keyType = type;
-            eventData_ir.data.irkey.keyCode = code;
-            DEBUG_PRINT(DEBUG_TRACE,"[gen_multiple_events pid=%d] Broadcasting IR event %d %d\n",getpid(),type,code);
-            if( clock_gettime( CLOCK_MONOTONIC, &eventData_ir.data.irkey.clock_when_event_sent) == -1)
-            {
-                DEBUG_PRINT(DEBUG_ERROR, "[gen_multiple_events pid=%d] clock gettime error",getpid());
-            }
-            retCode = IARM_Bus_BroadcastEvent(IARM_BUS_IRMGR_NAME, IARM_BUS_IRMGR_EVENT_IRKEY, (void*)&eventData_ir, sizeof(eventData_ir));
             DEBUG_PRINT(DEBUG_LOG,"[gen_multiple_events pid=%d] IARM_Bus_BroadcastEvent ret status = %d\n",getpid(), retCode);
           
             /*Broadcasting Bus event-ResolutionChange*/
