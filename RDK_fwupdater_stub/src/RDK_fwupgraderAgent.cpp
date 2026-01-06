@@ -613,11 +613,6 @@ void RDK_fwupgradeAgent::rdkfwupdater_RunCommand(IN const Json::Value& req, OUT 
 	DEBUG_PRINT(DEBUG_TRACE, "\nRunning eMD5Sum\n");
 	system_cmd = eMD5Sum;
     }
-    else if (!strcmp(command,"eGetModelNum"))
-    {
-        DEBUG_PRINT(DEBUG_TRACE, "\nRunning eGetModelNum\n");
-        system_cmd = eGetModelNum;
-    }
 
     returnValue = RunCommand( system_cmd, argument, result, result_size );
     DEBUG_PRINT(DEBUG_TRACE, "\nreturn Value = %zu\n", returnValue);
@@ -1142,6 +1137,7 @@ void RDK_fwupgradeAgent::rdkfwupdater_GetModelNum(IN const Json::Value& req, OUT
     signal(SIGSEGV,signalHandler);
     if (setjmp(jumpBuffer) == 0)
     {
+#ifdef GTEST_ENABLE
          if (req["null_param"].asInt())
          {
              returnValue = GetModelNum(NULL, buffer_size);
@@ -1150,6 +1146,10 @@ void RDK_fwupgradeAgent::rdkfwupdater_GetModelNum(IN const Json::Value& req, OUT
          {
              returnValue = GetModelNum(strModelNum, buffer_size);
          }
+#else
+	 DEBUG_PRINT(DEBUG_LOG, "GTEST_ENABLE flag is not enabled, GetModelNum is disabled");
+         returnValue = 0;
+#endif
     }
     else
     {
@@ -2020,13 +2020,16 @@ void RDK_fwupgradeAgent::rdkfwupdater_getRFCSettings(IN const Json::Value& req, 
 void RDK_fwupgradeAgent::rdkfwupdater_read_RFCProperty(IN const Json::Value& req, OUT Json::Value& response)
 {
     DEBUG_PRINT(DEBUG_TRACE, "rdkfwupdater_read_RFCProperty --->Entry\n");
-    char output[200] = { 0 };
-    char strRfctype[50] = { 0 }, strKey[50] = { 0 };
+    char output[200] = {};
+    char strRfctype[50] = {}, strKey[50] = {};
     int returnValue = 0;
 
     strcpy(strRfctype,req["rfctype"].asCString());
     strcpy(strKey,req["rfckey"].asCString());
     size_t data_size = req["data_size"].asInt();
+
+    DEBUG_PRINT(DEBUG_TRACE, "\nstrRfctype = %s\n" ,strRfctype);
+    DEBUG_PRINT(DEBUG_TRACE, "strKey = %s\n" ,strKey);
 
     signal(SIGSEGV,signalHandler);
     if (setjmp(jumpBuffer) == 0)
