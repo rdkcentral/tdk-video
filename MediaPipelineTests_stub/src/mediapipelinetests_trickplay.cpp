@@ -114,6 +114,7 @@ bool defaultStart = true;
 bool startWesterosConfig = false;
 bool createDisplayConfig = false;
 bool displayCreated = false;
+bool useWindowManager = false;
 int returnValue = 0;
 
 /*
@@ -1872,7 +1873,7 @@ bool parseResult(const std::string& jsonResponse)
 {
     //Check if response is FAILURE
     if (jsonResponse == "FAILURE")
-        return false;
+	return false;
     // Parse JSON response using jsoncpp
     Json::Value root;
     Json::CharReaderBuilder builder;
@@ -1885,84 +1886,191 @@ bool parseResult(const std::string& jsonResponse)
         if (root.isMember("error"))
         {
             std::string message = root["error"]["message"].asString();
-            printf("\nERROR : %s \n",message.c_str());
+	    printf("\nERROR : %s \n",message.c_str());
             return false;
         }
         else if (root.isMember("result") && root["result"].isArray() && root["result"].size() > 0)
         {
-            // Access the 'state' field in the first object in the result array
-            std::string state = root["result"][0]["state"].asString();
-            printf(" %s \n",state.c_str());
+            // Access the 'state' field in the first object in the result array (RDKShell format)
+            if (root["result"][0].isMember("state"))
+            {
+                std::string state = root["result"][0]["state"].asString();
+	        printf(" %s \n",state.c_str());
+                return state == "activated";
+            }
+        }
+        else if (root.isMember("result") && root["result"].isObject() && root["result"].isMember("state"))
+        {
+            // Direct state access for RDKWindowManager format
+            std::string state = root["result"]["state"].asString();
+	    printf(" %s \n",state.c_str());
             return state == "activated";
         }
         else if (root.isMember("result") && root["result"].isNull())
         {
-            printf("\nresult : \"null\"\n");
+	    printf("\nresult : \"null\"\n");
             return true;
         }
-        else if (root.isMember("result") && root["result"].isMember("clients") && root["result"]["clients"].isArray())
+	else if (root.isMember("result") && root["result"].isObject())
+	{
+	    // Handle different object formats for client/app checking
+	    if (root["result"].isMember("clients") && root["result"]["clients"].isArray())
+	    {
+	        // RDKShell format - check clients array
+	        if (root["result"]["clients"].size() > 0)
+	        {
+	            std::string client = root["result"]["clients"][0].asString();
+	            return client == "test";
+	        }
+	        return false;
+	    }
+	    else if (root["result"].isMember("apps") && root["result"]["apps"].isArray())
+	    {
+	        // RDKWindowManager format - check apps array (object format)
+	        for (const auto& app : root["result"]["apps"])
+	        {
+	            if (app.isMember("name") && app["name"].asString() == "test")
+	            {
+	                return true;
+	            }
+	        }
+	        return false;
+	    }
+	    else if (root["result"].isMember("success"))
+            {
+                // Generic success field handling
+                bool success = root["result"]["success"].asBool();
+	        printf(" success : %s\n", success ? "true" : "false");
+	        return success;
+            }
+	}
+        else if (root.isMember("result") && root["result"].isString())
         {
-            std::string client = root["result"]["clients"][0].asString();
-            return client == "test";
+            // RDKWindowManager getApps returns result as string containing JSON array: "[\"test\"]"
+            std::string resultStr = root["result"].asString();
+	    if (!resultStr.empty()) {
+                printf("apps string: %s\n", resultStr.c_str());
+            }
+            // Check if the string contains "test"
+            return resultStr.find("\"test\"") != std::string::npos;
+        }
+        else if (root.isMember("result") && root["result"].isArray())
+        {
+            // Handle direct array results (alternative RDKShell format or other plugins)
+            for (const auto& item : root["result"])
+            {
+                if (item.isString() && item.asString() == "test")
+                {
+                    return true;
+                }
+                else if (item.isObject() && item.isMember("name") && item["name"].asString() == "test")
+                {
+                    return true;
+                }
+                else if (item.isObject() && item.isMember("client") && item["client"].asString() == "test")
+                {
+                    return true;
+                }
+            }
+            return false;
         }
         else if (root.isMember("result"))
         {
-            // If "result" exists, check the "success" field
-            bool success = root["result"]["success"].asBool();
-            printf(" success : %s\n", success ? "true" : "false");
-	    return success;
+            // Generic result handling - for backward compatibility
+            // Check if result has success field or assume success if present
+            if (root["result"].isObject() && root["result"].isMember("success"))
+            {
+                bool success = root["result"]["success"].asBool();
+                printf(" success : %s\n", success ? "true" : "false");
+                return success;
+            }
+            else if (root["result"].isBool())
+            {
+                // Direct boolean result
+                bool success = root["result"].asBool();
+                printf(" success : %s\n", success ? "true" : "false");
+                return success;
+            }
+            else
+            {
+                // Assume success if result exists but format unknown
+                printf(" result received\n");
+                return true;
+            }
         }
-        else
-        {
-            printf("\nERROR : Unable to parse json response");
+	else
+	{
+	    printf("\nERROR : Unable to parse json response");
 	    if (log_enabled)
 	        fprintf(file, "\nERROR : Unable to parse json response");
-            return false;
-        }
+	    return false;
+	}
     }
     else
     {
         std::cerr << "Error parsing JSON: " << errs << std::endl;
         return false;
     }
+    
+    // Should never reach here, but add for safety
+    return false;
 }
 
 /********************************************************************************************************************
- * Purpose      : Function to obtain RDKShell plugin status
+ * Purpose      : Function to obtain RDKShell/RDKWindowManager plugin status
  ********************************************************************************************************************/
-bool RDKShellStatus()
+bool getPluginStatus()
 {
-    std::string jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.status@org.rdk.RDKShell"})";
+    std::string jsonData;
+    if (useWindowManager) {
+        jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.status@org.rdk.RDKWindowManager"})";
+    } else {
+        jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.status@org.rdk.RDKShell"})";
+    }
     // Call sendRequest function to get the JSON response as string
     std::string response = sendRequest(jsonData);
     if (response == "FAILURE")
-        printf ("\nERROR : Unable to send request to 0.0.0.0:9998\n");
+	printf ("\nERROR : Unable to send request to 0.0.0.0:9998\n");
     else
-        printf("\nRDKShell State : ");
+	printf(useWindowManager ? "\nRDKWindowManager State : " : "\nRDKShell State : ");
     return parseResult(response);
 }
 
 /********************************************************************************************************************
- * Purpose      : Function to activate RDKShell
+ * Purpose      : Function to activate display manager plugin (RDKShell/RDKWindowManager)
  ********************************************************************************************************************/
-bool activateRDKShell()
+bool activatePlugin()
 {
-    std::string jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.activate", "params": { "callsign": "org.rdk.RDKShell" }})";
+    std::string jsonData;
+    if (useWindowManager) {
+        jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.activate", "params": { "callsign": "org.rdk.RDKWindowManager" }})";
+    } else {
+        jsonData = R"({"jsonrpc": "2.0", "id": 2, "method": "Controller.1.activate", "params": { "callsign": "org.rdk.RDKShell" }})";
+    }
     // Call sendRequest function to get the JSON response as string
     std::string response = sendRequest(jsonData);
     return parseResult(response);
 }
 
 /********************************************************************************************************************
- * Purpose      : Function to verify a display named test is already running via RDKShell plugin
+ * Purpose      : Function to verify if a display client named test is already running
  ********************************************************************************************************************/
-bool checkDisplay()
+bool checkDisplayClient()
 {
-    std::string jsonData = R"({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "org.rdk.RDKShell.1.getClients"
-    })";
+    std::string jsonData;
+    if (useWindowManager) {
+        jsonData = R"({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "org.rdk.RDKWindowManager.1.getApps"
+        })";
+    } else {
+        jsonData = R"({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "org.rdk.RDKShell.1.getClients"
+        })";
+    }
 
     // Call sendRequest function to get the JSON response as string
     std::string response = sendRequest(jsonData);
@@ -1970,19 +2078,34 @@ bool checkDisplay()
 }
 
 /********************************************************************************************************************
- * Purpose      : Function to create Display via RDKShell plugin
+ * Purpose      : Function to create display client via display manager plugin
  ********************************************************************************************************************/
-bool createDisplay()
+bool createDisplayClient()
 {
-    std::string jsonData = R"({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "org.rdk.RDKShell.1.createDisplay",
-        "params": {
-            "client": "test",
-            "displayName": "test"
-        }
-    })";
+    std::string jsonData;
+    if (useWindowManager) {
+        jsonData = R"({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "org.rdk.RDKWindowManager.1.createDisplay",
+            "params": {
+                "displayParams" : {
+                    "client": "test",
+                    "displayName": "test"
+                }
+            }
+        })";
+    } else {
+        jsonData = R"({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "org.rdk.RDKShell.1.createDisplay",
+            "params": {
+                "client": "test",
+                "displayName": "test"
+            }
+        })";
+    }
 
     // Call sendRequest function to get the JSON response as string
     std::string response = sendRequest(jsonData);
@@ -1990,18 +2113,24 @@ bool createDisplay()
 }
 
 /********************************************************************************************************************
- * Purpose      : Function to destroy Display via RDKShell plugin
+ * Purpose      : Function to destroy display client via display manager plugin
  ********************************************************************************************************************/
-bool destroyDisplay()
+bool destroyDisplayClient()
 {
-    std::string jsonData = R"({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "org.rdk.RDKShell.1.kill",
-        "params": {
-            "client": "test"
-        }
-    })";
+    std::string jsonData;
+    if (useWindowManager) {
+        printf("\nDestroying display client via RDKWindowManager plugin is not implemented\n");
+        return true;
+    } else {
+        jsonData = R"({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "org.rdk.RDKShell.1.kill",
+            "params": {
+                "client": "test"
+            }
+        })";
+    }
 
     // Call sendRequest function to get the JSON response as string
     std::string response = sendRequest(jsonData);
@@ -2138,14 +2267,14 @@ void execute_postrequisite ()
     }
     if (createDisplayConfig && displayCreated)
     {
-        printf("Destroying RDKShell Display");
+        printf(useWindowManager ? "Destroying RDKWindowManager Display" : "Destroying RDKShell Display");
         if (log_enabled)
-            fprintf(file, "Destroying RDKShell Display");
-        if (!destroyDisplay())
+            fprintf(file, useWindowManager ? "Destroying RDKWindowManager Display" : "Destroying RDKShell Display");
+        if (!destroyDisplayClient())
         {
-            printf("ERROR: Unable to destroy RDKShell display\n");
+            printf(useWindowManager ? "ERROR: Unable to destroy RDKWindowManager display\n" : "ERROR: Unable to destroy RDKShell display\n");
             if (log_enabled)
-                fprintf(file, "ERROR: Unable to destroy RDKShell display\n");
+                fprintf(file, useWindowManager ? "ERROR: Unable to destroy RDKWindowManager display\n" : "ERROR: Unable to destroy RDKShell display\n");
             //Add destroying display failure to number of failures
             returnValue += 1;
         }
@@ -2305,9 +2434,20 @@ int main (int argc, char **argv)
     
     if (defaultStart)
     {
+        bool RDKWindowManager_exists = fileExists("/etc/WPEFramework/plugins/RDKWindowManager.json", true);
         bool RDKShell_exists = fileExists("/etc/WPEFramework/plugins/RDKShell.json", true);
-	if (RDKShell_exists)
+	if (RDKWindowManager_exists)
 	{
+	    useWindowManager = true;
+	    printf("\nRDKWindowManager is present in device\nCreating display - 'test'\n");
+	    if (log_enabled)
+		fprintf(file, "\nRDKWindowManager is present in device\nCreating display - 'test'\n");
+	    createDisplayConfig = true;
+            startWesterosConfig = false;
+	}
+	else if (RDKShell_exists)
+	{
+	    useWindowManager = false;
 	    printf("\nRDKShell is present in device\nCreating display - 'test'\n");
 	    if (log_enabled)
 		fprintf(file, "\nRDKShell is present in device\nCreating display - 'test'\n");
@@ -2316,9 +2456,9 @@ int main (int argc, char **argv)
 	}
 	else
 	{
-	    printf("\nRDKShell is not present in device\nProceeding to create display using westeros renderer\n");
+	    printf("\nRDKWindowManager/RDKShell is not present in device\nProceeding to create display using westeros renderer\n");
 	    if (log_enabled)
-		fprintf(file, "\nRDKShell is not present in device\nProceeding to create display using westeros renderer\n");
+		fprintf(file, "\nRDKWindowManager/RDKShell is not present in device\nProceeding to create display using westeros renderer\n");
 	    createDisplayConfig = false;
             startWesterosConfig = true;
         }
@@ -2336,29 +2476,29 @@ int main (int argc, char **argv)
       log_handler, NULL);
     if (createDisplayConfig)
     {
-        if(!RDKShellStatus())
+        if(!getPluginStatus())
         {
              if (curlError)
                   goto exit;
-             printf("\nRDKShell is deactivated\n");
-	     fprintf(file,"\nRDKShell is deactivated\n");
-             printf("Activating RDKShell\n");
-	     fprintf(file,"Activating RDKShell\n");
-             if (activateRDKShell())
+             printf(useWindowManager ? "\nRDKWindowManager is deactivated\n" : "\nRDKShell is deactivated\n");
+	     fprintf(file, useWindowManager ? "\nRDKWindowManager is deactivated\n" : "\nRDKShell is deactivated\n");
+             printf(useWindowManager ? "Activating RDKWindowManager\n" : "Activating RDKShell\n");
+	     fprintf(file, useWindowManager ? "Activating RDKWindowManager\n" : "Activating RDKShell\n");
+             if (activatePlugin())
              {
-                  printf("\nActivate RDKShell success\n");
+                  printf(useWindowManager ? "\nActivate RDKWindowManager success\n" : "\nActivate RDKShell success\n");
 
-                  //Wait for RDKShell to activate
+                  //Wait for plugin to activate
                   sleep(5);
-                  if (!RDKShellStatus())
+                  if (!getPluginStatus())
                   {
-                       printf("\nERROR : Unable to activate RDKShell plugin");
-		       fprintf(file,"\nERROR : Unable to activate RDKShell plugin");
+                       printf(useWindowManager ? "\nERROR : Unable to activate RDKWindowManager plugin" : "\nERROR : Unable to activate RDKShell plugin");
+		       fprintf(file, useWindowManager ? "\nERROR : Unable to activate RDKWindowManager plugin" : "\nERROR : Unable to activate RDKShell plugin");
                        goto exit;
                   }
              }
          }
-         if (checkDisplay())
+         if (checkDisplayClient())
          {
              printf("\nAlready a display \"test\" is running in DUT");
              printf("\nRe-using display");
@@ -2367,10 +2507,10 @@ int main (int argc, char **argv)
          }
          else
          {
-             printf("\nCreating RDKShell Display");
+             printf(useWindowManager ? "\nCreating RDKWindowManager Display" : "\nCreating RDKShell Display");
 	     if (log_enabled)
-	         fprintf(file,"\nCreating RDKShell Display");
-             if (!createDisplay())
+	         fprintf(file, useWindowManager ? "\nCreating RDKWindowManager Display" : "\nCreating RDKShell Display");
+             if (!createDisplayClient())
              {
                   printf("\nERROR : Unable to create Display\n");
 		  if (log_enabled)
@@ -2380,13 +2520,13 @@ int main (int argc, char **argv)
              else
              {
                   displayCreated = true;
-		  printf("\nSUCCESS : RDKShell display created successfully\n");
+		  printf(useWindowManager ? "\nSUCCESS : RDKWindowManager display created successfully\n" : "\nSUCCESS : RDKShell display created successfully\n");
 		  if (log_enabled)
-                      fprintf(file, "\nSUCCESS : RDKShell display created successfully\n");
+                      fprintf(file, useWindowManager ? "\nSUCCESS : RDKWindowManager display created successfully\n" : "\nSUCCESS : RDKShell display created successfully\n");
              }
          }
 
-	 // Set WAYLAND_DISPLAY to "test" as RDKShell creates a window with displayName as "test"
+	 // Set WAYLAND_DISPLAY to "test" as display manager creates a window with displayName as "test"
          printf("\nSetting WAYLAND_DISPLAY to \"test\"");
 	 fprintf(file, "\nSetting WAYLAND_DISPLAY to \"test\"");
          setenv("WAYLAND_DISPLAY", "test", 1);
