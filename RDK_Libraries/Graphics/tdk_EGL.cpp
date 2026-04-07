@@ -104,3 +104,34 @@ EGLBoolean eglSwapInterval (EGLDisplay dpy, EGLint interval)
         printf("\nDUMMY %s\n", __FUNCTION__);
         return false;
 }
+
+EGLBoolean eglDestroyContext(EGLDisplay display, EGLContext context)
+{
+        printf("\nDUMMY %s\n", __FUNCTION__);
+        return false;
+}
+
+extern "C"
+__eglMustCastToProperFunctionPointerType eglGetProcAddress(const char* procname)
+{
+    // No real EGL underneath → return NULL safely
+    return nullptr;
+}
+
+EGLContext eglGetCurrentContext(void)
+{
+        printf("\nDUMMY %s\n", __FUNCTION__);
+        return NULL;
+}
+
+EGLSurface eglGetCurrentSurface(EGLint readdraw)
+{
+	printf("\nDUMMY %s\n", __FUNCTION__);
+        return NULL;
+}
+
+EGLDisplay eglGetCurrentDisplay(void)
+{
+        printf("\nDUMMY %s\n", __FUNCTION__);
+        return NULL;
+}
