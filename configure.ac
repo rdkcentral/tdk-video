@@ -372,7 +372,6 @@ AC_ARG_ENABLE([fireboltcompliance],
          [
            case "${enableval}" in
               yes) FIREBOLTCOMPLIANCE=true
-		   PKG_CHECK_MODULES([EGL], [egl >= 0.0], [HAVE_EGL=true], [HAVE_EGL=false])
                    AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" FireboltCompliance_Validation "],
                           [echo "FireboltCompliance enabled in Hybrid"])
                    AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" FireboltCompliance_Validation "],
@@ -521,6 +520,19 @@ AC_ARG_ENABLE([fncsPackage],
            [echo "fncsPackage component is not enabled"])
 AM_CONDITIONAL([fncsPackage], [test x$fncsPackage = xtrue])
 
+AC_ARG_ENABLE([graphicstestapps],
+         AS_HELP_STRING([--enable-graphicstestapps],[enable graphicstestapps (default is no)]),
+         [
+           case "${enableval}" in
+              yes) graphicstestapps=true
+		   SUBDIR_DEFAULT+=" Graphics_TestApplications ";;
+             no) graphicstestapps=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-graphicstestapps ]) ;;
+             esac
+            ],
+           [echo "graphicstestapps is not enabled"])
+AM_CONDITIONAL([graphicstestapps], [test x$graphicstestapps = xtrue])
+
 AC_ARG_ENABLE([trace],
               AS_HELP_STRING([--enable-trace],[enable trace (default is no)]),
               [
@@ -557,8 +569,6 @@ AC_ARG_ENABLE([errorlog],
                   ],
                   )
 
-PKG_CHECK_MODULES([XML2], [libxml-2.0 >= 2.7.8])
-PKG_CHECK_MODULES([JANSON],[jansson >= 2.4])
 
 AC_SUBST(COPTS)
 AC_SUBST(AGENT_FLAGS)
@@ -609,5 +619,6 @@ AC_CONFIG_FILES([Makefile
 	 StorageMgr_stub/Makefile
 	 WesterosHal_stub/Makefile
          RDK_fwupdater_stub/Makefile
+         Graphics_TestApplications/Makefile
 	 MediaUtils_stub/Makefile])
 AC_OUTPUT

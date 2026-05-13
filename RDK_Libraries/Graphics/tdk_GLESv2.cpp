@@ -427,7 +427,7 @@ void glShaderBinary(GLsizei n, const GLuint *shaders, GLenum binaryformat, const
     printf("Dummy implementation of glShaderBinary\n");
 }
 // Dummy implementation for glShaderSource
-void glShaderSource(GLuint shader, GLsizei count, const GLchar *const*string, const GLint *length){
+void glShaderSource(GLuint shader, GLsizei count, const GLchar** string, const GLint* length) {
     printf("Dummy implementation of glShaderSource\n");
 }
 // Dummy implementation for glStencilFunc
