@@ -490,20 +490,20 @@ AC_ARG_ENABLE([mfrhal],
            [echo "mfrhal component is not enabled"])
 AM_CONDITIONAL([MFRHAL], [test x$MFRHAL = xtrue])
 
-AC_ARG_ENABLE([fncsPackage],
-         AS_HELP_STRING([--enable-fncsPackage],[enable fncsPackage (default is no)]),
+AC_ARG_ENABLE([npvsPackage],
+         AS_HELP_STRING([--enable-npvsPackage],[enable npvsPackage (default is no)]),
          [
            case "${enableval}" in
-              yes) fncspackage=true
+              yes) npvspackage=true
                    SUBDIR_DEFAULT=" MediaPipelineTests_stub Graphics_TestApplications "
                    SUBDIR_HYBRID=" "
                    SUBDIR_CLIENT=" ";;
-             no) fncsPackage=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-fncsPackage ]) ;;
+             no) npvsPackage=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-npvsPackage ]) ;;
              esac
             ],
-           [echo "fncsPackage component is not enabled"])
-AM_CONDITIONAL([fncsPackage], [test x$fncsPackage = xtrue])
+           [echo "npvsPackage component is not enabled"])
+AM_CONDITIONAL([npvsPackage], [test x$npvsPackage = xtrue])
 
 AC_ARG_ENABLE([graphicstestapps],
          AS_HELP_STRING([--enable-graphicstestapps],[enable graphicstestapps (default is no)]),

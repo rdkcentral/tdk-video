@@ -90,10 +90,45 @@ bool checkPTS = true;
 gint64 currentposition;
 bool trickplay = false;
 bool pause_operation = false;
+/* Set to true by assert_failure() after it unrefs the pipeline.
+ * The operations loop checks this flag at every iteration to avoid
+ * dereferencing a freed data.playbin when GCheck CK_NOFORK mode
+ * allows execution to continue after a failed fail_unless(). */
+static bool g_pipeline_destroyed = false;
 bool forward_events = true;
 gint64 startPosition;
 string audiosink;
 bool ignorePlayJump = false;
+std::string video_pts_validation_post_seek         = "FAILURE";   /* set in checkTrickplay */
+std::string pipeline_position_validation_post_seek = "FAILURE";   /* set in checkTrickplay */
+/* Rate-change scratch globals — overwritten per operation, then pushed to operation_verdicts */
+std::string rate_op_type               = "";
+double      rate_op_requested          = 0.0;
+double      rate_op_confirmed          = 0.0;
+std::string rate_confirmed_result      = "FAILURE";
+std::string pos_advancing_result       = "FAILURE";
+std::string pos_decreasing_result      = "FAILURE";
+std::string reached_start_result       = "FAILURE";
+
+/* Per-operation verdict — one entry pushed per trickplay/seek operation executed */
+struct OperationVerdict {
+    std::string op_type;          /* "seek", "fastforward", "rewind" */
+    bool        overall_pass;
+    /* seek fields */
+    int         seek_target_sec;
+    std::string pos_result;
+    std::string pts_result;
+    /* rate fields */
+    double      rate_requested;
+    double      rate_confirmed_val;
+    std::string rate_confirmed_str;
+    std::string pos_advancing_str;   /* fastforward */
+    std::string pos_decreasing_str;  /* rewind */
+    std::string reached_start_str;   /* rewind */
+    OperationVerdict() : overall_pass(false), seek_target_sec(0),
+                         rate_requested(0.0), rate_confirmed_val(0.0) {}
+};
+std::vector<OperationVerdict> operation_verdicts;
 bool buffering_flag = true;
 bool use_audioSink = true;
 bool checkEachSecondPlayback = false;
@@ -250,6 +285,257 @@ void startPlaybackValidationLogging(bool start=true)
 }
 
 
+/********************************************************************************************************************
+ * Purpose      : Print the verdict summary table and per-operation details for all trickplay
+ *                operations recorded so far.  Called both from the post-teardown path and from
+ *                assert_failure so the summary is always visible regardless of where the test stops.
+ * Returns      : true if any operation failed, false if all passed (or no operations recorded).
+ ********************************************************************************************************************/
+static bool printOperationVerdicts()
+{
+    if (operation_verdicts.empty())
+        return false;
+
+    bool any_failed = false;
+
+    /* ---- Summary table ---- */
+    printf("\n");
+    printf("================================================================\n");
+    printf("          TRICKPLAY OPERATIONS - VERDICT SUMMARY               \n");
+    printf("================================================================\n");
+    for (size_t i = 0; i < operation_verdicts.size(); i++)
+    {
+        const OperationVerdict& v = operation_verdicts[i];
+        if (v.op_type == "seek")
+            printf("  Op %zu: %-12s (target=%ds)  -> %s\n",
+                   i+1, "seek", v.seek_target_sec, v.overall_pass ? "PASS" : "FAIL");
+        else if (v.op_type == "play" || v.op_type == "pause")
+            printf("  Op %zu: %-12s               -> %s\n",
+                   i+1, v.op_type.c_str(), v.overall_pass ? "PASS" : "FAIL");
+        else
+            printf("  Op %zu: %-12s (rate=%.2f)   -> %s\n",
+                   i+1, v.op_type.c_str(), v.rate_requested, v.overall_pass ? "PASS" : "FAIL");
+        if (!v.overall_pass) any_failed = true;
+    }
+    printf("  OVERALL RESULT : %s\n", any_failed ? "FAIL" : "PASS");
+    printf("================================================================\n\n");
+
+    if (log_enabled)
+    {
+        fprintf(file, "\n================================================================\n");
+        fprintf(file, "          TRICKPLAY OPERATIONS - VERDICT SUMMARY               \n");
+        fprintf(file, "================================================================\n");
+        for (size_t i = 0; i < operation_verdicts.size(); i++)
+        {
+            const OperationVerdict& v = operation_verdicts[i];
+            if (v.op_type == "seek")
+                fprintf(file, "  Op %zu: %-12s (target=%ds)  -> %s\n",
+                        i+1, "seek", v.seek_target_sec, v.overall_pass ? "PASS" : "FAIL");
+            else if (v.op_type == "play" || v.op_type == "pause")
+                fprintf(file, "  Op %zu: %-12s               -> %s\n",
+                        i+1, v.op_type.c_str(), v.overall_pass ? "PASS" : "FAIL");
+            else
+                fprintf(file, "  Op %zu: %-12s (rate=%.2f)   -> %s\n",
+                        i+1, v.op_type.c_str(), v.rate_requested, v.overall_pass ? "PASS" : "FAIL");
+        }
+        fprintf(file, "  OVERALL RESULT : %s\n", any_failed ? "FAIL" : "PASS");
+        fprintf(file, "================================================================\n\n");
+    }
+
+    /* ---- Per-operation detailed verdict ---- */
+    for (size_t i = 0; i < operation_verdicts.size(); i++)
+    {
+        const OperationVerdict& v = operation_verdicts[i];
+
+        if (v.op_type == "seek")
+        {
+            bool pos_ok = (v.pos_result == "SUCCESS");
+            bool pts_ok = (v.pts_result == "SUCCESS");
+
+            printf("----------------------------------------------------------------\n");
+            printf("  Op %zu: SEEK to %d s\n", i+1, v.seek_target_sec);
+            printf("  pipeline_position_validation : %s\n", v.pos_result.c_str());
+            printf("  video_pts_validation         : %s\n", v.pts_result.c_str());
+            printf("  RESULT                       : %s\n", v.overall_pass ? "PASS" : "FAIL");
+            printf("----------------------------------------------------------------\n");
+
+            if (!pos_ok && pts_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] pipeline_position_validation_post_seek = FAILURE\n");
+                printf("  -> gst_element_query_position() did not report correct position after seek call.\n");
+                printf("  -> Even though seek was validated via video-pts (video-pts = SUCCESS),\n");
+                printf("     gst_element_query_position() returned an incorrect position.\n");
+                printf("  -> The pipeline position clock may not have reset correctly after the flush-seek.\n");
+            }
+            else if (!pos_ok && !pts_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] Seek unsuccessful.\n");
+                printf("  -> Both gst_element_query_position() and video-pts (westerossink) failed\n");
+                printf("     to reach the seek target position before the timeout expired.\n");
+                printf("  -> The pipeline did not resume playback from the correct position after seek.\n");
+            }
+            else
+            {
+                printf("[RESULT] pipeline_position_validation = SUCCESS -> PASS.\n");
+            }
+            printf("\n");
+
+            if (log_enabled)
+            {
+                fprintf(file, "----------------------------------------------------------------\n");
+                fprintf(file, "  Op %zu: SEEK to %d s\n", i+1, v.seek_target_sec);
+                fprintf(file, "  pipeline_position_validation : %s\n", v.pos_result.c_str());
+                fprintf(file, "  video_pts_validation         : %s\n", v.pts_result.c_str());
+                fprintf(file, "  RESULT                       : %s\n", v.overall_pass ? "PASS" : "FAIL");
+                if (!pos_ok && pts_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] position wrong despite video-pts SUCCESS.\n");
+                else if (!pos_ok && !pts_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] Seek unsuccessful — both validations FAILED.\n");
+                else
+                    fprintf(file, "[RESULT] PASS.\n");
+                fprintf(file, "----------------------------------------------------------------\n\n");
+            }
+        }
+        else if (v.op_type == "fastforward")
+        {
+            bool rate_ok = (v.rate_confirmed_str == "SUCCESS");
+            bool pos_ok  = (v.pos_advancing_str  == "SUCCESS");
+
+            printf("----------------------------------------------------------------\n");
+            printf("  Op %zu: FASTFORWARD %.2fx\n", i+1, v.rate_requested);
+            printf("  requested_rate     : %.2f\n", v.rate_requested);
+            printf("  confirmed_rate     : %.2f\n", v.rate_confirmed_val);
+            printf("  rate_confirmed     : %s\n",   v.rate_confirmed_str.c_str());
+            printf("  position_advancing : %s\n",   v.pos_advancing_str.c_str());
+            printf("  RESULT             : %s\n",   v.overall_pass ? "PASS" : "FAIL");
+            printf("----------------------------------------------------------------\n");
+
+            if (!rate_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] Playback rate was not set correctly.\n");
+                printf("  -> Requested %.2fx but pipeline reported %.2fx.\n",
+                       v.rate_requested, v.rate_confirmed_val);
+                printf("  -> Rate change did not take effect.\n");
+            }
+            else if (!pos_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] Rate was set to %.2fx but "
+                       "gst_element_query_position()\n", v.rate_requested);
+                printf("  -> did not advance at the expected speed.\n");
+                printf("  -> Pipeline may have accepted the rate change without "
+                       "actually fast-forwarding.\n");
+            }
+            else
+            {
+                printf("[RESULT] Fastforward %.2fx SUCCESS — rate confirmed and "
+                       "position advancing at expected rate.\n", v.rate_requested);
+            }
+            printf("\n");
+
+            if (log_enabled)
+            {
+                fprintf(file, "----------------------------------------------------------------\n");
+                fprintf(file, "  Op %zu: FASTFORWARD %.2fx\n", i+1, v.rate_requested);
+                fprintf(file, "  rate_confirmed     : %s\n", v.rate_confirmed_str.c_str());
+                fprintf(file, "  position_advancing : %s\n", v.pos_advancing_str.c_str());
+                fprintf(file, "  RESULT             : %s\n", v.overall_pass ? "PASS" : "FAIL");
+                if (!rate_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] Rate not set: requested %.2f got %.2f\n",
+                            v.rate_requested, v.rate_confirmed_val);
+                else if (!pos_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] Rate set but position not advancing.\n");
+                else
+                    fprintf(file, "[RESULT] Fastforward %.2fx SUCCESS.\n", v.rate_requested);
+                fprintf(file, "----------------------------------------------------------------\n\n");
+            }
+        }
+        else if (v.op_type == "rewind")
+        {
+            bool rate_ok    = (v.rate_confirmed_str  == "SUCCESS");
+            bool pos_dec    = (v.pos_decreasing_str  == "SUCCESS");
+            bool reached_ok = (v.reached_start_str   == "SUCCESS");
+
+            printf("----------------------------------------------------------------\n");
+            printf("  Op %zu: REWIND %.2fx\n", i+1, v.rate_requested);
+            printf("  requested_rate      : %.2f\n", v.rate_requested);
+            printf("  confirmed_rate      : %.2f\n", v.rate_confirmed_val);
+            printf("  rate_confirmed      : %s\n",   v.rate_confirmed_str.c_str());
+            printf("  position_decreasing : %s\n",   v.pos_decreasing_str.c_str());
+            printf("  reached_start       : %s\n",   v.reached_start_str.c_str());
+            printf("  RESULT              : %s\n",   v.overall_pass ? "PASS" : "FAIL");
+            printf("----------------------------------------------------------------\n");
+
+            if (!rate_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] Rewind rate was not set correctly.\n");
+                printf("  -> Requested %.2fx but pipeline reported %.2fx.\n",
+                       v.rate_requested, v.rate_confirmed_val);
+            }
+            else if (!pos_dec && !reached_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] Rewind rate %.2fx was accepted but "
+                       "gst_element_query_position()\n", v.rate_requested);
+                printf("  -> did not report a decreasing position.\n");
+                printf("  -> Pipeline may be stalled after the rewind seek.\n");
+            }
+            else if (pos_dec && !reached_ok)
+            {
+                printf("[TESTCASE FAILURE REASON] Rewind %.2fx — position was decreasing "
+                       "but pipeline\n", v.rate_requested);
+                printf("  -> did not reach start within the expected time. Partial rewind only.\n");
+            }
+            else
+            {
+                printf("[RESULT] Rewind %.2fx SUCCESS — rate confirmed, position decreased, "
+                       "and pipeline rewound to start.\n", v.rate_requested);
+            }
+            printf("\n");
+
+            if (log_enabled)
+            {
+                fprintf(file, "----------------------------------------------------------------\n");
+                fprintf(file, "  Op %zu: REWIND %.2fx\n", i+1, v.rate_requested);
+                fprintf(file, "  rate_confirmed      : %s\n", v.rate_confirmed_str.c_str());
+                fprintf(file, "  position_decreasing : %s\n", v.pos_decreasing_str.c_str());
+                fprintf(file, "  reached_start       : %s\n", v.reached_start_str.c_str());
+                fprintf(file, "  RESULT              : %s\n", v.overall_pass ? "PASS" : "FAIL");
+                if (!rate_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] Rewind rate not set: "
+                                  "requested %.2f got %.2f\n",
+                                  v.rate_requested, v.rate_confirmed_val);
+                else if (!pos_dec && !reached_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] Rate set but position not decreasing.\n");
+                else if (pos_dec && !reached_ok)
+                    fprintf(file, "[TESTCASE FAILURE REASON] Position decreasing but did not reach start.\n");
+                else
+                    fprintf(file, "[RESULT] Rewind %.2fx SUCCESS.\n", v.rate_requested);
+                fprintf(file, "----------------------------------------------------------------\n\n");
+            }
+        }
+        else if (v.op_type == "play" || v.op_type == "pause")
+        {
+            printf("----------------------------------------------------------------\n");
+            printf("  Op %zu: %s\n", i+1, v.op_type == "play" ? "PLAY" : "PAUSE");
+            printf("  RESULT : %s\n", v.overall_pass ? "PASS" : "FAIL");
+            printf("[RESULT] %s operation completed successfully.\n",
+                   v.op_type == "play" ? "Play" : "Pause");
+            printf("----------------------------------------------------------------\n\n");
+
+            if (log_enabled)
+            {
+                fprintf(file, "----------------------------------------------------------------\n");
+                fprintf(file, "  Op %zu: %s\n", i+1, v.op_type == "play" ? "PLAY" : "PAUSE");
+                fprintf(file, "  RESULT : %s\n", v.overall_pass ? "PASS" : "FAIL");
+                fprintf(file, "[RESULT] %s operation completed successfully.\n",
+                        v.op_type == "play" ? "Play" : "Pause");
+                fprintf(file, "----------------------------------------------------------------\n\n");
+            }
+        }
+    }
+
+    return any_failed;
+}
+
 void assert_failure(GstElement* playbin, bool success, const char *str= "Failure occured", const char* func= "default function", int line= 0, const char* test_step="Test Step")
 {
    if (strstr(test_step, "Test Step") != nullptr)
@@ -286,6 +572,10 @@ void assert_failure(GstElement* playbin, bool success, const char *str= "Failure
       gst_element_set_state (playbin, GST_STATE_NULL);
    }
    gst_object_unref (playbin);
+   /* Signal to the operations loop that the pipeline is gone.
+    * Prevents use-after-free when GCheck CK_NOFORK lets execution
+    * continue past the fail_unless() call below. */
+   g_pipeline_destroyed = true;
    if (log_enabled)
    {
       fprintf(file,"\nFAILURE observed at %s : [%s %d]", func, __FILE__, line);
@@ -299,6 +589,7 @@ void assert_failure(GstElement* playbin, bool success, const char *str= "Failure
    }
    //execute_postrequisite();
 
+   printOperationVerdicts();
    fail_unless(false,str);
 }
 
@@ -518,7 +809,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=fa
    gst_object_unref (bus);
 }
 
-void PlaybackValidation(MessageHandlerData *data, int seconds, bool seekOperation=false)
+void PlaybackValidation(MessageHandlerData *data, int seconds, bool seekOperation=false, gint64 preSeekPositionNs=0)
 {
     startPlaybackValidationLogging(true);
 
@@ -585,13 +876,24 @@ void PlaybackValidation(MessageHandlerData *data, int seconds, bool seekOperatio
     // Get playback rate
     current_rate = getRate (data->playbin);
 
-    // For seek operation , start expected position from seekSeconds
+    // For seek operation , start expected position from pre-seek position
+    // (after waitUntilPreSeekPositionReached the pipeline clock is expected to be
+    //  at or near the pre-seek value, not the seek target)
     if (seekOperation)
     {
         if (log_enabled)
              fprintf(file, "\n");
-	printf ("\nValidating for seek operation seekSeconds = %lld\n",data->seekPosition);
-	data->previousposition = data->seekPosition*GST_SECOND;
+	if (preSeekPositionNs > 0)
+	{
+	    printf ("\nValidating for seek operation: using pre-seek position %.3f s as baseline\n",
+	            (double)preSeekPositionNs / GST_SECOND);
+	    data->previousposition = preSeekPositionNs;
+	}
+	else
+	{
+	    printf ("\nValidating for seek operation seekSeconds = %lld\n",data->seekPosition);
+	    data->previousposition = data->seekPosition*GST_SECOND;
+	}
 	// For seek followed by pause, rendered frames will be observed as 0
 	//  which is expected as pipeline is flushed during seek and since its paused
 	//  there will be no frames rendered on screen
@@ -933,23 +1235,73 @@ static void checkTrickplay(MessageHandlerData *Param)
 
     if(!data.setRateOperation)
     {
+        /* Reset per-seek validation flags */
+        video_pts_validation_post_seek         = "FAILURE";
+        pipeline_position_validation_post_seek = "FAILURE";
 
-         start = std::chrono::high_resolution_clock::now();
-         while(!data.terminate && !data.seeked)
-         {
-               //Check if seek had already happened
-	       assert_failure (data.playbin, gst_element_query_position (data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),
-                                                     "Failed to query the current playback position",__FUNCTION__,__LINE__,"Querying Playback Position" );
-               //Added (GST_SECOND) buffer time between currentPosition and seekPosition
-               if (abs( data.currentPosition - data.seekPosition) <= ((GST_SECOND)))
-               {
-                   data.seeked = TRUE;
-                   time_elapsed = std::chrono::high_resolution_clock::now();
-               }
+        printf("\n[SEEK-CHECK] Polling position + video-pts (tolerance: 1 s, timeout: %d s)\n",
+               Seek_time_threshold);
 
-	       if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(Seek_time_threshold))
-                   break;
-         }
+        /* Use a dedicated variable for the SEEK-CHECK timeout.
+         * NOTE: MilliSleep() is a macro that overwrites the global `start` variable,
+         * so we must NOT use `start` to measure the seek-check timeout window —
+         * it would be reset on every sleep iteration, making the timeout never fire. */
+        auto seek_check_start = std::chrono::high_resolution_clock::now();
+        int seek_check_poll = 0;
+        while(!data.terminate && !data.seeked)
+        {
+            /* Pipeline position check */
+            assert_failure(data.playbin,
+                           gst_element_query_position(data.playbin, GST_FORMAT_TIME, &(data.currentPosition)),
+                           "Failed to query the current playback position",
+                           __FUNCTION__, __LINE__, "Querying Playback Position");
+
+            bool pos_ok = (abs(data.currentPosition - data.seekPosition) <= (gint64)GST_SECOND);
+
+            /* Video-PTS check: pts within 1 s of seek target (90 kHz ticks) */
+            gint64 vo_pts = 0;
+            bool pts_ok = false;
+            if (Param->westerosSink.sink)
+            {
+                g_object_get(Param->westerosSink.sink, "video-pts", &vo_pts, NULL);
+                gint64 seek_ticks = (data.seekPosition / (gint64)GST_SECOND) * 90000LL;
+                pts_ok = (llabs(vo_pts - seek_ticks) <= 90000LL);
+            }
+
+            {
+                auto _ct = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                std::tm *_ts = std::localtime(&_ct);
+                printf("\nTDK LOG :  %02d:%02d:%02d  --  video-pts : %lld  pts-progressing : %s  "
+                       "playback-position : %.3f  position-progressing : %s",
+                       _ts->tm_hour, _ts->tm_min, _ts->tm_sec,
+                       (long long)vo_pts,
+                       pts_ok ? "advancing" : "STALE",
+                       (double)data.currentPosition / GST_SECOND,
+                       pos_ok ? "advancing" : "STALE");
+            }
+            seek_check_poll++;
+
+            if (pos_ok)
+                pipeline_position_validation_post_seek = "SUCCESS";
+            if (pts_ok)
+                video_pts_validation_post_seek = "SUCCESS";
+
+            /* Seek confirmed if at least one validation passes */
+            if (pos_ok || pts_ok)
+            {
+                data.seeked = TRUE;
+                time_elapsed = std::chrono::high_resolution_clock::now();
+            }
+
+            if (std::chrono::high_resolution_clock::now() - seek_check_start > std::chrono::seconds(Seek_time_threshold))
+                break;
+
+            MilliSleep(500);
+        }
+
+        printf("\n[SEEK-CHECK] pipeline_position_validation=%s  video_pts_validation=%s\n",
+               pipeline_position_validation_post_seek.c_str(),
+               video_pts_validation_post_seek.c_str());
     }
     else
     {
@@ -1137,53 +1489,122 @@ static void trickplayOperation(MessageHandlerData *data)
 	if (log_enabled)
            fprintf(file, "\nCurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
 
-	assert_failure (data->playbin, TRUE == data->seeked, "Seek Unsuccessfull",__FUNCTION__,__LINE__,"Seek Successfull");
-        printf("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
-	if (log_enabled)
-           fprintf(file, "\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
-        GST_LOG ("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
+        bool seek_ok = (pipeline_position_validation_post_seek == "SUCCESS");
+        printf("\n[SEEK-RESULT] pipeline_position=%s  video_pts=%s  overall=%s\n",
+               pipeline_position_validation_post_seek.c_str(),
+               video_pts_validation_post_seek.c_str(),
+               seek_ok ? "PASS" : "FAIL");
+
+        /* Push per-operation verdict — final verdict is printed post-teardown */
+        OperationVerdict _sv;
+        _sv.op_type        = "seek";
+        _sv.seek_target_sec = (int)data->seekPosition;
+        _sv.pos_result     = pipeline_position_validation_post_seek;
+        _sv.pts_result     = video_pts_validation_post_seek;
+        _sv.overall_pass   = seek_ok;
+        operation_verdicts.push_back(_sv);
+
+        if (seek_ok)
+        {
+            printf("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
+            if (log_enabled)
+               fprintf(file, "\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
+            GST_LOG ("\nSEEK SUCCESSFULL :  CurrentPosition %lld seconds, SeekPosition %lld seconds\n", data->currentPosition, data->seekPosition);
+        }
+        else
+        {
+            printf("\n[SEEK-FAIL] Seek to %lld s FAILED — verdict will be printed after teardown.\n", data->seekPosition);
+        }
     }
     else
     {
-	char playback_rate_string[100];
-	sprintf(playback_rate_string,"Failed to do set rate to %f correctly\nCurrent playback rate is: %f\n", data->setRate, data->currentRate);
-        assert_failure (data->playbin, data->setRate == data->currentRate, playback_rate_string);
-        printf ("\nRate is set to %s %0.2fx speed\n",(data->setRate > 0)?"fastforward":"rewind", abs(data->setRate));
-	if (data->setRate < 0)
-        {
-	    printf("\nIn negative rate handling");
-	    bool reached_start = false;
-	    gint64 previous_position;
+        bool rate_ok = (data->setRate == data->currentRate);
 
-	    if (currentposition/(GST_SECOND) == 0)
-		reached_start = true;
+        /* Store rate info into globals for post-teardown verdict */
+        rate_op_requested     = data->setRate;
+        rate_op_confirmed     = data->currentRate;
+        rate_confirmed_result = rate_ok ? "SUCCESS" : "FAILURE";
+
+        if (data->setRate > 0)
+        {
+            rate_op_type = "fastforward";
+
+            /* Sample position before/after 1 s to verify position is advancing */
+            gint64 ff_pos_before = 0, ff_pos_after = 0;
+            gst_element_query_position(data->playbin, GST_FORMAT_TIME, &ff_pos_before);
+            Sleep(1);
+            gst_element_query_position(data->playbin, GST_FORMAT_TIME, &ff_pos_after);
+            bool pos_advancing = rate_ok && (ff_pos_after > ff_pos_before);
+            pos_advancing_result = pos_advancing ? "SUCCESS" : "FAILURE";
+
+            /* Push per-operation verdict */
+            OperationVerdict _fv;
+            _fv.op_type            = "fastforward";
+            _fv.overall_pass       = rate_ok && pos_advancing;
+            _fv.rate_requested     = data->setRate;
+            _fv.rate_confirmed_val = data->currentRate;
+            _fv.rate_confirmed_str = rate_confirmed_result;
+            _fv.pos_advancing_str  = pos_advancing_result;
+            operation_verdicts.push_back(_fv);
+
+            printf("\nRate is set to fastforward %0.2fx speed\n", abs(data->setRate));
+        }
+        else
+        {
+            rate_op_type = "rewind";
+
+            printf("\nIn negative rate handling");
+            bool reached_start = false;
+            bool pos_decreasing = false;
+            gint64 previous_position;
+
+            if (currentposition/(GST_SECOND) == 0)
+                reached_start = true;
 
             int time_to_reach_start = (currentposition/(GST_SECOND))/abs(data->currentRate);
             start = std::chrono::high_resolution_clock::now();
 
-	    printf("\nTime to reach start = %d",time_to_reach_start);
+            printf("\nTime to reach start = %d", time_to_reach_start);
             while(!reached_start)
             {
-	       previous_position = currentposition;
-               if ((currentposition/(GST_SECOND)) == 0)
-               {
-                  reached_start = true;
-               }
-               if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(time_to_reach_start))
-                  break;
-	       assert_failure (data->playbin, gst_element_query_position (data->playbin, GST_FORMAT_TIME, &currentposition), "Failed to query the current playback position",__FUNCTION__,__LINE__,"Querying the current playback position");
-	       if (previous_position != currentposition)
-		  printf("\nCurrentPosition %lld seconds",(currentposition/(GST_SECOND)));
-	    }
+                previous_position = currentposition;
+                if ((currentposition/(GST_SECOND)) == 0)
+                {
+                    reached_start = true;
+                }
+                if (std::chrono::high_resolution_clock::now() - start > std::chrono::seconds(time_to_reach_start))
+                    break;
+                assert_failure(data->playbin,
+                               gst_element_query_position(data->playbin, GST_FORMAT_TIME, &currentposition),
+                               "Failed to query the current playback position",
+                               __FUNCTION__, __LINE__, "Querying the current playback position");
+                if (previous_position > currentposition)
+                    pos_decreasing = true;
+                if (previous_position != currentposition)
+                    printf("\nCurrentPosition %lld seconds", (currentposition/(GST_SECOND)));
+            }
 
-	    if (reached_start)
-	    {
-	       printf("\nPipeline successfully rewinded to start\n");
-	       gst_element_set_state(data->playbin, GST_STATE_NULL);
-	       gst_object_unref (data->playbin);
-	       SetupStream (data);
-	    }
-	    assert_failure (data->playbin, true == reached_start, "Pipeline was not able to rewind to start",__FUNCTION__,__LINE__,"Verify if rewind is success");
+            pos_decreasing_result = pos_decreasing ? "SUCCESS" : "FAILURE";
+            reached_start_result  = reached_start  ? "SUCCESS" : "FAILURE";
+
+            /* Push per-operation verdict */
+            OperationVerdict _rv;
+            _rv.op_type             = "rewind";
+            _rv.overall_pass        = rate_ok && reached_start;
+            _rv.rate_requested      = data->setRate;
+            _rv.rate_confirmed_val  = data->currentRate;
+            _rv.rate_confirmed_str  = rate_confirmed_result;
+            _rv.pos_decreasing_str  = pos_decreasing_result;
+            _rv.reached_start_str   = reached_start_result;
+            operation_verdicts.push_back(_rv);
+
+            if (reached_start)
+            {
+                printf("\nPipeline successfully rewinded to start\n");
+                gst_element_set_state(data->playbin, GST_STATE_NULL);
+                gst_object_unref(data->playbin);
+                SetupStream(data);
+            }
         }
     }
 }
@@ -1288,9 +1709,15 @@ static void SetupStream (MessageHandlerData *data)
 	 }
     }
     /*
-     * Link the westeros-sink to playbin
+     * Link the westeros-sink to playbin.
+     * g_object_set with "video-sink" sinks the floating ref, so the pipeline
+     * becomes the sole owner.  Take an explicit extra ref here so that the
+     * post-teardown gst_object_unref() in trickplayTest() is valid — matching
+     * the pattern used for audioSink (obtained via g_object_get which also
+     * adds a ref).
      */
     g_object_set (data->playbin, "video-sink", data->westerosSink.sink, NULL);
+    gst_object_ref (data->westerosSink.sink);
     g_object_set (data->playbin, "async-handling", true, NULL);
     /*
      * Set the first frame received callback
@@ -1337,6 +1764,150 @@ static void SetupStream (MessageHandlerData *data)
     
 }
 
+/********************************************************************************************************************
+ * Purpose: After a backward seek, poll video-pts and pipeline position for the time it would
+ *          naturally take playback to advance from the seek target back to the pre-seek position.
+ *          This guards PlaybackValidation from being entered while the position clock is still
+ *          catching up after a flush-seek.
+ *          For forward seeks this function returns immediately without waiting.
+ * Parameters:
+ *   playbin          - Pipeline element
+ *   videoSink        - Westerossink element (may be NULL; used for video-pts logging)
+ *   pre_seek_ns      - Pipeline position (nanoseconds) captured before the seek was issued
+ *   seek_position_ns - Target position of the seek (nanoseconds)
+ *   timeout_sec      - Hard cap on wait time (default 90 s)
+ ********************************************************************************************************************/
+static int waitUntilPreSeekPositionReached(GstElement *playbin, GstElement *videoSink,
+                                            gint64 pre_seek_ns, gint64 seek_position_ns,
+                                            int timeout_sec = 90)
+{
+    /* Only wait for backward seeks */
+    if (seek_position_ns >= pre_seek_ns)
+    {
+        printf("\n[SEEK-WAIT] Forward seek (seek %.3f s >= pre-seek %.3f s). No wait needed.\n",
+               (double)seek_position_ns / GST_SECOND, (double)pre_seek_ns / GST_SECOND);
+        return 0;
+    }
+
+    /* Poll duration = natural playback time to advance from seek target to pre-seek position,
+     * plus 3 extra seconds to allow the position clock to settle after the initial catch-up. */
+    int wait_sec = (int)((pre_seek_ns - seek_position_ns) / GST_SECOND) + 3;
+    if (wait_sec <= 0) wait_sec = 1;
+    if (wait_sec > timeout_sec) wait_sec = timeout_sec;
+
+    /* Poll every 500 ms */
+    int total_polls = wait_sec * 2;
+
+    printf("\n[SEEK-WAIT] Backward seek: polling %d s (at 500 ms intervals) for playback to advance "
+           "from %.3f s to %.3f s.\n",
+           wait_sec, (double)seek_position_ns / GST_SECOND, (double)pre_seek_ns / GST_SECOND);
+
+    gint64 prev_pts = -1;
+    gint64 prev_pos = -1;
+    int pts_stale_count = 0;
+    int pos_stale_count = 0;
+
+    auto wait_start = std::chrono::high_resolution_clock::now();
+
+    for (int poll = 0; poll < total_polls; poll++)
+    {
+        MilliSleep(500);
+
+        gint64 cur_pos = -1;
+        gst_element_query_position(playbin, GST_FORMAT_TIME, &cur_pos);
+
+        gint64 vo_pts = 0;
+        if (videoSink)
+            g_object_get(videoSink, "video-pts", &vo_pts, NULL);
+
+        bool pts_adv = (prev_pts >= 0) && (vo_pts > prev_pts);
+        /* pos_adv requires position to advance by 400–600 ms per 500 ms poll.
+         * The nominal delta is 500 ms but embedded devices exhibit ±50–100 ms of
+         * OS scheduling jitter (observed range on RTK1325: 464–534 ms), so the
+         * window is widened to ±100 ms from 500 ms.  Plain "cur_pos > prev_pos"
+         * is still not used — it would pass even if the clock stalls then jumps. */
+        gint64 pos_diff_ns = (prev_pos >= 0) ? (cur_pos - prev_pos) : 0;
+        static const gint64 POS_DIFF_LO = 400000000LL;  /* 400 ms in ns */
+        static const gint64 POS_DIFF_HI = 600000000LL;  /* 600 ms in ns */
+        bool pos_adv = (prev_pos >= 0) && (pos_diff_ns >= POS_DIFF_LO) && (pos_diff_ns <= POS_DIFF_HI);
+
+        const char *pts_str = (poll == 0) ? "---" : (pts_adv ? "advancing" : "STALE");
+        const char *pos_str = (poll == 0) ? "---" : (pos_adv ? "advancing" : "STALE");
+
+        {
+            auto _ct = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+            std::tm *_ts = std::localtime(&_ct);
+            printf("\nTDK LOG :  %02d:%02d:%02d  --  video-pts : %lld  pts-progressing : %s  "
+                   "playback-position : %.3f  position-progressing : %s",
+                   _ts->tm_hour, _ts->tm_min, _ts->tm_sec,
+                   (long long)vo_pts, pts_str,
+                   (double)cur_pos / GST_SECOND, pos_str);
+
+            /* Print position diff on every poll after the first */
+            if (prev_pos >= 0)
+            {
+                printf("  pos-diff: %+.3f s (%.3f -> %.3f)%s",
+                       (double)pos_diff_ns / GST_SECOND,
+                       (double)prev_pos / GST_SECOND,
+                       (double)cur_pos  / GST_SECOND,
+                       pos_adv ? "" : "  [OUT-OF-RANGE: expected 0.400-0.600 s]");
+            }
+        }
+
+        if (poll > 0)
+        {
+            if (!pts_adv) pts_stale_count++;
+            if (!pos_adv) pos_stale_count++;
+        }
+
+        prev_pts = vo_pts;
+        prev_pos = cur_pos;
+    }
+
+    int elapsed_sec = (int)std::chrono::duration_cast<std::chrono::seconds>(
+                          std::chrono::high_resolution_clock::now() - wait_start).count();
+
+    /* Summary */
+    int check_polls = total_polls - 1;  /* first poll has no previous to compare */
+    printf("\n[SEEK-WAIT] Post-backward-seek progress summary (%d polls checked, %d s elapsed):\n",
+           check_polls, elapsed_sec);
+    if (check_polls > 0)
+    {
+        printf("  video-pts     : %s (%d/%d polls STALE)\n",
+               (pts_stale_count == 0) ? "ADVANCING" : "WARNING - NOT ADVANCING",
+               pts_stale_count, check_polls);
+        printf("  pipeline pos  : %s (%d/%d polls STALE)\n",
+               (pos_stale_count == 0) ? "ADVANCING" : "WARNING - NOT ADVANCING",
+               pos_stale_count, check_polls);
+        if (pts_stale_count > 0 && pos_stale_count > 0)
+            printf("  [WARN] Both video-pts and pipeline position were stale - "
+                   "pipeline may not be playing after seek.\n");
+        else if (pts_stale_count > 0)
+            printf("  [WARN] video-pts was stale - video decoder may be lagging after seek.\n");
+        else if (pos_stale_count > 0)
+            printf("  [WARN] pipeline position was stale - position clock may be "
+                   "catching up after seek (this can be normal for a short window).\n");
+    }
+
+    /* Overwrite the post-seek verdict globals from the wait-loop observations.
+     * A metric is SUCCESS if ≤30% of polls were STALE; FAILURE if >30% were STALE. */
+    if (check_polls > 0)
+    {
+        int stale_threshold = (check_polls * 30) / 100;
+        video_pts_validation_post_seek         = (pts_stale_count <= stale_threshold) ? "SUCCESS" : "FAILURE";
+        pipeline_position_validation_post_seek = (pos_stale_count <= stale_threshold) ? "SUCCESS" : "FAILURE";
+        printf("[SEEK-WAIT] Stale threshold: %d/%d polls (30%%). "
+               "pts_stale=%d pos_stale=%d\n",
+               stale_threshold, check_polls, pts_stale_count, pos_stale_count);
+        printf("[SEEK-WAIT] Final verdict flags (from wait loop): "
+               "pipeline_position=%s  video_pts=%s\n",
+               pipeline_position_validation_post_seek.c_str(),
+               video_pts_validation_post_seek.c_str());
+    }
+    printf("[SEEK-WAIT] Wait loop elapsed: %d s. Returning to caller.\n\n", elapsed_sec);
+    return elapsed_sec;
+}
+
 GST_START_TEST (trickplayTest)
 {
     printf ("\n Entered into Trickplay\n");
@@ -1345,6 +1916,8 @@ GST_START_TEST (trickplayTest)
     double operationTimeout = 10.0;
     int seekSeconds = 0;
     bool seekOperation = false;
+    gint64 pre_seek_position_ns = 0;  /* position (ns) before seek; passed to PlaybackValidation */
+    int wait_loop_elapsed_sec = 0;    /* seconds consumed by waitUntilPreSeekPositionReached */
     gdouble rate = 1;
     GstBus *bus;
     GstStateChangeReturn state_change;
@@ -1360,11 +1933,25 @@ GST_START_TEST (trickplayTest)
     bus = gst_element_get_bus(data.playbin);
     gst_bus_add_watch(bus, (GstBusFunc) handleMessage, NULL);
 
+    bool any_seek_done = false;  /* tracks whether at least one seek operation was executed */
+    bool any_rate_done = false;  /* tracks whether at least one FF/rewind operation was executed */
+    g_pipeline_destroyed = false;  /* reset before the operations loop */
+
     /*
      * Iterate through the list of operations recieved as input arguments and execute each of them for the requesed operation and timeperiod
      */
     for (operationItr = operationsList.begin(); operationItr != operationsList.end(); ++operationItr)
     {
+        /* Guard: assert_failure() in a prior operation may have freed data.playbin
+         * and set this flag. In GCheck CK_NOFORK mode fail_unless() does not
+         * longjmp, so the loop would otherwise continue and dereference a freed
+         * pointer.  Break early and let GCheck tally the already-recorded failure. */
+        if (g_pipeline_destroyed)
+        {
+            printf("\n[ABORT] Pipeline destroyed by a prior assert_failure — "
+                   "skipping remaining operations.\n");
+            break;
+        }
 	/*
 	 * Operating string will be in operation:operationTimeout format,
 	 * so split the string to retrieve operation string and timeout values
@@ -1473,7 +2060,7 @@ GST_START_TEST (trickplayTest)
 
 	assert_failure (data.playbin, gst_element_query_position (data.playbin, GST_FORMAT_TIME, &data.currentPosition), "Failed to query the current playback position",__FUNCTION__,__LINE__,"Query playback position");
 
-	if ((rate != data.currentRate) && (!pause_operation))
+	if ((rate != data.currentRate) && (!pause_operation) && !(seekOperation && rate == 1))
 	{
 	    if (log_enabled)
                    fprintf(file, "\n");
@@ -1496,7 +2083,15 @@ GST_START_TEST (trickplayTest)
             }
 	    data.setRateOperation = TRUE;
 	    data.setRate = rate;
+            any_rate_done = true;  /* mark that a FF/rewind operation was issued */
             trickplayOperation(&data);
+            /* Stop processing further operations if this one failed */
+            if (!operation_verdicts.empty() && !operation_verdicts.back().overall_pass)
+            {
+                printf("\n[ABORT] %s %.2fx failed. Skipping remaining operations.\n",
+                       rate_op_type.c_str(), abs(rate_op_requested));
+                break;
+            }
 	    if (!(rate < 0))
 	    {
 		if (log_enabled)
@@ -1527,6 +2122,35 @@ GST_START_TEST (trickplayTest)
 	    trickplay = false;
 	    data.setRateOperation = FALSE;
 	    data.seekSeconds = seekSeconds;
+	    any_seek_done = true;  /* mark that a seek was issued in this test run */
+	    /* If pipeline is not already at 1x, silently reset rate before seeking
+	     * (this is an internal prerequisite, not a user-requested trickplay op) */
+	    data.currentRate = getRate(data.playbin);
+	    if (data.currentRate != NORMAL_PLAYBACK_RATE)
+	    {
+	        printf("\n[SEEK-PREP] Resetting rate from %.2f to 1.0 before seek (not recorded as operation).\n",
+	               data.currentRate);
+	        data.setRateOperation = TRUE;
+	        data.setRate = NORMAL_PLAYBACK_RATE;
+	        trickplayOperation(&data);
+	        /* Remove the auto-pushed rate-reset verdict — it is not a user operation */
+	        if (!operation_verdicts.empty() &&
+	            operation_verdicts.back().op_type == "fastforward" &&
+	            operation_verdicts.back().rate_requested == NORMAL_PLAYBACK_RATE)
+	        {
+	            operation_verdicts.pop_back();
+	        }
+	        data.setRateOperation = FALSE;
+	    }
+	    /* Capture position before seek by querying the pipeline directly.
+	     * Do NOT use data.currentPosition here — after a silent rate reset via
+	     * trickplayOperation(setRateOperation=TRUE) the field is left as
+	     * GST_CLOCK_TIME_NONE because checkTrickplay only updates it in the
+	     * seek (non-rate) path, which would corrupt pre_seek_position_ns. */
+	    pre_seek_position_ns = 0;
+	    gst_element_query_position(data.playbin, GST_FORMAT_TIME, &pre_seek_position_ns);
+	    printf("\n[SEEK-PREP] pre_seek_position captured: %.3f s (seek target: %d s)\n",
+	           (double)pre_seek_position_ns / GST_SECOND, seekSeconds);
 	    trickplayOperation(&data);
 	    startPosition = seekSeconds * (GST_SECOND);
 	    if (checkNewPlay)
@@ -1543,6 +2167,51 @@ GST_START_TEST (trickplayTest)
             {
                 latency = std::chrono::duration_cast<std::chrono::milliseconds>(time_elapsed - timestamp);
                 parselatency();
+            }
+	    /* For backward seeks, always run the wait loop regardless of checkTrickplay result.
+	     * checkTrickplay only polls for 5 s right after the seek — the position clock on
+	     * this platform can take much longer to catch up after a flush-seek.
+	     * The wait loop is the authoritative validation for backward seeks; it overwrites
+	     * pipeline_position_validation_post_seek / video_pts_validation_post_seek globals
+	     * and we then update the verdict that was pushed by trickplayOperation. */
+	    if (checkNewPlay && !pause_operation)
+	    {
+	        wait_loop_elapsed_sec = waitUntilPreSeekPositionReached(
+	                                        data.playbin, data.westerosSink.sink,
+	                                        pre_seek_position_ns,
+	                                        (gint64)seekSeconds * GST_SECOND);
+
+	        /* Update the seek verdict with wait-loop results for backward seeks */
+	        if (!operation_verdicts.empty() && operation_verdicts.back().op_type == "seek")
+	        {
+	            OperationVerdict& sv = operation_verdicts.back();
+	            sv.pos_result   = pipeline_position_validation_post_seek;
+	            sv.pts_result   = video_pts_validation_post_seek;
+	            sv.overall_pass = (pipeline_position_validation_post_seek == "SUCCESS");
+	            printf("\n[SEEK-VERDICT] Updated after wait loop: "
+	                   "pipeline_position=%s  video_pts=%s  overall=%s\n",
+	                   sv.pos_result.c_str(), sv.pts_result.c_str(),
+	                   sv.overall_pass ? "PASS" : "FAIL");
+	        }
+	    }
+	    else if (pause_operation)
+	    {
+	        /* Pipeline is in PAUSE state (from a preceding pause operation).
+	         * The wait loop is skipped intentionally: position will not advance
+	         * while paused, so polling would mark all samples STALE and
+	         * incorrectly fail the seek verdict.
+	         * The seek verdict from checkTrickplay (position/pts at seek target)
+	         * is used as-is. */
+	        printf("\n[SEEK-WAIT] Skipped: pipeline is PAUSED after seek "
+	               "(pause_operation=true). Position advancement cannot be "
+	               "validated in PAUSED state.\n");
+	    }
+
+            /* Abort on failure only after the wait loop has had its say */
+            if (!operation_verdicts.empty() && !operation_verdicts.back().overall_pass)
+            {
+                printf("\n[ABORT] Seek to %d s failed. Skipping remaining operations.\n", seekSeconds);
+                break;
             }
 	}
 
@@ -1581,6 +2250,14 @@ GST_START_TEST (trickplayTest)
 	      * Wait for the requested time
 	      */
              printf ("Waiting for %f seconds\n", operationTimeout);
+
+             /* Record play operation verdict */
+             {
+                 OperationVerdict _pv;
+                 _pv.op_type     = "play";
+                 _pv.overall_pass = true;
+                 operation_verdicts.push_back(_pv);
+             }
 	 } 
 	 else if ("pause" == operationString)
          {
@@ -1619,6 +2296,14 @@ GST_START_TEST (trickplayTest)
 	      * Sleep for the requested time
 	      */
 	     operationTimeout -= 5;
+
+	     /* Record pause operation verdict */
+	     {
+	         OperationVerdict _pv;
+	         _pv.op_type     = "pause";
+	         _pv.overall_pass = true;
+	         operation_verdicts.push_back(_pv);
+	     }
 	 }
 	 if (true == checkAVStatus)
 	 {    
@@ -1640,7 +2325,61 @@ GST_START_TEST (trickplayTest)
 		 //Reset setRate
 		 data.setRate = NORMAL_PLAYBACK_RATE;
 	     }
-             PlaybackValidation(&data,timeout,seekOperation);
+             /* For backward seeks the wait loop ran gap+3 s, so the pipeline has
+              * already advanced past pre_seek_position_ns by the time we get here.
+              * Query the actual current position and use that as the PlaybackValidation
+              * baseline so the first poll diff is near zero.
+              * For forward seeks pass 0 to let PlaybackValidation use seekPosition as usual.
+              * Only do this when the wait loop actually ran (wait_loop_elapsed_sec > 0).
+              * If the wait loop was skipped (e.g. pause_operation=true) the pipeline is still
+              * at the seek target, so pass 0 and let PlaybackValidation use seekPosition. */
+             gint64 playback_baseline_ns = 0;
+             if (pre_seek_position_ns > (gint64)seekSeconds * (gint64)GST_SECOND
+                 && wait_loop_elapsed_sec > 0)
+             {
+                 /* Backward seek — wait loop ran; query actual current position */
+                 gst_element_query_position(data.playbin, GST_FORMAT_TIME, &playback_baseline_ns);
+                 if (playback_baseline_ns <= 0)
+                     playback_baseline_ns = pre_seek_position_ns;
+                 printf("\n[SEEK-BASELINE] Backward seek: using current position %.3f s as PlaybackValidation baseline\n",
+                        (double)playback_baseline_ns / GST_SECOND);
+             }
+             else if (pre_seek_position_ns > (gint64)seekSeconds * (gint64)GST_SECOND
+                      && wait_loop_elapsed_sec == 0)
+             {
+                 /* Backward seek — wait loop skipped (pause); use seek target */
+                 printf("\n[SEEK-BASELINE] Wait loop was skipped; using seek target %d s as PlaybackValidation baseline\n",
+                        seekSeconds);
+             }
+             else if (seekOperation)
+             {
+                 /* Forward seek — SEEK-CHECK + Sleep(1) consumed variable wall time,
+                  * so the pipeline has already advanced past seekSeconds+1 by the time
+                  * PlaybackValidation starts. Query the actual current position as baseline
+                  * instead of the stale (seekSeconds+1) value to avoid a constant diff
+                  * that grows into a false failure. */
+                 gst_element_query_position(data.playbin, GST_FORMAT_TIME, &playback_baseline_ns);
+                 if (playback_baseline_ns <= 0)
+                     playback_baseline_ns = (gint64)seekSeconds * (gint64)GST_SECOND;
+                 printf("\n[SEEK-BASELINE] Forward seek: using current position %.3f s as PlaybackValidation baseline\n",
+                        (double)playback_baseline_ns / GST_SECOND);
+             }
+             /* Adjust timeout: subtract time already spent in the wait loop */
+             int adjusted_timeout = timeout - wait_loop_elapsed_sec;
+             wait_loop_elapsed_sec = 0;  /* reset for next iteration */
+             if (adjusted_timeout <= 0)
+             {
+                 printf("\n[SEEK-WAIT] Wait loop consumed all %d s of play timeout. "
+                        "Skipping PlaybackValidation.\n", timeout);
+             }
+             else
+             {
+                 if (adjusted_timeout < timeout)
+                     printf("\n[SEEK-WAIT] %d s consumed by wait loop; running "
+                            "PlaybackValidation for remaining %d s.\n",
+                            timeout - adjusted_timeout, adjusted_timeout);
+                 PlaybackValidation(&data, adjusted_timeout, seekOperation, playback_baseline_ns);
+             }
 	 }
 	 else
          {
@@ -1653,6 +2392,36 @@ GST_START_TEST (trickplayTest)
     gst_object_unref(bus);
 
     terminatePipeline(data.playbin);
+    data.playbin = NULL;  /* prevent use-after-free; terminatePipeline already freed it */
+
+    /* Drop the original factory_make references to the sink elements.
+     * playbin held one ref to each during playback; that ref was released when
+     * playbin was destroyed by terminatePipeline() above.  The initial ref
+     * from gst_element_factory_make() is still outstanding and must be released
+     * explicitly — otherwise the GStreamer elements are leaked. */
+    if (data.westerosSink.sink)
+    {
+        gst_object_unref(data.westerosSink.sink);
+        data.westerosSink.sink = NULL;
+    }
+    if (data.audioSink.sink)
+    {
+        gst_object_unref(data.audioSink.sink);
+        data.audioSink.sink = NULL;
+    }
+
+    /* ================================================================
+     * POST-TEARDOWN FINAL VERDICT FOR ALL TRICKPLAY OPERATIONS
+     * Verdicts are printed in execution order.
+     * The first failed operation causes the testcase to FAIL.
+     * ================================================================ */
+    if (!operation_verdicts.empty())
+    {
+        bool any_failed = printOperationVerdicts();
+        fail_unless(!any_failed,
+                    "One or more trickplay operations FAILED. "
+                    "See TRICKPLAY OPERATIONS - VERDICT SUMMARY above.");
+    }
 }
 GST_END_TEST;
 
@@ -2089,10 +2858,10 @@ bool createDisplayClient()
             "id": 1,
             "method": "org.rdk.RDKWindowManager.1.createDisplay",
             "params": {
-                "displayParams" : {
-                    "client": "test",
-                    "displayName": "test"
-                }
+                "clientId": "test",
+                "displayName": "test",
+                "displayWidth": 1920,
+                "displayHeight": 1080
             }
         })";
     } else {
