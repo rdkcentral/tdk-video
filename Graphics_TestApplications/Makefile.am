@@ -51,5 +51,39 @@ vkoverlay_LDADD = $(COMMON_LIBS) -lm
 ogloverlay_SOURCES = src/gl_overlay_test.c
 ogloverlay_LDADD = $(COMMON_LIBS) -lm
 
+# Essos validation test
+bin_PROGRAMS += Essos_TDKTestApp
+Essos_TDKTestApp_SOURCES = src/EssosValidationSuite.cpp
+Essos_TDKTestApp_CXXFLAGS = ${AM_CXXFLAGS}
+if HAVE_EGL
+Essos_TDKTestApp_CXXFLAGS += ${EGL_CFLAGS}
+endif
+if TDKGRAPHICS
+Essos_TDKTestApp_LDFLAGS = $(AM_FLAGS) -lessos -ltdk-GLESv2
+else
+Essos_TDKTestApp_LDFLAGS = $(AM_FLAGS) -lessos -lGLESv2
+endif
+
+# Westeros validation test
+bin_PROGRAMS += Westeros_TDKTestApp
+Westeros_TDKTestApp_SOURCES = src/WesterosValidationSuite.cpp
+if TDKGRAPHICS
+Westeros_TDKTestApp_LDFLAGS= \
+   -lwayland-server \
+   -lwayland-client \
+   -lxkbcommon \
+   -lwesteros_simpleshell_client \
+   -ltdk-wayland-egl -ltdk-GLESv2\
+   -ltdk-EGL
+else
+Westeros_TDKTestApp_LDFLAGS= \
+   -lwayland-server \
+   -lwayland-client \
+   -lxkbcommon \
+   -lwesteros_simpleshell_client \
+   -lwayland-egl -lGLESv2\
+   -lEGL
+endif
+
 # Include header files in distribution
 noinst_HEADERS = include/overlay.h include/font8x8_basic.h include/vk_overlay_test.h

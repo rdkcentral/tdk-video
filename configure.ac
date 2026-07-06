@@ -367,22 +367,7 @@ AC_ARG_ENABLE([rdkfwupdater],
            [echo "rdkfwupdater component is not enabled"])
 AM_CONDITIONAL([rdkfwupdater], [test x$rdkfwupdater = xtrue])
 
-AC_ARG_ENABLE([fireboltcompliance],
-         AS_HELP_STRING([--enable-fireboltcompliance],[enable fireboltcompliance (default is no)]),
-         [
-           case "${enableval}" in
-              yes) FIREBOLTCOMPLIANCE=true
-                   AS_IF([test x$HYBRID = xtrue], [SUBDIR_HYBRID+=" FireboltCompliance_Validation "],
-                          [echo "FireboltCompliance enabled in Hybrid"])
-                   AS_IF([test x$CLIENT = xtrue], [SUBDIR_CLIENT+=" FireboltCompliance_Validation "],
-                          [echo "FireboltCompliance enabled in Client"]) ;;
-             no) FIREBOLTCOMPLIANCE=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-fireboltcompliance ]) ;;
-             esac
-            ],
-           [echo "FireboltCompliance is not enabled"])
 AM_CONDITIONAL([HAVE_EGL], [test x$HAVE_EGL = xtrue])
-AM_CONDITIONAL([FIREBOLTCOMPLIANCE], [test x$FIREBOLTCOMPLIANCE = xtrue])
 
 AC_ARG_ENABLE([tdkgraphics],
          AS_HELP_STRING([--enable-tdkgraphics],[enable tdkgraphics (default is no)]),
@@ -505,20 +490,20 @@ AC_ARG_ENABLE([mfrhal],
            [echo "mfrhal component is not enabled"])
 AM_CONDITIONAL([MFRHAL], [test x$MFRHAL = xtrue])
 
-AC_ARG_ENABLE([fncsPackage],
-         AS_HELP_STRING([--enable-fncsPackage],[enable fncsPackage (default is no)]),
+AC_ARG_ENABLE([npvsPackage],
+         AS_HELP_STRING([--enable-npvsPackage],[enable npvsPackage (default is no)]),
          [
            case "${enableval}" in
-              yes) fncspackage=true
-                   SUBDIR_DEFAULT=" MediaPipelineTests_stub FireboltCompliance_Validation "
+              yes) npvspackage=true
+                   SUBDIR_DEFAULT=" MediaPipelineTests_stub Graphics_TestApplications "
                    SUBDIR_HYBRID=" "
                    SUBDIR_CLIENT=" ";;
-             no) fncsPackage=false ;;
-            *) AC_MSG_ERROR([bad value ${enableval} for --enable-fncsPackage ]) ;;
+             no) npvsPackage=false ;;
+            *) AC_MSG_ERROR([bad value ${enableval} for --enable-npvsPackage ]) ;;
              esac
             ],
-           [echo "fncsPackage component is not enabled"])
-AM_CONDITIONAL([fncsPackage], [test x$fncsPackage = xtrue])
+           [echo "npvsPackage component is not enabled"])
+AM_CONDITIONAL([npvsPackage], [test x$npvsPackage = xtrue])
 
 AC_ARG_ENABLE([graphicstestapps],
          AS_HELP_STRING([--enable-graphicstestapps],[enable graphicstestapps (default is no)]),
@@ -603,10 +588,7 @@ AC_CONFIG_FILES([Makefile
 	 AAMP_stub/Makefile
          BluetoothHal_stub/Makefile
          MfrHal_stub/Makefile
-         FireboltCompliance_Validation/Makefile
-	 FireboltCompliance_Validation/graphics_validation/Makefile
-	 FireboltCompliance_Validation/GStreamer_plugins_test/Makefile
-	 MediaPipelineTests_stub/Makefile
+         MediaPipelineTests_stub/Makefile
 	 Apparmor_Stub/Makefile
 	 AudioCaptureMgr_stub/Makefile
 	 USBCtrl_stub/Makefile
