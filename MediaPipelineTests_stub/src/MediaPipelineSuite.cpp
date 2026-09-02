@@ -85,6 +85,9 @@ using namespace tinyxml2;
 #define PROGRESS_BAR_DISPLAY_INTERVAL   5 //seconds 
 #define resolution_count		3
 #define LOG_FILE                        "/opt/TDK/mediapipeline_test_step.log"
+#define DOT_GENERATE_SETUP(playbin) if(playbin) generate_dot_graph(playbin, "setup", current_test_name.c_str())
+#define DOT_GENERATE_PLAYING(playbin) if(playbin) generate_dot_graph(playbin, "playing", current_test_name.c_str())
+#define DOT_GENERATE_FINAL(playbin) if(playbin) generate_dot_graph(playbin, "final", current_test_name.c_str())
 
 char m_play_url[BUFFER_SIZE_LONG] = {'\0'};
 char tcname[BUFFER_SIZE_SHORT] = {'\0'};
@@ -92,6 +95,7 @@ char TDK_PATH[BUFFER_SIZE_SHORT] = {'\0'};
 char channel_url[BUFFER_SIZE_LONG] = {'\0'};
 char audio_change_test[BUFFER_SIZE_SHORT] = {'\0'};
 vector<string> operationsList;
+string current_test_name = "mediapipeline";
 
 /*
  * Default values for avstatus check flag and play_timeout if not received as input arguments
@@ -283,6 +287,50 @@ typedef struct CustomData {
  */
 static void handleMessage (MessageHandlerData *data, GstMessage *message);
 
+/********************************************************************************************************************
+Purpose:               Generate DOT graph for GStreamer pipeline visualization
+Parameters:
+pipeline               - The GStreamer pipeline element
+stage_name             - Stage identifier (e.g., "init", "playing", "post_seek", "final")
+test_name              - Test name for filename identification
+********************************************************************************************************************/
+void generate_dot_graph(GstElement *pipeline, const char *stage_name, const char *test_name = NULL)
+{
+    if (!pipeline) {
+        printf("[DOT] WARNING: Cannot generate dot graph - pipeline is NULL\n");
+        return;
+    }
+
+    const char *dot_dir = g_getenv("GST_DEBUG_DUMP_DOT_DIR");
+    if (!dot_dir) {
+        printf("[DOT] GST_DEBUG_DUMP_DOT_DIR is not set , not proceeding to capture dot graph\n");
+        return;
+    }
+
+    const char *use_test_name = test_name ? test_name : current_test_name.c_str();
+
+    /* Append a timestamp so each capture gets a unique name and is not overwritten */
+    char timestamp[32];
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", tm_info);
+
+    char filename[512];
+    mkdir(dot_dir, 0755);
+    snprintf(filename, sizeof(filename), "%s/MediaPipelineSuite_%s_%s_%s.dot", dot_dir, use_test_name, stage_name, timestamp);
+
+    char just_filename[256];
+    snprintf(just_filename, sizeof(just_filename), "MediaPipelineSuite_%s_%s_%s", use_test_name, stage_name, timestamp);
+
+    GST_DEBUG_BIN_TO_DOT_FILE((GstBin *)pipeline, GST_DEBUG_GRAPH_SHOW_ALL, just_filename);
+    
+    if (access(filename, F_OK) == 0) {
+        printf("[DOT] SUCCESS: DOT file created: %s\n", filename);
+    } else {
+        printf("[DOT] INFO: DOT file may be in %s\n", dot_dir);
+    }
+}
+
 bool fileExists(const char* filename, bool returnResult = false)
 {
    std::ifstream file_(filename);
@@ -371,13 +419,14 @@ void assert_failure(GstElement* playbin, bool success, const char *str= "Failure
 
 void terminatePipeline(GstElement* playbin)
 {
+   DOT_GENERATE_FINAL(playbin);
    if (playbin)
    {
         assert_failure(playbin, gst_element_set_state (playbin, GST_STATE_NULL), "Failed to set playbin to NULL state",__FUNCTION__,__LINE__,"Set Pipeline to NULL state");
         gst_object_unref (playbin);
    }
 }
-    
+
 /*******************************************************************************************************************************************
 Purpose:                To continue the state of the pipeline and check whether operation is being carried throughout the specified interval
 Parameters:
@@ -784,6 +833,7 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds)
 void PlaybackValidation(MessageHandlerData *data, int seconds)
 {
     startPlaybackValidationLogging(true);
+    DOT_GENERATE_PLAYING(data->playbin);
     if (only_audio)
     {
 	 checkPTS=false;
@@ -2273,6 +2323,7 @@ static void SetupPipeline (MessageHandlerData *data, bool play_after_setup = tru
      */
     data->playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
     assert_failure(data->playbin, data->playbin != NULL, "Failed to create 'playbin' element",__FUNCTION__,__LINE__,"Create Playbin Instance");
+    DOT_GENERATE_SETUP(data->playbin);
     /*
      * Set the url received from argument as the 'uri' for playbin
      */
@@ -4249,7 +4300,10 @@ media_pipeline_suite (void)
 
     GST_INFO ("Test Case name is %s\n", tcname);
     printf ("Test Case name is %s\n", tcname);
-    
+
+    if (tcname[0] != '\0')
+        current_test_name = tcname;
+
     if (strcmp ("test_generic_playback", tcname) == 0)
     {
        tcase_add_test (tc_chain, test_generic_playback);
