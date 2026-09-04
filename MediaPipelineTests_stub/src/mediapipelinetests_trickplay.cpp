@@ -26,6 +26,7 @@
 #include <time.h>
 #include <ctime>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <sstream>
 #include <chrono>
 #include <dlfcn.h>
@@ -67,6 +68,9 @@ using namespace std;
 #define DEBUG_PRINT(f_, ...)            if (enable_trace) \
                                             printf((f_), ##__VA_ARGS__)
 #define LOG_FILE                        "/opt/TDK/mediapipeline_trickplay_test_step.log"
+#define DOT_GENERATE_SETUP(playbin) if(playbin) generate_dot_graph(playbin, "setup")
+#define DOT_GENERATE_PLAYING(playbin) if(playbin) generate_dot_graph(playbin, "playing")
+#define DOT_GENERATE_FINAL(playbin) if(playbin) generate_dot_graph(playbin, "final")
 
 char m_play_url[BUFFER_SIZE_LONG] = {'\0'};
 char TDK_PATH[BUFFER_SIZE_SHORT] = {'\0'};
@@ -242,6 +246,47 @@ static void trickplayOperation (MessageHandlerData *data);
 static gdouble getRate (GstElement* playbin);
 static void SetupStream (MessageHandlerData *data);
 void execute_postrequisite();
+
+/********************************************************************************************************************
+Purpose:               Generate DOT graph for GStreamer pipeline visualization
+Parameters:
+pipeline               - The GStreamer pipeline element
+stage_name             - Stage identifier (e.g., "setup", "playing", "final")
+********************************************************************************************************************/
+void generate_dot_graph(GstElement *pipeline, const char *stage_name)
+{
+    if (!pipeline) {
+        printf("[DOT] WARNING: Cannot generate dot graph - pipeline is NULL\n");
+        return;
+    }
+
+    const char *dot_dir = g_getenv("GST_DEBUG_DUMP_DOT_DIR");
+    if (!dot_dir) {
+        printf("[DOT] GST_DEBUG_DUMP_DOT_DIR is not set, not proceeding to capture dot graph\n");
+        return;
+    }
+
+    /* Append a timestamp so each capture gets a unique name and is not overwritten */
+    char timestamp[32];
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", tm_info);
+
+    char filename[512];
+    mkdir(dot_dir, 0755);
+    snprintf(filename, sizeof(filename), "%s/MediaPipelineTests_Trickplay_%s_%s.dot", dot_dir, stage_name, timestamp);
+
+    char just_filename[256];
+    snprintf(just_filename, sizeof(just_filename), "MediaPipelineTests_Trickplay_%s_%s", stage_name, timestamp);
+
+    GST_DEBUG_BIN_TO_DOT_FILE((GstBin *)pipeline, GST_DEBUG_GRAPH_SHOW_ALL, just_filename);
+
+    if (access(filename, F_OK) == 0) {
+        printf("[DOT] SUCCESS: DOT file created: %s\n", filename);
+    } else {
+        printf("[DOT] INFO: DOT file may be in %s\n", dot_dir);
+    }
+}
 
 bool fileExists(const char* filename, bool returnResult = false)
 {
@@ -1400,6 +1445,9 @@ Return:               - None
 *********************************************************************************************************************/
 static void trickplayOperation(MessageHandlerData *data)
 {
+    /* Generate DOT graph during trickplay operation */
+    DOT_GENERATE_PLAYING(data->playbin);
+
     /*
      * Get the current playback position
      */
@@ -1752,6 +1800,9 @@ static void SetupStream (MessageHandlerData *data)
     printf ("\n\n\nPipeline set to : %s  state \n\n\n", gst_element_state_get_name(data->cur_state));
     WaitForOperation;
     assert_failure (data->playbin, data->cur_state == GST_STATE_PLAYING, "Pipeline is not set to playing state", __FUNCTION__,__LINE__,"Verifying if pipeline is successfully set to PLAYING state");
+
+    /* Generate DOT graph after pipeline setup */
+    DOT_GENERATE_SETUP(data->playbin);
 
     /*
      * Check if the first frame received flag is set
@@ -2390,6 +2441,9 @@ GST_START_TEST (trickplayTest)
 
     printf("\n unref the bus\n");
     gst_object_unref(bus);
+
+    /* Generate DOT graph before pipeline termination */
+    DOT_GENERATE_FINAL(data.playbin);
 
     terminatePipeline(data.playbin);
     data.playbin = NULL;  /* prevent use-after-free; terminatePipeline already freed it */
@@ -3310,6 +3364,13 @@ int main (int argc, char **argv)
 	     fprintf(file, "\nUnable to set WAYLAND_DISPLAY to \"test\"\n\n");
              goto exit;
          }
+    }
+    else if (startWesterosConfig)
+    {
+        /* Skip RDKWindowManager initialization when using westeros */
+        printf("\nSkipping RDKWindowManager initialization - using westeros renderer\n");
+        if (log_enabled)
+            fprintf(file, "\nSkipping RDKWindowManager initialization - using westeros renderer\n");
     }
     if ((startWesterosConfig) && (WesterosProcessID() == "NIL"))
     {
