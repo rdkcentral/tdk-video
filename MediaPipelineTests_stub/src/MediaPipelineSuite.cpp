@@ -5532,6 +5532,13 @@ int main (int argc, char **argv)
              goto exit;
          }
     }
+    else if (startWesterosConfig)
+    {
+        /* Skip RDKWindowManager initialization when using westeros */
+        printf("\nSkipping RDKWindowManager initialization - using westeros renderer\n");
+        if (log_enabled)
+            fprintf(file, "\nSkipping RDKWindowManager initialization - using westeros renderer\n");
+    }
     else
     {
 	if(!getPluginStatus())
