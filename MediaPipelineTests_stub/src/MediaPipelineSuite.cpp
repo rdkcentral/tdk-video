@@ -198,6 +198,7 @@ bool enable_last_sample = false;
 gint64 buffer_PTS = 0;
 bool live_stream = false;
 bool resolutionSeen[TOTAL_RESOLUTIONS_COUNT] = {false};
+gint64 seek_position = -1;  /* Seek position for test_seek_EOS (in nanoseconds). -1 means not provided. */
 
 /*
  * Playbin flags
@@ -3014,7 +3015,7 @@ static void tdkSourceSetup(GstElement *playbin, GstElement *source, gpointer use
     if (!only_video)
         feed->audio.app.appsrc = gst_tdk_src_get_audio_appsrc(GST_TDK_SRC(source));
 
-    if (feed->video.app.demuxed)
+    if (feed->video.app.demuxed && !only_audio && feed->video.app.appsrc != NULL)
     {
         if (feed->videoCaps != NULL)
         {
@@ -3063,7 +3064,7 @@ static void tdkSourceSetup(GstElement *playbin, GstElement *source, gpointer use
         }
     }
 
-    if (feed->audio.app.demuxed)
+    if (feed->audio.app.demuxed && !only_video && feed->audio.app.appsrc != NULL)
     {
         if (feed->audioCaps != NULL)
         {
@@ -3211,16 +3212,19 @@ static gboolean setupInlineMultiAppsrc(MessageHandlerData *data, bool play_after
     assert_failure(data->playbin, gst_element_set_state(data->playbin, GST_STATE_PAUSED) != GST_STATE_CHANGE_FAILURE,
             "Failed to set pipeline to paused state", __FUNCTION__, __LINE__, "Setting pipeline to paused state");
 
-    printf("\nPushing buffers into tdksrc -- Calling read_data\n");
-    if (!only_audio)
-        while (read_data(&feed.video));
-    else if (feed.video.app.appsrc != NULL)
-        g_signal_emit_by_name(feed.video.app.appsrc, "end-of-stream", &ret);
-
-    if (!only_video)
-        while (read_data(&feed.audio));
-    else if (feed.audio.app.appsrc != NULL)
+    /* Do NOT call read_data() here - it races with need-data callbacks already connected in tdkSourceSetup.
+       The callbacks will handle feeding buffers on-demand from the queues.
+       For audio-only, explicitly emit EOS if video stream not present. */
+    if (only_video && feed.audio.app.appsrc != NULL)
+    {
+        printf("\n[tdksrc] Video-only mode: explicitly emitting EOS to audio stream\n");
         g_signal_emit_by_name(feed.audio.app.appsrc, "end-of-stream", &ret);
+    }
+    if (only_audio && feed.video.app.appsrc != NULL)
+    {
+        printf("\n[tdksrc] Audio-only mode: explicitly emitting EOS to video stream\n");
+        g_signal_emit_by_name(feed.video.app.appsrc, "end-of-stream", &ret);
+    }
 
     if (!play_after_setup)
         goto cleanup_success;
@@ -3238,28 +3242,80 @@ static gboolean setupInlineMultiAppsrc(MessageHandlerData *data, bool play_after
             __FUNCTION__, __LINE__, "Verifying if pipeline is successfully set to PLAYING state");
 
 cleanup_success:
+    /* Disconnect source-setup handler to prevent re-registration on state changes */
     g_signal_handlers_disconnect_by_func(data->playbin, (gpointer)tdkSourceSetup, &feed);
+    
+    /* For non-trickplay (play_after_setup=false): disconnect all callbacks and free queues.
+       For trickplay (play_after_setup=true): keep queues intact for next channel/operation. */
+    if (!play_after_setup)
+    {
+        /* Disconnect need-data and seek-data callbacks to prevent dangling pointer access */
+        if (feed.video.app.appsrc != NULL)
+        {
+            g_signal_handlers_disconnect_by_func(feed.video.app.appsrc, (gpointer)tdkNeedData, &feed.video.app);
+            g_signal_handlers_disconnect_by_func(feed.video.app.appsrc, (gpointer)tdkSeekData, &feed.video.app);
+        }
+        if (feed.audio.app.appsrc != NULL)
+        {
+            g_signal_handlers_disconnect_by_func(feed.audio.app.appsrc, (gpointer)tdkNeedData, &feed.audio.app);
+            g_signal_handlers_disconnect_by_func(feed.audio.app.appsrc, (gpointer)tdkSeekData, &feed.audio.app);
+        }
+        
+        /* Free queues and caps only when not using them for trickplay */
+        if (feed.video.app.auQueue != NULL)
+        {
+            g_queue_free_full(feed.video.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+            feed.video.app.auQueue = NULL;
+        }
+        if (feed.audio.app.auQueue != NULL)
+        {
+            g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+            feed.audio.app.auQueue = NULL;
+        }
+    }
+    /* For trickplay mode: keep queues alive for next operation */
+    
     if (feed.videoCaps != NULL)
         gst_caps_unref(feed.videoCaps);
     if (feed.audioCaps != NULL)
         gst_caps_unref(feed.audioCaps);
-    if (feed.video.app.auQueue != NULL)
-        g_queue_free_full(feed.video.app.auQueue, (GDestroyNotify) gst_buffer_unref);
-    if (feed.audio.app.auQueue != NULL)
-        g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify) gst_buffer_unref);
     g_free(feed.video.app.data);
     g_free(feed.audio.app.data);
     return TRUE;
 
 cleanup_fail:
+    /* Cleanup failed before pipeline was fully created */
     g_signal_handlers_disconnect_by_func(data->playbin, (gpointer)tdkSourceSetup, &feed);
+    
+    /* Disconnect all callbacks to prevent dangling pointer access */
+    if (feed.video.app.appsrc != NULL)
+    {
+        g_signal_handlers_disconnect_by_func(feed.video.app.appsrc, (gpointer)tdkNeedData, &feed.video.app);
+        g_signal_handlers_disconnect_by_func(feed.video.app.appsrc, (gpointer)tdkSeekData, &feed.video.app);
+    }
+    if (feed.audio.app.appsrc != NULL)
+    {
+        g_signal_handlers_disconnect_by_func(feed.audio.app.appsrc, (gpointer)tdkNeedData, &feed.audio.app);
+        g_signal_handlers_disconnect_by_func(feed.audio.app.appsrc, (gpointer)tdkSeekData, &feed.audio.app);
+    }
+    
     if (feed.videoCaps != NULL)
         gst_caps_unref(feed.videoCaps);
     if (feed.audioCaps != NULL)
         gst_caps_unref(feed.audioCaps);
-    if (feed.video.app.auQueue != NULL)
+    
+    /* Setup failed before pipeline creation, buffers never reached pipeline.
+       Safe to cleanup and release all refs (demux ref + protection ref). */
+    if (!only_audio && feed.video.app.auQueue != NULL)
+    {
         g_queue_free_full(feed.video.app.auQueue, (GDestroyNotify) gst_buffer_unref);
-    if (feed.audio.app.auQueue != NULL)
+        feed.video.app.auQueue = NULL;
+    }
+    if (!only_video && feed.audio.app.auQueue != NULL)
+    {
+        g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+        feed.audio.app.auQueue = NULL;
+    }
         g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify) gst_buffer_unref);
     g_free(feed.video.app.data);
     g_free(feed.audio.app.data);
@@ -4876,18 +4932,22 @@ GST_START_TEST (test_seek_EOS)
     bus = gst_element_get_bus (data.playbin);
     assert_failure (data.playbin,bus != NULL,"Failed to get bus", __FUNCTION__,__LINE__,  "Get Playbin bus");
 
-    /* For multiappsrc mode: calculate target duration as (play_timeout + 30) seconds, skip duration query */
-    gint64 target_duration_ns = (play_timeout + 30) * GST_SECOND;
-    gint64 duration = target_duration_ns;
-    data.seekPosition = target_duration_ns - 1 * GST_SECOND;  /* Seek 1 second before EOS */
+    /* Check if seek position was provided via command line */
+    assert_failure (data.playbin, seek_position != -1, 
+                    "Seek position not provided. Use: seekPosition=<seconds> (e.g., seekPosition=39)", 
+                    __FUNCTION__, __LINE__, "Verify seek position is provided via command line");
 
-    printf("\n[test_seek_EOS] Using calculated duration: %" G_GINT64_FORMAT ":00 (play_timeout=%d + 30s) (multiappsrc mode)\n", 
+    /* Use provided seek position */
+    data.seekPosition = seek_position;
+    gint64 duration = (play_timeout + 30) * GST_SECOND;  /* Reference duration for logging */
+
+    printf("\n[test_seek_EOS] Using seek position from command line: %" G_GINT64_FORMAT " seconds\n", 
+           GST_TIME_AS_SECONDS(data.seekPosition));
+    printf("[test_seek_EOS] Reference duration: %" G_GINT64_FORMAT " seconds (play_timeout=%d + 30s)\n", 
            GST_TIME_AS_SECONDS(duration), play_timeout);
-    printf("[test_seek_EOS] Seeking to position: %" G_GINT64_FORMAT ":00 (1 second before EOS)\n", GST_TIME_AS_SECONDS(data.seekPosition));
 
-    printf ("\n\nDURATION OF STREAM :  %" G_GINT64_FORMAT, duration);
-    printf ("\nSeeking towards end of stream");
-    printf ("\nSEEK POSITION is set as %" G_GINT64_FORMAT, data.seekPosition);
+    printf ("\nSeeking to position: %" G_GINT64_FORMAT " nanoseconds\n", data.seekPosition);
+    printf ("\nSEEK POSITION is set as %" G_GINT64_FORMAT "\n", data.seekPosition);
 
     //Seek call
     assert_failure (data.playbin,gst_element_seek (data.playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
@@ -4922,9 +4982,12 @@ GST_START_TEST (test_seek_EOS)
        //Added GST_SECOND buffer time between currentPosition and seekPosition
        if (abs( data.currentPosition - data.seekPosition) <= (GST_SECOND))
        {
+           if (!seeked)  /* Only print once when seek is first detected */
+           {
+               printf("[test_seek_EOS] Seek completed: current position %" G_GINT64_FORMAT " within 1s of target %" G_GINT64_FORMAT "\n",
+                      data.currentPosition, data.seekPosition);
+           }
            seeked = TRUE;
-           printf("[test_seek_EOS] Seek completed: current position %" G_GINT64_FORMAT " within 1s of target %" G_GINT64_FORMAT "\n",
-                  data.currentPosition, data.seekPosition);
 	   //Reset to playing state
 	   if (seek_with_pause)
            {
@@ -4948,29 +5011,14 @@ GST_START_TEST (test_seek_EOS)
            break;
        }
     }
-    /* Primary goal: Receive EOS message when seeking to end of stream */
-    if (received_EOS)
-    {
-        printf ("\nTEST PASSED: EOS message received successfully\n");
-        printf ("\nCurrent playback position: %" G_GINT64_FORMAT "\n", data.currentPosition);
-    }
-    else
-    {
-        /* If no EOS received, at least verify seek was successful */
-        assert_failure (data.playbin,TRUE == seeked, "Seek Unsuccessfull and no EOS received\n", __FUNCTION__,__LINE__, "Verify if seek is successfull");
-        printf ("\nSEEK SUCCESSFULL : Current Position : %" G_GINT64_FORMAT " SEEK POSITION : %" G_GINT64_FORMAT "\n",data.currentPosition, data.seekPosition);
-    }
+    /* TEST SUCCESS CRITERIA: EOS message MUST be received when seeking to end of stream */
+    assert_failure (data.playbin, received_EOS == true, 
+                    "FAILED: No EOS message received within timeout. EOS reception is mandatory for test success.", 
+                    __FUNCTION__, __LINE__, "Verify EOS message is received when seeking to end of stream");
 
-    gst_object_unref(bus);
-
-    if (received_EOS == false)
-    {
-        printf("[test_seek_EOS] No EOS message received within timeout\n");
-    }
-    else
-    {
-        printf("[test_seek_EOS] SUCCESS: EOS message received as expected\n");
-    }
+    printf ("\n[test_seek_EOS] TEST PASSED: EOS message received successfully\n");
+    printf ("[test_seek_EOS] Current playback position: %" G_GINT64_FORMAT " nanoseconds\n", data.currentPosition);
+    printf ("[test_seek_EOS] Seek position was: %" G_GINT64_FORMAT " nanoseconds\n", data.seekPosition);
 
     printf ("\nEOS Received with pipeline in %s state\n",gst_element_state_get_name(cur_state));
 
@@ -6576,6 +6624,14 @@ int main (int argc, char **argv)
                 {
                     strtok (argv[arg], "=");
                     connection_speed = atoi (strtok (NULL, "="));
+                }
+		if (strstr (argv[arg], "seekPosition=") != NULL)
+                {
+                    strtok (argv[arg], "=");
+                    gint64 seek_pos_seconds = atoi (strtok (NULL, "="));
+                    seek_position = seek_pos_seconds * GST_SECOND;
+                    printf("[main] Seek position set to %lld seconds (%" G_GINT64_FORMAT " nanoseconds)\n", 
+                           seek_pos_seconds, seek_position);
                 }
 		if (strstr (argv[arg], "height=") != NULL)
                 {
