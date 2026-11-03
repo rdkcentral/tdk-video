@@ -23,7 +23,6 @@ TEST=$1
 TIMEOUT=$2
 TEST_OPTION=$3
 
-
 if [ "$1" == "--help" ];then
    printf '#%.0s' {1..100}
    printf "\nThis Test Script executes Essos_TDKTestApp, Westeros_TDKTestApp and waymetric along with all the pre-requisites\n"
@@ -63,15 +62,27 @@ if [[ ! -z `systemctl status wpeframework 2>/dev/null | grep "active (running)"`
     wpeframework_stop=1
 fi
 
+hdmiservice_stop=0
+if systemctl is-active --quiet hdmiservice 2>/dev/null; then
+    echo "$SVC is active, stopping it"
+    systemctl stop hdmiservice
+    hdmiservice_stop=1
+fi
 
 #Run waymetric --no-multi test
 if [ "$TEST" == "Waymetric" ];
 then
     printf "Starting waymetric test"
+    wayland_egl_library=`find /usr/lib -iname "libwayland-egl.so*" | head -n1`
+    export LD_PRELOAD=${LD_PRELOAD}:${wayland_egl_library}
     waymetric --no-multi
     #Reset wpeframework to original state
     if [[ "$wpeframework_stop" == 1 ]]; then
         systemctl start wpeframework
+    fi
+    #Reset hdmiservice to original state
+    if [[ "$hdmiservice_stop" == 1 ]]; then
+        systemctl start hdmiservice
     fi
     exit
 fi
