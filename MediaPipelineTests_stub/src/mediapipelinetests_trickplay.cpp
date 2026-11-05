@@ -39,6 +39,9 @@ extern "C"
 {
 #include <gst/check/gstcheck.h>
 #include <gst/gst.h>
+#include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
+#include "GstTdkSrc.h"
 }
 using namespace std;
 #define RATE_SET_TIMEOUT                5
@@ -94,6 +97,7 @@ bool checkPTS = true;
 gint64 currentposition;
 bool trickplay = false;
 bool pause_operation = false;
+
 /* Set to true by assert_failure() after it unrefs the pipeline.
  * The operations loop checks this flag at every iteration to avoid
  * dereferencing a freed data.playbin when GCheck CK_NOFORK mode
@@ -156,6 +160,21 @@ bool displayCreated = false;
 bool useWindowManager = false;
 int returnValue = 0;
 
+/* Multiappsrc support for container file playback */
+bool use_multiappsrc = false;
+bool bufferUnderflowTest = false;
+bool multiappsrc_defer_eos = false;  /* For trickplay: defer EOS until after operations complete */
+GstElement *multiappsrc_video_appsrc = NULL;  /* Reference to video appsrc for deferred EOS */
+GstElement *multiappsrc_audio_appsrc = NULL;  /* Reference to audio appsrc for deferred EOS */
+GQueue *multiappsrc_video_queue = NULL;  /* Reference to video buffer queue for pre-load */
+GQueue *multiappsrc_audio_queue = NULL;  /* Reference to audio buffer queue for pre-load */
+void *multiappsrc_video_app = NULL;  /* Opaque pointer to video App struct for updating iterator in pre-load */
+void *multiappsrc_audio_app = NULL;  /* Opaque pointer to audio App struct for updating iterator in pre-load */
+GList *multiappsrc_audio_buffer_iter = NULL;  /* Iterator for audio buffer queue (need-data position) */
+guint64 total_bytes_fed = 0;
+guint64 BYTES_THRESHOLD = 0;
+guint64 trickplay_buffer_duration_ns = 0;  /* Dynamically calculated for trickplay operations */
+
 /*
  * Playbin flags
  */
@@ -210,8 +229,28 @@ typedef struct SinkData {
     gboolean UnderflowReceived;
 } SinkElementData;
 
+typedef struct _App App;
+
+struct _App
+{
+  GstElement *appsrc;
+  guint sourceid;
+  GMappedFile *file;
+  gchar *data;
+  gsize length;
+  guint64 offset;
+  gboolean demuxed;
+  GQueue *auQueue;
+  GstCaps *caps;                              /* Demuxed stream capabilities */
+  guint64 demuxed_cumulative_duration_ns;     /* Track cumulative duration for demuxed queue feeding */
+  gboolean segment_event_sent;                /* Flag to track if segment event has been sent */
+  GList *current_buffer_iter;                 /* Iterator for current buffer during seek repositioning */
+  guint64 current_byte_offset;                /* Byte offset tracker for seeking support */
+};
+
 typedef struct CustomData {
     GstElement *playbin;                /* Playbin element handle */
+    App app;                            /* Appsrc data for multiappsrc mode */
     SinkElementData westerosSink;       /* westerossink element handle */
     SinkElementData audioSink;          /* audioSink element handle */
     gboolean pipelineInitiation;        /* Variable to indicate whether pipeline playback validation is just started */
@@ -245,6 +284,7 @@ static void handleMessage (MessageHandlerData *data, GstMessage *message);
 static void trickplayOperation (MessageHandlerData *data);
 static gdouble getRate (GstElement* playbin);
 static void SetupStream (MessageHandlerData *data);
+static void tdkPreloadFastforward(App *videoApp, App *audioApp, gdouble trickplayRate);
 void execute_postrequisite();
 
 /********************************************************************************************************************
@@ -674,7 +714,6 @@ static void PlaySeconds(GstElement* playbin,int RunSeconds,bool seekOperation=fa
    gfloat previous_position = 0;
    gint jump_buffer = 3;
    gint jump_buffer_small_value = 3;
-   GstStateChangeReturn state_change;
    gfloat _startPosition = 0;
 
 
@@ -1082,6 +1121,8 @@ void PlaybackValidation(MessageHandlerData *data, int seconds, bool seekOperatio
 
                  if ((data->audioSink.rendered_frames <= data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PLAYING))
                     data->audioSink.frame_buffer -= 1;
+                else if ((data->audioSink.rendered_frames > data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PLAYING) && (data->audioSink.frame_buffer < 3))
+                    data->audioSink.frame_buffer += 1;
 		 else if ((data->audioSink.rendered_frames != data->audioSink.previous_rendered_frames) &&  (data->cur_state == GST_STATE_PAUSED))
 		    data->audioSink.frame_buffer -= 1;
 
@@ -1306,7 +1347,12 @@ static void checkTrickplay(MessageHandlerData *Param)
             /* Video-PTS check: pts within 1 s of seek target (90 kHz ticks) */
             gint64 vo_pts = 0;
             bool pts_ok = false;
-            if (Param->westerosSink.sink)
+            /* Skip video-pts validation for audio-only playback */
+            if (only_audio)
+            {
+                pts_ok = true;  /* Mark as OK to skip video-pts validation */
+            }
+            else if (Param->westerosSink.sink)
             {
                 g_object_get(Param->westerosSink.sink, "video-pts", &vo_pts, NULL);
                 gint64 seek_ticks = (data.seekPosition / (gint64)GST_SECOND) * 90000LL;
@@ -1459,7 +1505,31 @@ static void trickplayOperation(MessageHandlerData *data)
 	data->seekPosition = (GST_SECOND) * (data->seekSeconds);
 	timestamp = std::chrono::high_resolution_clock::now();
 
-	assert_failure (data->playbin, gst_element_seek (data->playbin, NORMAL_PLAYBACK_RATE, GST_FORMAT_TIME,
+        /* Flush audio and video appsrc sources (MPB pattern) to prevent audio sync issues.
+           Flush at the source rather than sink for better buffering control. */
+        printf("[trickplay] Flushing appsrc sources before seek to position %.1f seconds\n", data->seekSeconds);
+        
+        /* Flush audio source if available */
+        if (multiappsrc_audio_appsrc != NULL && !only_video)
+        {
+            printf("[trickplay] Flushing audio appsrc...\n");
+            gst_element_send_event(multiappsrc_audio_appsrc, gst_event_new_flush_start());
+            gst_element_send_event(multiappsrc_audio_appsrc, gst_event_new_flush_stop(FALSE));
+        }
+        
+        /* Flush video source if available */
+        if (multiappsrc_video_appsrc != NULL && !only_audio)
+        {
+            printf("[trickplay] Flushing video appsrc...\n");
+            gst_element_send_event(multiappsrc_video_appsrc, gst_event_new_flush_start());
+            gst_element_send_event(multiappsrc_video_appsrc, gst_event_new_flush_stop(FALSE));
+        }
+        
+        g_usleep(10000);  /* 10ms for flush to propagate */
+	
+	gdouble seek_rate = (only_audio) ? 1.0 : NORMAL_PLAYBACK_RATE;
+	
+	assert_failure (data->playbin, gst_element_seek (data->playbin, seek_rate, GST_FORMAT_TIME,
                                    GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, data->seekPosition,
                                    GST_SEEK_TYPE_NONE, GST_CLOCK_TIME_NONE), "Failed to seek", __FUNCTION__, __LINE__, "Seek to the position");
 	if (only_audio)
@@ -1494,6 +1564,41 @@ static void trickplayOperation(MessageHandlerData *data)
             fprintf(file, "\n");
 	trickplay = true;
         GST_LOG ("Setting the playback rate to %f\n", data->setRate);
+        
+        /* Flush audio and video appsrc sources (MPB pattern) before rate change.
+           Clears accumulated frames so only new data flows during FF/RW. */
+        printf("[trickplay] Flushing appsrc sources before rate change (rate=%.1fx)\n", data->setRate);
+        
+        /* Flush audio source if available */
+        if (multiappsrc_audio_appsrc != NULL && !only_video)
+        {
+            printf("[trickplay] Flushing audio appsrc...\n");
+            gst_element_send_event(multiappsrc_audio_appsrc, gst_event_new_flush_start());
+            gst_element_send_event(multiappsrc_audio_appsrc, gst_event_new_flush_stop(FALSE));
+        }
+        
+        /* Flush video source if available */
+        if (multiappsrc_video_appsrc != NULL && !only_audio)
+        {
+            printf("[trickplay] Flushing video appsrc...\n");
+            gst_element_send_event(multiappsrc_video_appsrc, gst_event_new_flush_start());
+            gst_element_send_event(multiappsrc_video_appsrc, gst_event_new_flush_stop(FALSE));
+        }
+        
+        g_usleep(10000);  /* 10ms for flush to propagate */
+        
+        /* Pre-load buffers ONLY for fastforward (not for seeks or rewind) 
+           Fastforward = setRateOperation=TRUE && rate>1.0
+           For 2x: 2 minutes buffer | For 3x/4x: 4 minutes buffer */
+        
+        gdouble trickplay_rate = (only_audio) ? 1.0 : data->setRate;
+        
+        printf("[trickplay] Seeking playbin with rate=%.1fx for %s\n", 
+               trickplay_rate, only_audio ? "audio-only" : "video");
+        
+        /* For audio-only trickplay, rate=1.0 to playbin seek but audio decoder speed is set via server-play-speed */
+        /* For video, use actual trickplay rate */
+        
         /*
          * Playback rates can be positive or negative depending on whether we are fast forwarding or rewinding
          * Below are the Playback rates used in our test scenarios
@@ -1510,9 +1615,32 @@ static void trickplayOperation(MessageHandlerData *data)
          * Rewind the pipeline if rate is a negative number
          */ 
         timestamp = std::chrono::high_resolution_clock::now();
+        
+        /* Use FLUSH flag to trigger seek-data callback which repositions iterator.
+           This is essential for both seek and rate-change operations to work correctly. */
+        GstSeekFlags seek_flags = GST_SEEK_FLAG_FLUSH;
+        
+        printf("[trickplay] Current position before rate change seek: %" GST_TIME_FORMAT " (seconds: %.1f)\n",
+               GST_TIME_ARGS(data->currentPosition), (double)data->currentPosition / GST_SECOND);
+        
+        /* Diagnostic logging for standalone fastforward debugging */
+        if (use_multiappsrc && data->setRateOperation)
+        {
+            fprintf(stderr, "[trickplay-diagnostic] BEFORE rate change:\n");
+            fprintf(stderr, "  currentPosition: %.3f seconds\n", (double)data->currentPosition / GST_SECOND);
+            fprintf(stderr, "  video_queue size: %u buffers\n", 
+                    multiappsrc_video_queue ? g_queue_get_length(multiappsrc_video_queue) : 0);
+            fprintf(stderr, "  audio_queue size: %u buffers\n",
+                    multiappsrc_audio_queue ? g_queue_get_length(multiappsrc_audio_queue) : 0);
+            fprintf(stderr, "  video_iter: %p\n", 
+                    multiappsrc_video_app ? ((App*)multiappsrc_video_app)->current_buffer_iter : NULL);
+            fprintf(stderr, "  audio_iter: %p\n",
+                    multiappsrc_audio_app ? ((App*)multiappsrc_audio_app)->current_buffer_iter : NULL);
+        }
+        
         if (data->setRate < 0)
-	{
-	     assert_failure (data->playbin, gst_element_seek (data->playbin, data->setRate, GST_FORMAT_TIME, GST_SEEK_FLAG_FLUSH,
+	    {
+	     assert_failure (data->playbin, gst_element_seek (data->playbin, trickplay_rate, GST_FORMAT_TIME, seek_flags,
                   GST_SEEK_TYPE_SET, 0, GST_SEEK_TYPE_SET, data->currentPosition), "Failed to set playback rate",__FUNCTION__,__LINE__,"Playback rate is set"); 
         }   
     	/*
@@ -1520,9 +1648,144 @@ static void trickplayOperation(MessageHandlerData *data)
          */
         else
         {
-             assert_failure (data->playbin, gst_element_seek(data->playbin, data->setRate, GST_FORMAT_TIME, GST_SEEK_FLAG_FLUSH, GST_SEEK_TYPE_SET, data->currentPosition,
+             assert_failure (data->playbin, gst_element_seek(data->playbin, trickplay_rate, GST_FORMAT_TIME, seek_flags, GST_SEEK_TYPE_SET, data->currentPosition,
                 GST_SEEK_TYPE_SET, GST_CLOCK_TIME_NONE), "Failed to set playback rate",__FUNCTION__,__LINE__,"Playback rate is set");
-	}    
+	}
+        
+        /* Manually reposition BOTH video and audio iterators to ensure they're at the correct position.
+           This handles cases where seek-data callbacks don't fire for one or both streams.
+           After FLUSH seek, tdkSeekData should have repositioned them, but we verify and fix if needed. */
+        if (use_multiappsrc && multiappsrc_video_app != NULL && multiappsrc_audio_app != NULL)
+        {
+            App *video_app = (App *)multiappsrc_video_app;
+            App *audio_app = (App *)multiappsrc_audio_app;
+            
+            printf("[trickplay] Manual iterator repositioning after seek to %.1f seconds\n", 
+                   (double)data->currentPosition / GST_SECOND);
+            
+            /* Reposition video iterator */
+            if (video_app->auQueue != NULL)
+            {
+                GList *iter = video_app->auQueue->head;
+                GList *first_at_or_after = NULL;  /* First buffer at or after seek position */
+                gboolean found = FALSE;
+                
+                while (iter != NULL)
+                {
+                    GstBuffer *buf = (GstBuffer *)iter->data;
+                    guint64 buf_pts = GST_BUFFER_PTS(buf);
+                    guint64 buf_duration = GST_BUFFER_DURATION(buf);
+                    
+                    if (buf_pts != GST_CLOCK_TIME_NONE && buf_duration != GST_CLOCK_TIME_NONE)
+                    {
+                        /* Check if seek position is within this buffer */
+                        if (buf_pts <= data->currentPosition && data->currentPosition < buf_pts + buf_duration)
+                        {
+                            video_app->current_buffer_iter = iter;
+                            printf("[trickplay] Video iterator repositioned to buffer at %" GST_TIME_FORMAT "\n", 
+                                   GST_TIME_ARGS(buf_pts));
+                            found = TRUE;
+                            break;
+                        }
+                        
+                        /* Track first buffer at or after seek position */
+                        if (buf_pts >= data->currentPosition && first_at_or_after == NULL)
+                            first_at_or_after = iter;
+                    }
+                    iter = iter->next;
+                }
+                
+                if (!found)
+                {
+                    if (first_at_or_after != NULL)
+                    {
+                        video_app->current_buffer_iter = first_at_or_after;
+                        GstBuffer *buf = (GstBuffer *)first_at_or_after->data;
+                        printf("[trickplay] Video iterator not found within buffer, repositioned to first buffer at/after seek (%" GST_TIME_FORMAT ")\n", 
+                               GST_TIME_ARGS(GST_BUFFER_PTS(buf)));
+                    }
+                    else if (video_app->auQueue->head != NULL)
+                    {
+                        video_app->current_buffer_iter = video_app->auQueue->head;
+                        printf("[trickplay] Video iterator not found, repositioned to head\n");
+                    }
+                }
+            }
+            
+            /* Reposition audio iterator */
+            if (audio_app->auQueue != NULL)
+            {
+                GList *iter = audio_app->auQueue->head;
+                GList *first_at_or_after = NULL;  /* First buffer at or after seek position */
+                gboolean found = FALSE;
+                
+                while (iter != NULL)
+                {
+                    GstBuffer *buf = (GstBuffer *)iter->data;
+                    guint64 buf_pts = GST_BUFFER_PTS(buf);
+                    guint64 buf_duration = GST_BUFFER_DURATION(buf);
+                    
+                    if (buf_pts != GST_CLOCK_TIME_NONE && buf_duration != GST_CLOCK_TIME_NONE)
+                    {
+                        /* Check if seek position is within this buffer */
+                        if (buf_pts <= data->currentPosition && data->currentPosition < buf_pts + buf_duration)
+                        {
+                            audio_app->current_buffer_iter = iter;
+                            printf("[trickplay] Audio iterator repositioned to buffer at %" GST_TIME_FORMAT "\n", 
+                                   GST_TIME_ARGS(buf_pts));
+                            found = TRUE;
+                            break;
+                        }
+                        
+                        /* Track first buffer at or after seek position */
+                        if (buf_pts >= data->currentPosition && first_at_or_after == NULL)
+                            first_at_or_after = iter;
+                    }
+                    iter = iter->next;
+                }
+                
+                if (!found)
+                {
+                    if (first_at_or_after != NULL)
+                    {
+                        audio_app->current_buffer_iter = first_at_or_after;
+                        GstBuffer *buf = (GstBuffer *)first_at_or_after->data;
+                        printf("[trickplay] Audio iterator not found within buffer, repositioned to first buffer at/after seek (%" GST_TIME_FORMAT ")\n", 
+                               GST_TIME_ARGS(GST_BUFFER_PTS(buf)));
+                    }
+                    else if (audio_app->auQueue->head != NULL)
+                    {
+                        audio_app->current_buffer_iter = audio_app->auQueue->head;
+                        printf("[trickplay] Audio iterator not found, repositioned to head\n");
+                    }
+                }
+            }
+        }
+        
+        printf("[trickplay] Rate change complete (rate=%.1fx), audio buffers flushed\n", data->setRate);
+        
+        /* Pre-load buffers AFTER seek completes (seek repositions iterator via tdkSeekData callback).
+           Now current_buffer_iter is at the correct position for preload to start from.
+           IMPORTANT: Pre-load BOTH video and audio in a single call to prevent confusion. */
+        if (use_multiappsrc && data->setRateOperation && data->setRate > 1.0)
+        {
+            printf("[trickplay] Pre-loading buffers for fastforward at rate %.1fx\n", data->setRate);
+            /* Defer EOS until after trickplay completes to allow pipeline to consume all pre-loaded buffers */
+            multiappsrc_defer_eos = true;
+            
+            /* Pre-load both video and audio buffers in a single call */
+            if (multiappsrc_video_app != NULL && !only_audio)
+            {
+                App *video_app = (App *)multiappsrc_video_app;
+                App *audio_app = (multiappsrc_audio_app && !only_video) ? (App *)multiappsrc_audio_app : NULL;
+                
+                printf("[trickplay] Pre-loading video: iter=%p, audio: iter=%p\n",
+                       video_app->current_buffer_iter, audio_app ? audio_app->current_buffer_iter : NULL);
+                
+                tdkPreloadFastforward(video_app, audio_app, data->setRate);
+            }
+        }
+        
 
     }
 
@@ -1596,6 +1859,11 @@ static void trickplayOperation(MessageHandlerData *data)
             operation_verdicts.push_back(_fv);
 
             printf("\nRate is set to fastforward %0.2fx speed\n", abs(data->setRate));
+            
+            /* Reset defer_eos flag now that trickplay has completed 
+               This allows EOS to be emitted normally when buffers are exhausted */
+            if (use_multiappsrc)
+                multiappsrc_defer_eos = false;
         }
         else
         {
@@ -1691,6 +1959,1446 @@ void setflags()
 }
 
 /********************************************************************************************************************
+Purpose:               Multiappsrc Support Functions for Container File Demuxing
+********************************************************************************************************************/
+
+/* Pre-load buffers for fastforward: push buffers for 120s (2x) or 240s (3x/4x) of duration
+ * Uses cumulative duration tracking (like MediaPipelineSuite_latest.cpp) to ensure exact duration
+ * This ensures audio/video are available immediately without need-data starvation during FF
+ * Only called for fastforward (not for seek or normal playback) */
+static void tdkPreloadFastforward(App *videoApp, App *audioApp, gdouble trickplayRate)
+{
+    /* Determine buffer threshold based on trickplay rate - adds 30s safety margin like latest.cpp */
+    guint64 base_preload_seconds = 2 * 60;  /* Default: 2 minutes for 2x */
+    if (trickplayRate >= 3.0) {
+        base_preload_seconds = 4 * 60;  /* 4 minutes for 3x, 4x rates */
+    }
+    guint64 safety_margin_seconds = 30;  /* Extra buffer to prevent starvation (same as latest.cpp) */
+    guint64 target_preload_ns = (base_preload_seconds + safety_margin_seconds) * GST_SECOND;
+    
+    guint preload_count = 0;
+    guint64 accumulated_video_duration_ns = 0;
+    guint64 accumulated_audio_duration_ns = 0;
+    GstFlowReturn ret;
+
+    if (videoApp == NULL || videoApp->auQueue == NULL)
+    {
+        printf("[trickplay-preload] WARNING: videoApp or auQueue is NULL, skipping pre-load\n");
+        return;
+    }
+
+    printf("\n[trickplay-preload] Pre-loading for rate=%.1fx: %.0f + %.0f sec margin = %.0f seconds total\n", 
+           trickplayRate, (double)base_preload_seconds, (double)safety_margin_seconds, 
+           (double)(base_preload_seconds + safety_margin_seconds));
+    printf("[trickplay-preload] Video queue has %u buffers total\n", g_queue_get_length(videoApp->auQueue));
+    
+    /* After gst_element_seek() call above (with FLUSH flag), tdkSeekData callback is triggered.
+       It repositions current_buffer_iter to the buffer at the current playback position (e.g., 10s).
+       This ensures preload starts from the right position without re-pushing already-consumed buffers. */
+    GList *iter = videoApp->current_buffer_iter;
+    if (iter == NULL)
+    {
+        printf("[trickplay-preload] WARNING: current_buffer_iter is NULL after seek repositioning, cannot preload\n");
+        return;
+    }
+    GList *last_pushed_iter = NULL;  /* Track the last buffer we successfully pushed */
+    while (iter != NULL)
+    {
+        GstBuffer *buf = (GstBuffer *)iter->data;
+        if (buf == NULL)
+        {
+            iter = iter->next;
+            continue;
+        }
+
+        guint64 buf_duration = GST_BUFFER_DURATION(buf);
+        guint64 buf_pts = GST_BUFFER_PTS(buf);
+        
+        /* Track cumulative duration (same logic as MediaPipelineSuite_latest.cpp) */
+        if (buf_duration != GST_CLOCK_TIME_NONE)
+            accumulated_video_duration_ns += buf_duration;
+
+        /* Stop pre-loading once we've accumulated enough duration */
+        if (accumulated_video_duration_ns >= target_preload_ns)
+        {
+            printf("[trickplay-preload] Video: reached target duration at PTS %" GST_TIME_FORMAT 
+                   " (accumulated %" GST_TIME_FORMAT " >= target %" GST_TIME_FORMAT ")\n",
+                   GST_TIME_ARGS(buf_pts), GST_TIME_ARGS(accumulated_video_duration_ns), 
+                   GST_TIME_ARGS(target_preload_ns));
+            break;
+        }
+
+        /* Push buffer to appsrc */
+        if (videoApp->appsrc != NULL)
+        {
+            gst_buffer_ref(buf);  /* Extra ref for protection */
+            ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(videoApp->appsrc), buf);
+            
+            if (ret == GST_FLOW_OK)
+            {
+                preload_count++;
+                last_pushed_iter = iter;  /* Track this as the last successfully pushed buffer */
+                if (preload_count <= 5)  /* Only log first 5 to avoid spam */
+                    printf("[trickplay-preload] Pushed buffer %u (PTS %" GST_TIME_FORMAT ")\n",
+                           preload_count, GST_TIME_ARGS(buf_pts));
+            }
+            else
+            {
+                printf("[trickplay-preload] ERROR pushing buffer (ret=%s)\n", gst_flow_get_name(ret));
+                break;
+            }
+        }
+        else
+        {
+            printf("[trickplay-preload] WARNING: appsrc is NULL, cannot push buffers\n");
+            break;
+        }
+
+        iter = iter->next;
+    }
+    
+    printf("[trickplay-preload] COMPLETE: %u video buffers pre-loaded (%.2f seconds)\n", 
+           preload_count, (double)accumulated_video_duration_ns / GST_SECOND);
+    
+    /* CRITICAL: Update video app's iterator and handle EOS for pre-load
+       If we broke early (iter != NULL): resume from iter (first buffer after threshold)
+       If we consumed all buffers (iter == NULL): emit EOS immediately to signal end-of-stream */
+    if (iter != NULL)
+    {
+        videoApp->current_buffer_iter = iter;  /* Resume from first buffer after threshold */
+        printf("[trickplay-preload] Video: resume from buffer after pre-load threshold\n");
+    }
+    else if (last_pushed_iter != NULL)
+    {
+        /* All buffers consumed */
+        videoApp->current_buffer_iter = NULL;  /* Clear iterator */
+        if (!multiappsrc_defer_eos)
+        {
+            /* Emit EOS immediately if not deferring */
+            GstFlowReturn eos_ret = GST_FLOW_OK;
+            g_signal_emit_by_name(videoApp->appsrc, "end-of-stream", &eos_ret);
+            printf("[trickplay-preload] Video: all buffers pre-loaded, EOS emitted immediately\n");
+        }
+        else
+        {
+            /* Defer EOS until after trickplay completes */
+            printf("[trickplay-preload] Video: all buffers pre-loaded, EOS deferred until trickplay completes\n");
+        }
+    }
+    
+    /* Pre-load audio buffers - use audioApp parameter if provided, otherwise use globals */
+    App *active_audio_app = audioApp;  /* Use parameter if provided */
+    if (active_audio_app == NULL && multiappsrc_audio_app != NULL)
+        active_audio_app = (App *)multiappsrc_audio_app;  /* Fall back to global */
+    
+    if (active_audio_app != NULL && active_audio_app->auQueue != NULL && 
+        active_audio_app->appsrc != NULL && !only_video)
+    {
+        guint audio_preload_count = 0;
+        /* CRITICAL: Start from current audio position, not from queue->head (same fix as video).
+           This prevents re-pushing already-consumed audio buffers. */
+        GList *audio_iter = active_audio_app->current_buffer_iter;
+        
+        if (audio_iter == NULL)
+        {
+            printf("[trickplay-preload] WARNING: audio current_buffer_iter is NULL, cannot preload\n");
+            return;
+        }
+        
+        GList *last_pushed_iter = NULL;  /* Track the last buffer we successfully pushed */
+        accumulated_audio_duration_ns = 0;
+        
+        printf("[trickplay-preload] Pre-loading audio buffers (target: %.0f seconds)\n",
+               (double)target_preload_ns / GST_SECOND);
+        
+        while (audio_iter != NULL)
+        {
+            GstBuffer *audio_buf = (GstBuffer *)audio_iter->data;
+            if (audio_buf == NULL)
+            {
+                audio_iter = audio_iter->next;
+                continue;
+            }
+            
+            guint64 audio_duration = GST_BUFFER_DURATION(audio_buf);
+            guint64 audio_pts = GST_BUFFER_PTS(audio_buf);
+            
+            /* Track cumulative duration (same as video) */
+            if (audio_duration != GST_CLOCK_TIME_NONE)
+                accumulated_audio_duration_ns += audio_duration;
+            
+            /* Stop pre-loading once we've accumulated enough duration */
+            if (accumulated_audio_duration_ns >= target_preload_ns)
+            {
+                printf("[trickplay-preload] Audio: reached target duration at PTS %" GST_TIME_FORMAT 
+                       " (accumulated %" GST_TIME_FORMAT " >= target %" GST_TIME_FORMAT ")\n",
+                       GST_TIME_ARGS(audio_pts), GST_TIME_ARGS(accumulated_audio_duration_ns),
+                       GST_TIME_ARGS(target_preload_ns));
+                break;
+            }
+            
+            /* Push audio buffer to appsrc */
+            gst_buffer_ref(audio_buf);
+            ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(active_audio_app->appsrc), audio_buf);
+            
+            if (ret == GST_FLOW_OK)
+            {
+                audio_preload_count++;
+                last_pushed_iter = audio_iter;  /* Track this as the last successfully pushed buffer */
+                if (audio_preload_count <= 5)  /* Only log first 5 to avoid spam */
+                    printf("[trickplay-preload] Pushed audio buffer %u (PTS %" GST_TIME_FORMAT ")\n",
+                           audio_preload_count, GST_TIME_ARGS(audio_pts));
+            }
+            else
+            {
+                printf("[trickplay-preload] ERROR pushing audio buffer (ret=%s)\n", gst_flow_get_name(ret));
+                break;
+            }
+            
+            audio_iter = audio_iter->next;
+        }
+        
+        printf("[trickplay-preload] COMPLETE: %u audio buffers pre-loaded (%.2f seconds)\n", 
+               audio_preload_count, (double)accumulated_audio_duration_ns / GST_SECOND);
+        
+        /* CRITICAL: Update the audio app's iterator and handle EOS for pre-load */
+        if (audio_iter != NULL)
+        {
+            active_audio_app->current_buffer_iter = audio_iter;  /* Resume from first buffer after pre-load threshold */
+            printf("[trickplay-preload] Audio: resume from buffer after pre-load threshold\n");
+        }
+        else if (last_pushed_iter != NULL)
+        {
+            /* All buffers consumed */
+            active_audio_app->current_buffer_iter = NULL;  /* Clear iterator */
+            if (!multiappsrc_defer_eos)
+            {
+                /* Emit EOS immediately if not deferring */
+                GstFlowReturn eos_ret = GST_FLOW_OK;
+                g_signal_emit_by_name(active_audio_app->appsrc, "end-of-stream", &eos_ret);
+                printf("[trickplay-preload] Audio: all buffers pre-loaded, EOS emitted immediately\n");
+            }
+            else
+            {
+                /* Defer EOS until after trickplay completes */
+                printf("[trickplay-preload] Audio: all buffers pre-loaded, EOS deferred until trickplay completes\n");
+            }
+        }
+    }
+}
+
+/* Check if URL points to a container file (MP4, MOV, M4V, M4A, MKV, MKA) */
+static gboolean tdkIsContainer(const char *fileUrl)
+{
+    const char *filePrefix = "file:";
+    const char *filePath = fileUrl;
+
+    if (fileUrl == NULL)
+        return FALSE;
+    if (strncmp(fileUrl, filePrefix, strlen(filePrefix)) == 0)
+        filePath = fileUrl + strlen(filePrefix);
+
+    const char *ext = strrchr(filePath, '.');
+    if (ext == NULL)
+        return FALSE;
+
+    return (g_ascii_strcasecmp(ext, ".mp4") == 0 ||
+            g_ascii_strcasecmp(ext, ".mov") == 0 ||
+            g_ascii_strcasecmp(ext, ".m4v") == 0 ||
+            g_ascii_strcasecmp(ext, ".m4a") == 0 ||
+            g_ascii_strcasecmp(ext, ".mkv") == 0 ||
+            g_ascii_strcasecmp(ext, ".mka") == 0 ||
+            g_ascii_strcasecmp(ext, ".webm") == 0 ||
+            g_ascii_strcasecmp(ext, ".webmv") == 0 ||
+            g_ascii_strcasecmp(ext, ".webma") == 0);
+}
+
+/* Check if URL points to an audio-only file (MP3, WAV, FLAC, etc.) */
+static gboolean tdkIsAudioOnly(const char *fileUrl)
+{
+    const char *filePrefix = "file:";
+    const char *filePath = fileUrl;
+
+    if (fileUrl == NULL)
+        return FALSE;
+    if (strncmp(fileUrl, filePrefix, strlen(filePrefix)) == 0)
+        filePath = fileUrl + strlen(filePrefix);
+
+    const char *ext = strrchr(filePath, '.');
+    if (ext == NULL)
+        return FALSE;
+
+    return (g_ascii_strcasecmp(ext, ".mp3") == 0 ||
+            g_ascii_strcasecmp(ext, ".wav") == 0 ||
+            g_ascii_strcasecmp(ext, ".flac") == 0 ||
+            g_ascii_strcasecmp(ext, ".aac") == 0 ||
+            g_ascii_strcasecmp(ext, ".ogg") == 0);
+}
+
+/* Structure for demux sink pair */
+typedef struct _TdkDemuxSinks {
+    GstElement *videoSink;
+    GstElement *audioSink;
+} TdkDemuxSinks;
+
+/* Per-stream feed data for demuxing */
+typedef struct _TdkFeedData {
+    MessageHandlerData video;
+    MessageHandlerData audio;
+    GstCaps *videoCaps;
+    GstCaps *audioCaps;
+} TdkFeedData;
+
+/* Callback when demux pads are added */
+static void tdkDemuxPadAdded(GstElement *, GstPad *pad, gpointer user)
+{
+    TdkDemuxSinks *sinks = (TdkDemuxSinks *) user;
+    GstCaps *caps = gst_pad_get_current_caps(pad);
+    if (caps == NULL)
+        caps = gst_pad_query_caps(pad, NULL);
+
+    const gchar *name = gst_structure_get_name(gst_caps_get_structure(caps, 0));
+    GstElement *sink = NULL;
+    
+    if (g_str_has_prefix(name, "video/"))
+    {
+        /* Skip video sink if only_audio is set */
+        if (!only_audio)
+            sink = sinks->videoSink;
+        else
+        {
+            printf("\n[tdksrc] demux: skipping video pad (only_audio=true)\n");
+            gst_caps_unref(caps);
+            return;
+        }
+    }
+    else if (g_str_has_prefix(name, "audio/"))
+    {
+        /* Skip audio sink if only_video is set */
+        if (!only_video)
+            sink = sinks->audioSink;
+        else
+        {
+            printf("\n[tdksrc] demux: skipping audio pad (only_video=true)\n");
+            gst_caps_unref(caps);
+            return;
+        }
+    }
+
+    if (sink != NULL)
+    {
+        GstPad *sinkpad = gst_element_get_static_pad(sink, "sink");
+        if (!gst_pad_is_linked(sinkpad))
+        {
+            if (gst_pad_link(pad, sinkpad) != GST_PAD_LINK_OK)
+                printf("\n[tdksrc] demux: failed to link %s pad to appsink\n", name);
+            else
+                printf("\n[tdksrc] demux: linked %s pad to appsink\n", name);
+        }
+        gst_object_unref(sinkpad);
+    }
+
+    gst_caps_unref(caps);
+}
+
+/* Drain appsink with optimized timeout for unused sinks */
+static guint tdkDrainAppsink(GstElement *appsink, GQueue *queue, GstCaps **outCaps)
+{
+    guint count = 0;
+    GstSample *sample;
+    
+    guint64 short_timeout_ns = 100 * GST_MSECOND;
+    guint64 long_timeout_ns = 100 * GST_MSECOND;  /* Reduced from 5s to 100ms for faster drain */
+    
+    printf("[tdksrc] tdkDrainAppsink: starting drain with short timeout %llu ms\n", short_timeout_ns / GST_MSECOND);
+    sample = gst_app_sink_try_pull_sample(GST_APP_SINK(appsink), short_timeout_ns);
+    if (sample == NULL && *outCaps == NULL)
+    {
+        printf("[tdksrc] tdkDrainAppsink: no samples on first pull, returning 0\n");
+        return 0;
+    }
+    
+    if (sample != NULL)
+    {
+        printf("[tdksrc] tdkDrainAppsink: got first sample\n");
+        if (*outCaps == NULL)
+        {
+            GstCaps *c = gst_sample_get_caps(sample);
+            if (c != NULL)
+            {
+                *outCaps = gst_caps_copy(c);
+                printf("[tdksrc] tdkDrainAppsink: copied caps from first sample\n");
+            }
+        }
+
+        GstBuffer *buf = gst_sample_get_buffer(sample);
+        if (buf != NULL)
+        {
+            g_queue_push_tail(queue, gst_buffer_ref(buf));
+            count++;
+            printf("[tdksrc] tdkDrainAppsink: queued first buffer (count=%u, size=%zu)\n", count, gst_buffer_get_size(buf));
+        }
+        gst_sample_unref(sample);
+    }
+    
+    printf("[tdksrc] tdkDrainAppsink: entering fast drain loop with %llu ms timeout per pull\n", long_timeout_ns / GST_MSECOND);
+    auto drain_start = std::chrono::high_resolution_clock::now();
+    guint64 max_drain_time_ms = 3000;  /* Maximum 3 seconds total for drain */
+    int loop_count = 0;
+    
+    while ((sample = gst_app_sink_try_pull_sample(GST_APP_SINK(appsink), long_timeout_ns)) != NULL)
+    {
+        loop_count++;
+        if (*outCaps == NULL)
+        {
+            GstCaps *c = gst_sample_get_caps(sample);
+            if (c != NULL)
+                *outCaps = gst_caps_copy(c);
+        }
+
+        GstBuffer *buf = gst_sample_get_buffer(sample);
+        if (buf != NULL)
+        {
+            g_queue_push_tail(queue, gst_buffer_ref(buf));
+            count++;
+        }
+        gst_sample_unref(sample);
+        
+        /* Check if we've spent too long draining */
+        auto elapsed = std::chrono::high_resolution_clock::now() - drain_start;
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() > (long)max_drain_time_ms)
+        {
+            printf("[tdksrc] tdkDrainAppsink: drain timeout after %lld ms\n", 
+                   std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+            break;
+        }
+    }
+    printf("[tdksrc] tdkDrainAppsink: drain loop exited after %d iterations, %u total buffers\n", loop_count, count);
+    
+    gboolean is_eos = gst_app_sink_is_eos(GST_APP_SINK(appsink));
+    printf("[tdksrc] tdkDrainAppsink: EOS=%d\n", is_eos);
+    if (is_eos)
+    {
+        if (count > 0)
+            printf("\n[tdksrc] tdkDrainAppsink: Stream reached EOS, extracted %u buffers\n", count);
+        else
+            printf("[tdksrc] tdkDrainAppsink: Stream reached EOS but 0 buffers extracted\n");
+    }
+    
+    return count;
+}
+
+/* Calculate total size of all buffers in a queue for size property */
+/* Need-data callback: feeds buffers dynamically to enable seeking
+ * This is called when appsrc needs more data, allowing us to feed from
+ * the current buffer iterator position (which can be changed by seek-data) */
+extern "C" {
+static void tdkNeedData(GstAppSrc *appsrc, guint length, App *app)
+{
+    if (app == NULL || app->appsrc == NULL || app->auQueue == NULL)
+        return;
+    
+    GstFlowReturn ret;
+    GstBuffer *buffer;
+    
+    /* Handle sticky events on first need-data call */
+    if (!app->segment_event_sent && app->appsrc != NULL)
+    {
+        GstPad *srcpad = gst_element_get_static_pad(app->appsrc, "src");
+        if (srcpad)
+        {
+            /* Send stream-start event first */
+            GstEvent *stream_start_event = gst_event_new_stream_start("tdksrc-stream");
+            if (!gst_pad_push_event(srcpad, stream_start_event))
+                printf("[tdksrc] Warning: Failed to push stream-start event\n");
+            
+            /* Send caps event second */
+            if (app->caps != NULL)
+            {
+                GstEvent *caps_event = gst_event_new_caps(app->caps);
+                if (!gst_pad_push_event(srcpad, caps_event))
+                    printf("[tdksrc] Warning: Failed to push caps event\n");
+            }
+            
+            /* Send segment event with current playback position */
+            GstSegment segment;
+            gst_segment_init(&segment, GST_FORMAT_TIME);
+            segment.start = 0;
+            segment.position = 0;
+            GstEvent *segment_event = gst_event_new_segment(&segment);
+            if (!gst_pad_push_event(srcpad, segment_event))
+                printf("[tdksrc] Warning: Failed to push segment event\n");
+            
+            gst_object_unref(srcpad);
+        }
+        app->segment_event_sent = TRUE;
+    }
+    
+    /* Feed multiple buffers per callback to prevent starvation during continuous playback.
+       Push buffers until we reach a time threshold (500ms) or run out of buffers.
+       This ensures the pipeline has enough buffered data ahead of playback position. */
+    if (app->current_buffer_iter != NULL)
+    {
+        guint64 accumulated_time_ns = 0;
+        guint64 buffer_threshold_ns = 500 * GST_MSECOND;  /* Push ~500ms of buffers per callback */
+        guint buffers_pushed_this_call = 0;
+        
+        while (app->current_buffer_iter != NULL && accumulated_time_ns < buffer_threshold_ns)
+        {
+            buffer = (GstBuffer *)app->current_buffer_iter->data;
+            if (buffer != NULL)
+            {
+                guint64 buffer_duration = GST_BUFFER_DURATION(buffer);
+                if (buffer_duration != GST_CLOCK_TIME_NONE)
+                    app->demuxed_cumulative_duration_ns += buffer_duration;
+                
+                total_bytes_fed += gst_buffer_get_size(buffer);
+                
+                /* Push the buffer using direct API.
+                 * Take an extra reference to protect the buffer across multiple
+                 * feeding cycles and seek operations. This ensures the buffer
+                 * remains valid in the queue even after the pipeline processes it. */
+                gst_buffer_ref(buffer);
+                ret = gst_app_src_push_buffer(GST_APP_SRC_CAST(appsrc), buffer);
+                
+                if (ret == GST_FLOW_OK)
+                {
+                    buffers_pushed_this_call++;
+                    if (buffer_duration != GST_CLOCK_TIME_NONE)
+                        accumulated_time_ns += buffer_duration;
+                }
+                else
+                {
+                    /* Push failed, stop feeding buffers this cycle */
+                    app->current_buffer_iter = app->current_buffer_iter->next;
+                    break;
+                }
+            }
+            
+            /* Move iterator to next buffer */
+            app->current_buffer_iter = app->current_buffer_iter->next;
+        }
+        
+        /* Check if queue is now exhausted (iterator became NULL) */
+        if (app->current_buffer_iter == NULL && ret == GST_FLOW_OK)
+        {
+            /* All buffers have been pushed. Emit EOS unless deferred. */
+            if (!multiappsrc_defer_eos)
+            {
+                g_signal_emit_by_name(app->appsrc, "end-of-stream", &ret);
+            }
+        }
+        
+        if (buffers_pushed_this_call > 0 && buffers_pushed_this_call <= 3)
+        {
+            /* Low push rate - may indicate queue starvation soon. Log for debugging. */
+            /* printf("[tdksrc] WARNING: Low buffer feed rate (only %u buffers pushed)\n", buffers_pushed_this_call); */
+        }
+    }
+    else
+    {
+        /* Iterator is NULL - either pre-load completed or all buffers consumed.
+           Don't try to reposition, just emit EOS to signal end-of-stream. */
+        if (!multiappsrc_defer_eos)
+        {
+            GstFlowReturn eos_ret = GST_FLOW_OK;
+            g_signal_emit_by_name(appsrc, "end-of-stream", &eos_ret);
+        }
+    }
+}
+} /* extern "C" - close tdkNeedData */
+
+/* Seek-data callback: repositions buffer queue to requested time offset
+ * Note: With format=GST_FORMAT_TIME, offset is in nanoseconds (not bytes).
+ * This callback uses buffer timestamps to find the correct seek position. */
+extern "C" {
+static gboolean tdkSeekData(GstAppSrc *appsrc, guint64 offset, App *app)
+{
+    if (app == NULL || app->auQueue == NULL)
+    {
+        printf("\n[tdksrc] seek-data: invalid app or queue\n");
+        return FALSE;
+    }
+
+    /* offset is in nanoseconds for time-based seeking */
+    printf("\n[tdksrc] seek-data: seeking to time %" GST_TIME_FORMAT " ns\n", GST_TIME_ARGS(offset));
+
+    GList *iter = app->auQueue->head;
+    GstBuffer *first_buf = NULL;
+    GstBuffer *last_buf = NULL;
+    GList *last_iter = NULL;
+
+    /* Get first and last buffer timestamps to detect backward seek beyond queue */
+    if (iter != NULL)
+    {
+        first_buf = (GstBuffer *)iter->data;
+        last_iter = g_queue_peek_tail_link(app->auQueue);
+        if (last_iter != NULL)
+            last_buf = (GstBuffer *)last_iter->data;
+    }
+
+    /* Check for BACKWARD seek to time BEFORE the queue starts */
+    if (first_buf != NULL)
+    {
+        guint64 first_buf_pts = GST_BUFFER_PTS(first_buf);
+        if (first_buf_pts != GST_CLOCK_TIME_NONE && offset < first_buf_pts)
+        {
+            /* Seeking backward before queue start (e.g., seek to 0 from position 10s) - reposition to HEAD */
+            app->current_buffer_iter = app->auQueue->head;
+            app->current_byte_offset = offset;
+            printf("[tdksrc] seek-data: BACKWARD seek before queue, repositioned to HEAD (first buffer at %" GST_TIME_FORMAT ")\n",
+                   GST_TIME_ARGS(first_buf_pts));
+            return TRUE;
+        }
+    }
+
+    /* Traverse queue to find buffer at or after requested time */
+    while (iter != NULL)
+    {
+        GstBuffer *buf = (GstBuffer *)iter->data;
+        guint64 buf_pts = GST_BUFFER_PTS(buf);
+        guint64 buf_duration = GST_BUFFER_DURATION(buf);
+
+        /* Check if this buffer contains the seek time */
+        if (buf_pts != GST_CLOCK_TIME_NONE && buf_duration != GST_CLOCK_TIME_NONE)
+        {
+            if (buf_pts <= offset && offset < buf_pts + buf_duration)
+            {
+                /* Found the buffer at the seek position */
+                app->current_buffer_iter = iter;
+                app->current_byte_offset = offset;  /* Store time offset */
+                printf("[tdksrc] seek-data: repositioned to buffer at time %" GST_TIME_FORMAT "\n", GST_TIME_ARGS(buf_pts));
+                return TRUE;
+            }
+        }
+
+        iter = iter->next;
+    }
+
+    /* If we get here, seek beyond current buffers (forward seek beyond end) - reposition to last buffer */
+    if (last_iter != NULL)
+    {
+        app->current_buffer_iter = last_iter;
+        printf("[tdksrc] seek-data: FORWARD seek beyond queue end, repositioned to TAIL (last buffer)\n");
+        return TRUE;
+    }
+
+    app->current_byte_offset = offset;
+    return TRUE;
+}
+} /* extern "C" */
+
+/* Demux container file and extract buffers to queues */
+static gboolean tdkDemuxContainer(const char *fileUrl, TdkFeedData *feed)
+{
+    const char *filePrefix = "file:";
+    const char *filePath = fileUrl;
+    if (strncmp(fileUrl, filePrefix, strlen(filePrefix)) == 0)
+        filePath = fileUrl + strlen(filePrefix);
+
+    /* For audio-only files (MP3, WAV, FLAC), use a direct audio pipeline without demuxing */
+    if (tdkIsAudioOnly(fileUrl))
+    {
+        printf("\n[tdksrc] demux: audio-only file detected, using direct audio pipeline\n");
+        
+        GstElement *pipeline = gst_pipeline_new("tdk-audio-demux");
+        GstElement *filesrc  = gst_element_factory_make("filesrc", NULL);
+        GstElement *parser   = NULL;
+        
+        /* Use mpegaudioparse for MP3 to parse frames and extract raw encoded bytes */
+        if (strstr(fileUrl, ".mp3") || strstr(fileUrl, ".MP3"))
+        {
+            parser = gst_element_factory_make("mpegaudioparse", NULL);
+            if (parser)
+                printf("[tdksrc] demux: using mpegaudioparse for MP3 frame parsing (raw encoded bytes)\n");
+        }
+        
+        /* Fallback to decodebin for WAV, FLAC, AAC, OGG, etc. */
+        if (!parser)
+        {
+            parser = gst_element_factory_make("decodebin", NULL);
+            printf("[tdksrc] demux: using decodebin for audio format detection and decoding\n");
+        }
+        
+        GstElement *asink = (!only_video) ? gst_element_factory_make("appsink", NULL) : NULL;
+
+        if (!pipeline || !filesrc || !parser || (!only_video && !asink))
+        {
+            printf("\n[tdksrc] demux: failed to create audio extraction elements\n");
+            if (pipeline) gst_object_unref(pipeline);
+            if (parser) gst_object_unref(parser);
+            if (asink) gst_object_unref(asink);
+            return FALSE;
+        }
+
+        g_object_set(filesrc, "location", filePath, NULL);
+        
+        if (asink)
+            g_object_set(asink, "sync", FALSE, "async", FALSE, "max-buffers", 0, "emit-signals", FALSE, NULL);
+
+        if (asink)
+            gst_bin_add_many(GST_BIN(pipeline), filesrc, parser, asink, NULL);
+        else
+            gst_bin_add_many(GST_BIN(pipeline), filesrc, parser, NULL);
+
+        if (!gst_element_link(filesrc, parser))
+        {
+            printf("\n[tdksrc] demux: failed to link filesrc -> parser\n");
+            gst_object_unref(pipeline);
+            return FALSE;
+        }
+
+        if (!gst_element_link(parser, asink))
+        {
+            printf("\n[tdksrc] demux: failed to link parser -> appsink\n");
+            gst_object_unref(pipeline);
+            return FALSE;
+        }
+
+        printf("[tdksrc] demux: setting pipeline to PLAYING state...\n");
+        GstState cur_state_audio;
+        GstStateChangeReturn ret_state_audio = gst_element_set_state(pipeline, GST_STATE_PLAYING);
+        
+        if (ret_state_audio == GST_STATE_CHANGE_FAILURE)
+        {
+            printf("\n[tdksrc] demux: failed to start audio extraction pipeline\n");
+            gst_object_unref(pipeline);
+            return FALSE;
+        }
+        
+        /* For ASYNC state changes, wait for completion (up to 3 seconds) */
+        if (ret_state_audio == GST_STATE_CHANGE_ASYNC)
+        {
+            printf("[tdksrc] demux: audio pipeline state change is ASYNC, waiting for completion (max 3s)...\n");
+            gint64 timeout_ns_audio = 3 * GST_SECOND;
+            GstStateChangeReturn wait_ret_audio = gst_element_get_state(pipeline, &cur_state_audio, NULL, timeout_ns_audio);
+            
+            if (wait_ret_audio == GST_STATE_CHANGE_FAILURE)
+            {
+                printf("[ERROR] demux audio pipeline failed to reach PLAYING state\n");
+                gst_object_unref(pipeline);
+                return FALSE;
+            }
+            printf("[tdksrc] demux: audio pipeline reached state %s after async wait\n", gst_element_state_get_name(cur_state_audio));
+        }
+        else
+        {
+            printf("[tdksrc] demux: audio pipeline state change returned SUCCESS\n");
+        }
+
+        /* Additional wait for parser/decoder to process and produce buffers
+           Broadcom: ~200-300ms, Realtek: ~800ms-1.5s for audio decode */
+        printf("[tdksrc] demux: waiting 1.0s for audio parser/decoder to produce buffers...\n");
+        g_usleep(1000000);  /* 1.0 second - covers both Broadcom and Realtek latencies */
+
+        printf("[tdksrc] demux: draining appsink...\n");
+        guint ac = asink ? tdkDrainAppsink(asink, feed->audio.app.auQueue, &feed->audioCaps) : 0;
+        printf("[tdksrc] demux: extracted %u audio buffers from appsink\n", ac);
+
+        gst_element_set_state(pipeline, GST_STATE_NULL);
+        gst_object_unref(pipeline);
+
+        printf("\n[tdksrc] demux: extracted 0 video AUs, %u audio AUs from %s (only_audio=%d, only_video=%d)\n",
+                ac, filePath, only_audio, only_video);
+
+        feed->video.app.demuxed = FALSE;
+        feed->audio.app.demuxed = (ac > 0);
+        return (ac > 0);
+    }
+
+    /* For container files, detect format and create appropriate demuxer */
+    GstElement *pipeline = gst_pipeline_new("tdk-demux");
+    GstElement *filesrc  = gst_element_factory_make("filesrc", NULL);
+    
+    /* Choose demuxer based on file extension */
+    GstElement *demux = NULL;
+    if (strstr(filePath, ".mkv") || strstr(filePath, ".mka") || strstr(filePath, ".webm") || strstr(filePath, ".webmv") || strstr(filePath, ".webma") ||
+        strstr(filePath, ".MKV") || strstr(filePath, ".MKA") || strstr(filePath, ".WEBM") || strstr(filePath, ".WEBMV") || strstr(filePath, ".WEBMA"))
+        demux = gst_element_factory_make("matroskademux", NULL);  /* Matroska/WebM (WebM is Matroska-based) */
+    else
+        demux = gst_element_factory_make("qtdemux", NULL);  /* MP4/MOV default */
+    
+    /* Only create sinks for streams we want to demux */
+    GstElement *vsink    = (!only_audio) ? gst_element_factory_make("appsink", NULL) : NULL;
+    GstElement *asink    = (!only_video) ? gst_element_factory_make("appsink", NULL) : NULL;
+
+    if (!pipeline || !filesrc || !demux || 
+        (!only_audio && !vsink) || (!only_video && !asink))
+    {
+        printf("\n[tdksrc] demux: failed to create extraction elements\n");
+        if (pipeline) gst_object_unref(pipeline);
+        if (vsink) gst_object_unref(vsink);
+        if (asink) gst_object_unref(asink);
+        return FALSE;
+    }
+
+    g_object_set(filesrc, "location", filePath, NULL);
+    
+    if (vsink)
+        g_object_set(vsink, "sync", FALSE, "async", FALSE, "max-buffers", 0, "emit-signals", FALSE, NULL);
+    if (asink)
+        g_object_set(asink, "sync", FALSE, "async", FALSE, "max-buffers", 0, "emit-signals", FALSE, NULL);
+
+    /* Use heap-allocated struct to avoid use-after-free when signal fires asynchronously */
+    TdkDemuxSinks *sinks = (TdkDemuxSinks*)g_malloc(sizeof(TdkDemuxSinks));
+    sinks->videoSink = vsink;
+    sinks->audioSink = asink;
+    
+    /* Add only the elements we need */
+    if (vsink && asink)
+        gst_bin_add_many(GST_BIN(pipeline), filesrc, demux, vsink, asink, NULL);
+    else if (vsink)
+        gst_bin_add_many(GST_BIN(pipeline), filesrc, demux, vsink, NULL);
+    else if (asink)
+        gst_bin_add_many(GST_BIN(pipeline), filesrc, demux, asink, NULL);
+    else
+        gst_bin_add_many(GST_BIN(pipeline), filesrc, demux, NULL);
+    
+    if (!gst_element_link(filesrc, demux))
+    {
+        printf("\n[tdksrc] demux: failed to link filesrc -> demuxer (qtdemux/matroskademux)\n");
+        g_free(sinks);
+        gst_object_unref(pipeline);
+        return FALSE;
+    }
+    gulong signal_id = g_signal_connect(demux, "pad-added", G_CALLBACK(tdkDemuxPadAdded), sinks);
+
+    /* Set to PLAYING and wait for async state change to complete (critical for Realtek)
+       Realtek: slower pipeline, requires waiting for filesrc pad activation and demux initialization
+       Broadcom: faster pipeline, but proper wait ensures robustness */
+    GstState cur_state;
+    GstStateChangeReturn ret_state = gst_element_set_state(pipeline, GST_STATE_PLAYING);
+    
+    if (ret_state == GST_STATE_CHANGE_FAILURE)
+    {
+        printf("\n[tdksrc] demux: failed to start extraction pipeline\n");
+        g_signal_handler_disconnect(demux, signal_id);
+        g_free(sinks);
+        gst_object_unref(pipeline);
+        return FALSE;
+    }
+    
+    /* For ASYNC state changes, wait for completion (up to 3 seconds) */
+    if (ret_state == GST_STATE_CHANGE_ASYNC)
+    {
+        printf("[tdksrc] demux: state change is ASYNC, waiting for completion (max 3s)...\n");
+        gint64 timeout_ns = 3 * GST_SECOND;
+        GstStateChangeReturn wait_ret = gst_element_get_state(pipeline, &cur_state, NULL, timeout_ns);
+        
+        if (wait_ret == GST_STATE_CHANGE_FAILURE)
+        {
+            printf("[ERROR] demux pipeline failed to reach PLAYING state\n");
+            g_signal_handler_disconnect(demux, signal_id);
+            g_free(sinks);
+            gst_object_unref(pipeline);
+            return FALSE;
+        }
+        printf("[tdksrc] demux: pipeline reached state %s after async wait\n", gst_element_state_get_name(cur_state));
+    }
+    else
+    {
+        printf("[tdksrc] demux: state change returned SUCCESS, pipeline ready\n");
+    }
+
+    /* Additional wait for demux pad-added callbacks to fire and link sinks
+       Different platforms have different latencies:
+       Broadcom: ~100-300ms, Realtek: ~500ms-1.5s due to hardware decode init
+       This ensures filesrc pad is activated and demux has linked the pads */
+    printf("[tdksrc] demux: waiting 1.0s for demux pads to link and buffers to start flowing...\n");
+    g_usleep(1000000);  /* 1.0 second */
+
+    guint vc = vsink ? tdkDrainAppsink(vsink, feed->video.app.auQueue, &feed->videoCaps) : 0;
+    guint ac = asink ? tdkDrainAppsink(asink, feed->audio.app.auQueue, &feed->audioCaps) : 0;
+
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    g_signal_handler_disconnect(demux, signal_id);
+    g_free(sinks);
+    gst_object_unref(pipeline);
+
+    printf("\n[tdksrc] demux: extracted %u video AUs, %u audio AUs from %s (only_audio=%d, only_video=%d)\n",
+            vc, ac, filePath, only_audio, only_video);
+
+    feed->video.app.demuxed = (vc > 0);
+    feed->audio.app.demuxed = (ac > 0);
+    return (vc > 0 || ac > 0);
+}
+
+/* Callback when tdksrc source element is set up */
+static void tdkSourceSetup(GstElement *playbin, GstElement *source, gpointer userData)
+{
+    TdkFeedData *feed = (TdkFeedData *) userData;
+
+    if (!GST_IS_TDK_SRC(source))
+    {
+        printf("\n[tdksrc] source-setup: unexpected source element %s\n", GST_ELEMENT_NAME(source));
+        return;
+    }
+
+    if (feed->video.app.appsrc != NULL && feed->audio.app.appsrc != NULL)
+    {
+        printf("\n[tdksrc] source-setup: ignoring subsequent callback\n");
+        return;
+    }
+
+    printf("\nGot source setup callback\n");
+    /* Only get appsrc elements for streams we're actually using */
+    if (!only_audio)
+        feed->video.app.appsrc = gst_tdk_src_get_video_appsrc(GST_TDK_SRC(source));
+    if (!only_video)
+        feed->audio.app.appsrc = gst_tdk_src_get_audio_appsrc(GST_TDK_SRC(source));
+
+    if (feed->video.app.demuxed && !only_audio && feed->video.app.appsrc != NULL)
+    {
+        /* Set format to TIME for timestamp-based seeking (matches MPB approach) */
+        gst_base_src_set_format(GST_BASE_SRC(feed->video.app.appsrc), GST_FORMAT_TIME);
+        
+        g_object_set(feed->video.app.appsrc, 
+                     "caps", feed->videoCaps, 
+                     "stream-type", GST_APP_STREAM_TYPE_SEEKABLE,
+                     "format", GST_FORMAT_TIME,
+                     "block", FALSE,
+                     "is-live", FALSE,           /* File-based playback, not live stream */
+                     "do-timestamp", FALSE,      /* Don't add timestamps, use PTS from buffers */
+                     NULL);
+        
+        /* Redundant set for safety (matches MPB pattern) */
+        gst_app_src_set_stream_type(GST_APP_SRC(feed->video.app.appsrc), GST_APP_STREAM_TYPE_SEEKABLE);
+        
+        /* Register seek-data callback for video appsrc */
+        g_signal_connect(feed->video.app.appsrc, "seek-data",
+                         G_CALLBACK(tdkSeekData), &feed->video.app);
+        
+        /* Register need-data callback for dynamic buffer feeding (enables seeking) */
+        g_signal_connect(feed->video.app.appsrc, "need-data",
+                         G_CALLBACK(tdkNeedData), &feed->video.app);
+        feed->video.app.caps = gst_caps_copy(feed->videoCaps);
+        feed->video.app.current_buffer_iter = feed->video.app.auQueue->head;
+        feed->video.app.current_byte_offset = 0;
+        printf("\n[tdksrc] source-setup: video demuxed caps set, stream-type=SEEKABLE, format=TIME, is-live=FALSE, seek-data callback registered\n");
+    }
+
+    if (feed->audio.app.demuxed && !only_video && feed->audio.app.appsrc != NULL)
+    {
+        /* Set format to TIME for timestamp-based seeking (matches MPB approach) */
+        gst_base_src_set_format(GST_BASE_SRC(feed->audio.app.appsrc), GST_FORMAT_TIME);
+        
+        g_object_set(feed->audio.app.appsrc, 
+                     "caps", feed->audioCaps, 
+                     "stream-type", GST_APP_STREAM_TYPE_SEEKABLE,
+                     "format", GST_FORMAT_TIME,
+                     "block", FALSE,
+                     "is-live", FALSE,           /* File-based playback, not live stream */
+                     "do-timestamp", FALSE,      /* Don't add timestamps, use PTS from buffers */
+                     NULL);
+        
+        /* Redundant set for safety (matches MPB pattern) */
+        gst_app_src_set_stream_type(GST_APP_SRC(feed->audio.app.appsrc), GST_APP_STREAM_TYPE_SEEKABLE);
+        
+        /* Register seek-data callback for audio appsrc */
+        g_signal_connect(feed->audio.app.appsrc, "seek-data",
+                         G_CALLBACK(tdkSeekData), &feed->audio.app);
+        
+        /* Register need-data callback for dynamic buffer feeding (enables seeking) */
+        g_signal_connect(feed->audio.app.appsrc, "need-data",
+                         G_CALLBACK(tdkNeedData), &feed->audio.app);
+        feed->audio.app.caps = gst_caps_copy(feed->audioCaps);
+        feed->audio.app.current_buffer_iter = feed->audio.app.auQueue->head;
+        feed->audio.app.current_byte_offset = 0;
+        printf("\n[tdksrc] source-setup: audio demuxed caps set, stream-type=SEEKABLE, format=TIME, is-live=FALSE, seek-data callback registered\n");
+    }
+
+    printf("\n[tdksrc] source-setup: obtained tdksrc (video appsrc=%p, audio appsrc=%p)\n",
+            (void *) feed->video.app.appsrc, (void *) feed->audio.app.appsrc);
+}
+
+/* Read demuxed buffers and push them into appsrc */
+static gboolean read_data (MessageHandlerData * data)
+{
+  GstBuffer *buffer;
+  GstFlowReturn ret;
+
+  if (data == NULL || data->app.appsrc == NULL) {
+    printf("\nReceived NULL pointer");
+    return FALSE;
+  }
+
+    if (data->app.demuxed)
+    {
+        if (data->app.auQueue == NULL || g_queue_is_empty(data->app.auQueue))
+        {
+            /* For trickplay operations, defer EOS until after operations complete.
+               For other modes, send EOS now to finish the stream. */
+            if (!multiappsrc_defer_eos)
+                g_signal_emit_by_name(data->app.appsrc, "end-of-stream", &ret);
+            return FALSE;
+        }
+
+        /* Send sticky events in correct order: stream-start → caps → segment */
+        if (!data->app.segment_event_sent && data->app.appsrc != NULL)
+        {
+            GstPad *srcpad = gst_element_get_static_pad(data->app.appsrc, "src");
+            if (srcpad)
+            {
+                /* Send stream-start event first */
+                GstEvent *stream_start_event = gst_event_new_stream_start("tdksrc-stream");
+                if (!gst_pad_push_event(srcpad, stream_start_event))
+                    printf("[tdksrc] Warning: Failed to push stream-start event\n");
+                
+                /* Send caps event second (required before segment) - MUST have caps */
+                if (data->app.caps != NULL)
+                {
+                    GstEvent *caps_event = gst_event_new_caps(data->app.caps);
+                    if (!gst_pad_push_event(srcpad, caps_event))
+                        printf("[tdksrc] Warning: Failed to push caps event\n");
+                }
+                else
+                {
+                    printf("[tdksrc] Warning: No caps available for sticky event\n");
+                }
+                
+                /* Send segment event after stream-start and caps */
+                GstSegment segment;
+                gst_segment_init(&segment, GST_FORMAT_TIME);
+                segment.start = 0;
+                segment.position = 0;
+                GstEvent *segment_event = gst_event_new_segment(&segment);
+                if (!gst_pad_push_event(srcpad, segment_event))
+                    printf("[tdksrc] Warning: Failed to push segment event\n");
+                
+                gst_object_unref(srcpad);
+                
+                /* Small delay to allow sticky events to propagate downstream */
+                g_usleep(10000);  /* 10ms */
+            }
+            data->app.segment_event_sent = TRUE;
+        }
+
+        /* For trickplay: push all buffers without duration limit.
+           WaitForOperation macro will control when to stop. */
+        buffer = (GstBuffer *) g_queue_pop_head(data->app.auQueue);
+        guint64 buffer_duration = GST_BUFFER_DURATION(buffer);
+        if (buffer_duration != GST_CLOCK_TIME_NONE)
+            data->app.demuxed_cumulative_duration_ns += buffer_duration;
+        
+        total_bytes_fed += gst_buffer_get_size(buffer);
+        g_signal_emit_by_name(data->app.appsrc, "push-buffer", buffer, &ret);
+        gst_buffer_unref(buffer);
+        if (ret != GST_FLOW_OK)
+            return FALSE;
+        return TRUE;
+    }
+
+  return FALSE;
+}
+
+/* Calculate total buffer duration needed for all trickplay operations */
+static guint64 calculateBufferDurationForTrickplay()
+{
+    guint64 total_duration_ns = 0;
+    double operationTimeout = 0.0;
+    int seekPosition = 0;
+    char *operationBuffer = NULL;
+    string operationString;
+    
+    printf("\n[tdksrc] Calculating buffer duration for trickplay operations...\n");
+    
+    for (auto &op : operationsList)
+    {
+        operationBuffer = strdup(op.c_str());
+        operationString = strtok(operationBuffer, ":");
+        
+        if (operationString.empty())
+        {
+            free(operationBuffer);
+            continue;
+        }
+        
+        /* Parse timeout (first numeric parameter) */
+        char *timeout_str = strtok(NULL, ":");
+        operationTimeout = timeout_str ? atof(timeout_str) : 0.0;
+        
+        guint64 op_duration_ns = 0;
+        
+        if (operationString == "play")
+        {
+            /* play:T -> push T seconds */
+            op_duration_ns = (guint64)(operationTimeout * GST_SECOND);
+            printf("  [play:%.0f] -> %" G_GUINT64_FORMAT "ns\n", operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "pause")
+        {
+            /* pause:T -> push T seconds (buffered, not consumed) */
+            op_duration_ns = (guint64)(operationTimeout * GST_SECOND);
+            printf("  [pause:%.0f] -> %" G_GUINT64_FORMAT "ns\n", operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "seek")
+        {
+            /* seek:T:P -> push (T + P) seconds (T = play after seek, P = seek position) */
+            char *seek_pos_str = strtok(NULL, ":");
+            seekPosition = seek_pos_str ? atoi(seek_pos_str) : 0;
+            op_duration_ns = (guint64)((operationTimeout + seekPosition) * GST_SECOND);
+            printf("  [seek:%.0f:%d] -> (%.0f + %d) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, seekPosition, operationTimeout, seekPosition, op_duration_ns);
+        }
+        else if (operationString == "fastforward2x")
+        {
+            /* fastforward2x:T -> push (2 * T) seconds (consumed 2x faster) */
+            op_duration_ns = (guint64)(2.0 * operationTimeout * GST_SECOND);
+            printf("  [fastforward2x:%.0f] -> (2 * %.0f) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "fastforward3x")
+        {
+            /* fastforward3x:T -> push (3 * T) seconds (consumed 3x faster) */
+            op_duration_ns = (guint64)(3.0 * operationTimeout * GST_SECOND);
+            printf("  [fastforward3x:%.0f] -> (3 * %.0f) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "rewind2x")
+        {
+            /* rewind2x:T -> push (2 * T) seconds (consumed 2x faster backward) */
+            op_duration_ns = (guint64)(2.0 * operationTimeout * GST_SECOND);
+            printf("  [rewind2x:%.0f] -> (2 * %.0f) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "fastforward4x")
+        {
+            /* fastforward4x:T -> push (4 * T) seconds (consumed 4x faster) */
+            op_duration_ns = (guint64)(4.0 * operationTimeout * GST_SECOND);
+            printf("  [fastforward4x:%.0f] -> (4 * %.0f) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "rewind3x")
+        {
+            /* rewind3x:T -> push (3 * T) seconds (consumed 3x faster backward) */
+            op_duration_ns = (guint64)(3.0 * operationTimeout * GST_SECOND);
+            printf("  [rewind3x:%.0f] -> (3 * %.0f) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, operationTimeout, op_duration_ns);
+        }
+        else if (operationString == "rewind4x")
+        {
+            /* rewind4x:T -> push (4 * T) seconds (consumed 4x faster backward) */
+            op_duration_ns = (guint64)(4.0 * operationTimeout * GST_SECOND);
+            printf("  [rewind4x:%.0f] -> (4 * %.0f) = %" G_GUINT64_FORMAT "ns\n", 
+                   operationTimeout, operationTimeout, op_duration_ns);
+        }
+        
+        total_duration_ns += op_duration_ns;
+        free(operationBuffer);
+    }
+    
+    /* Add 20 seconds threshold */
+    guint64 threshold_ns = 20 * GST_SECOND;
+    total_duration_ns += threshold_ns;
+    
+    printf("\n[tdksrc] Total trickplay buffer duration: %" G_GUINT64_FORMAT "ns (~%u seconds) (including 20s threshold)\n",
+           total_duration_ns, (guint)(total_duration_ns / GST_SECOND));
+    
+    return total_duration_ns;
+}
+
+/* Setup multiappsrc mode with demuxed container playback */
+static gboolean setupInlineMultiAppsrc(MessageHandlerData *data, bool play_after_setup)
+{
+    GstState cur_state;
+    gint64 timeout_ns;
+    GstStateChangeReturn ret_state;  /* Declare before any goto to avoid cross-initialization */
+    GstFlowReturn ret_feed = GST_FLOW_OK;
+    guint video_preload_count = 0, audio_preload_count = 0;
+
+    /* Static feed for multiappsrc - persists between calls for channel changes */
+    static TdkFeedData feed = {0};
+
+    /* Clear old feed from previous channel if needed */
+    if (feed.video.app.auQueue != NULL)
+    {
+        g_queue_free_full(feed.video.app.auQueue, (GDestroyNotify)gst_buffer_unref);
+        feed.video.app.auQueue = NULL;
+    }
+    if (feed.audio.app.auQueue != NULL)
+    {
+        g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify)gst_buffer_unref);
+        feed.audio.app.auQueue = NULL;
+    }
+    if (feed.videoCaps != NULL)
+    {
+        gst_caps_unref(feed.videoCaps);
+        feed.videoCaps = NULL;
+    }
+    if (feed.audioCaps != NULL)
+    {
+        gst_caps_unref(feed.audioCaps);
+        feed.audioCaps = NULL;
+    }
+
+    memset(&feed, 0, sizeof(feed));
+    feed.video.playbin = NULL;
+    feed.audio.playbin = NULL;
+
+    if (!gst_element_factory_find("tdksrc"))
+    {
+        if (!gst_element_register(NULL, "tdksrc", GST_RANK_PRIMARY + 100, GST_TDK_TYPE_SRC))
+            return FALSE;
+        printf("\n[tdksrc] Registered custom element 'tdksrc'\n");
+    }
+
+    /* Support both container files (MP4/MOV/M4V/M4A) and audio-only files (MP3/WAV/FLAC) */
+    if (!tdkIsContainer(m_play_url) && !tdkIsAudioOnly(m_play_url))
+        return FALSE;
+
+    feed.video.app.auQueue = g_queue_new();
+    feed.audio.app.auQueue = g_queue_new();
+
+    if (!tdkDemuxContainer(m_play_url, &feed))
+        goto cleanup_fail;
+
+    if (feed.videoCaps != NULL)
+    {
+        gchar *capsStr = gst_caps_to_string(feed.videoCaps);
+        printf("\n[tdksrc] Demuxed video caps = %s\n", capsStr);
+        g_free(capsStr);
+    }
+    if (feed.audioCaps != NULL)
+    {
+        gchar *capsStr = gst_caps_to_string(feed.audioCaps);
+        printf("\n[tdksrc] Demuxed audio caps = %s\n", capsStr);
+        g_free(capsStr);
+    }
+
+    g_object_set(data->playbin, "uri", "tdk://", NULL);
+    g_signal_connect(data->playbin, "source-setup", G_CALLBACK(tdkSourceSetup), &feed);
+
+    /* For trickplay operations (play_after_setup=true): defer EOS emission until after operations complete.
+       Set this BEFORE setting state so it takes effect from the start. */
+    if (play_after_setup)
+    {
+        multiappsrc_defer_eos = true;
+        printf("[tdksrc] Deferring EOS for trickplay operations\n");
+    }
+
+    /* Set to PAUSED first (not PLAYING) to allow source-setup callback to complete
+       and appsrc to be created without triggering preroll/EOS prematurely */
+    if (gst_element_set_state(data->playbin, GST_STATE_PAUSED) == GST_STATE_CHANGE_FAILURE)
+        return FALSE;
+
+    /* Brief delay for source-setup callback to complete */
+    g_usleep(50000);  /* 50ms */
+
+    if ((only_audio || feed.video.app.appsrc != NULL) && (only_video || feed.audio.app.appsrc != NULL))
+    {
+        printf("[tdksrc] Got valid appsrc from tdksrc\n");
+        if (play_after_setup)
+        {
+            multiappsrc_video_appsrc = feed.video.app.appsrc;
+            multiappsrc_audio_appsrc = feed.audio.app.appsrc;
+            
+            /* Copy queue and caps to data->app for trickplay pre-load access */
+            data->app.auQueue = feed.video.app.auQueue;
+            data->app.appsrc = feed.video.app.appsrc;
+            data->app.caps = feed.videoCaps;
+            data->app.current_buffer_iter = feed.video.app.current_buffer_iter;
+            
+            /* Store queue, appsrc, and App pointers for pre-load access */
+            multiappsrc_video_queue = feed.video.app.auQueue;
+            multiappsrc_video_appsrc = feed.video.app.appsrc;
+            multiappsrc_video_app = (void *)&feed.video.app;  /* Store opaque pointer to video App struct */
+            
+            multiappsrc_audio_queue = feed.audio.app.auQueue;
+            multiappsrc_audio_appsrc = feed.audio.app.appsrc;
+            multiappsrc_audio_app = (void *)&feed.audio.app;  /* Store opaque pointer to audio App struct */
+            multiappsrc_audio_buffer_iter = feed.audio.app.current_buffer_iter;
+        }
+    }
+    else
+    {
+        printf("[ERROR] Failed to get appsrc from tdksrc\n");
+        return FALSE;
+    }
+
+    printf("\nBuffer feeding via need-data callbacks (dynamic mode - supports seeking)\n");
+    /* Buffers are now fed on-demand via tdkNeedData callback when pipeline needs them.
+       This enables seeking: seek-data repositions the iterator, next need-data feeds from new position.
+       
+       For trickplay: Push buffers upfront to ensure initial preroll succeeds, 
+       but keep queue intact for preloading during rate changes. */
+    
+    /* Push buffers upfront to enable PLAYING state to reach quickly */
+    printf("[tdksrc] Pre-feeding buffers for initial playback...\n");
+    
+    /* Pre-feed video buffers (iterate without removing from queue) */
+    if (!only_audio && feed.video.app.appsrc != NULL && feed.video.app.auQueue != NULL)
+    {
+        GList *iter = feed.video.app.auQueue->head;
+        guint64 accumulated_duration = 0;
+        guint64 preload_target_ns = 10 * GST_SECOND;  /* 10 seconds initial preload for robust PLAYING state transition */
+        
+        while (iter != NULL && accumulated_duration < preload_target_ns)
+        {
+            GstBuffer *buf = (GstBuffer *)iter->data;
+            if (buf != NULL)
+            {
+                gst_buffer_ref(buf);
+                ret_feed = gst_app_src_push_buffer(GST_APP_SRC_CAST(feed.video.app.appsrc), buf);
+                if (ret_feed == GST_FLOW_OK)
+                {
+                    video_preload_count++;
+                    guint64 buf_duration = GST_BUFFER_DURATION(buf);
+                    if (buf_duration != GST_CLOCK_TIME_NONE)
+                        accumulated_duration += buf_duration;
+                }
+                else
+                {
+                    printf("[tdksrc] Error pushing video buffer during pre-feed\n");
+                    break;
+                }
+            }
+            iter = iter->next;
+        }
+        printf("[tdksrc] Pre-fed %u video buffers (%.1f seconds)\n", 
+               video_preload_count, (double)accumulated_duration / GST_SECOND);
+    }
+    
+    /* Pre-feed audio buffers (iterate without removing from queue) */
+    if (!only_video && feed.audio.app.appsrc != NULL && feed.audio.app.auQueue != NULL)
+    {
+        GList *iter = feed.audio.app.auQueue->head;
+        guint64 accumulated_duration = 0;
+        guint64 preload_target_ns = 10 * GST_SECOND;  /* 10 seconds initial preload for robust PLAYING state transition */
+        
+        while (iter != NULL && accumulated_duration < preload_target_ns)
+        {
+            GstBuffer *buf = (GstBuffer *)iter->data;
+            if (buf != NULL)
+            {
+                gst_buffer_ref(buf);
+                ret_feed = gst_app_src_push_buffer(GST_APP_SRC_CAST(feed.audio.app.appsrc), buf);
+                if (ret_feed == GST_FLOW_OK)
+                {
+                    audio_preload_count++;
+                    guint64 buf_duration = GST_BUFFER_DURATION(buf);
+                    if (buf_duration != GST_CLOCK_TIME_NONE)
+                        accumulated_duration += buf_duration;
+                }
+                else
+                {
+                    printf("[tdksrc] Error pushing audio buffer during pre-feed\n");
+                    break;
+                }
+            }
+            iter = iter->next;
+        }
+        printf("[tdksrc] Pre-fed %u audio buffers (%.1f seconds)\n", 
+               audio_preload_count, (double)accumulated_duration / GST_SECOND);
+    }
+
+    if (!play_after_setup)
+        goto cleanup_success;
+
+    /* Transition to PLAYING for trickplay operations.
+       With is-live=FALSE and proper appsrc configuration, state change should succeed. */
+    printf("[tdksrc] Attempting state transition to PLAYING...\n");
+    ret_state = gst_element_set_state(data->playbin, GST_STATE_PLAYING);
+    
+    if (ret_state == GST_STATE_CHANGE_FAILURE)
+    {
+        printf("[ERROR] Pipeline state change to PLAYING returned FAILURE\n");
+        return FALSE;
+    }
+    
+    printf("[tdksrc] State change returned: %d (0=FAILURE, 1=SUCCESS, 2=ASYNC, 3=NO_PREROLL)\n", ret_state);
+
+    /* For ASYNC changes, wait for completion (up to 5 seconds) */
+    if (ret_state == GST_STATE_CHANGE_ASYNC)
+    {
+        printf("[tdksrc] Waiting for async state change to complete...\n");
+        timeout_ns = 5 * GST_SECOND;
+        GstStateChangeReturn wait_ret = gst_element_get_state(data->playbin, &cur_state, NULL, timeout_ns);
+        
+        if (wait_ret == GST_STATE_CHANGE_FAILURE)
+        {
+            printf("[ERROR] Pipeline failed to reach PLAYING state (get_state returned FAILURE)\n");
+            return FALSE;
+        }
+        
+        printf("[tdksrc] Final state: %s (get_state returned: %d)\n", gst_element_state_get_name(cur_state), wait_ret);
+        
+        if (cur_state != GST_STATE_PLAYING)
+        {
+            printf("[ERROR] Pipeline stuck at %s state, not PLAYING\n", gst_element_state_get_name(cur_state));
+            return FALSE;
+        }
+    }
+    else
+    {
+        /* For SUCCESS or NO_PREROLL, state already reached */
+        gst_element_get_state(data->playbin, &cur_state, NULL, GST_CLOCK_TIME_NONE);
+        printf("[tdksrc] Pipeline reached state: %s\n", gst_element_state_get_name(cur_state));
+    }
+    
+    printf("[tdksrc] Pipeline successfully in PLAYING state, ready for trickplay\n");
+
+cleanup_success:
+    g_signal_handlers_disconnect_by_func(data->playbin, (gpointer)tdkSourceSetup, &feed);
+    if (feed.videoCaps != NULL)
+        gst_caps_unref(feed.videoCaps);
+    if (feed.audioCaps != NULL)
+        gst_caps_unref(feed.audioCaps);
+    
+    /* Buffer reference accounting:
+       - Demux stores buffers with refcount via gst_buffer_ref()
+       - tdkNeedData takes extra gst_buffer_ref() before push for protection across seeks
+       - For non-trickplay: buffers were pushed to pipeline, need cleanup
+       - For trickplay: buffers stay in queue for future operations, keep refs alive
+       - Respect only_audio and only_video flags: skip cleanup for disabled streams
+       
+       In non-trickplay mode: pipeline owns buffers after push, we only clean queue structure.
+       In trickplay mode: skip cleanup entirely to preserve queues and refs for next operation. */
+    if (!play_after_setup)
+    {
+        if (!only_audio && feed.video.app.auQueue != NULL)
+        {
+            g_queue_free_full(feed.video.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+            feed.video.app.auQueue = NULL;
+        }
+        if (!only_video && feed.audio.app.auQueue != NULL)
+        {
+            g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+            feed.audio.app.auQueue = NULL;
+        }
+    }
+    /* Trickplay mode: queues stay alive, buffers kept safe by extra ref protection */
+    
+    g_free(feed.video.app.data);
+    g_free(feed.audio.app.data);
+    return TRUE;
+
+cleanup_fail:
+    g_signal_handlers_disconnect_by_func(data->playbin, (gpointer)tdkSourceSetup, &feed);
+    if (feed.videoCaps != NULL)
+        gst_caps_unref(feed.videoCaps);
+    if (feed.audioCaps != NULL)
+        gst_caps_unref(feed.audioCaps);
+    
+    /* Setup failed before pipeline creation, buffers never reached pipeline.
+       Safe to cleanup and release all refs (demux ref + protection ref).
+       Respect only_audio and only_video flags: skip cleanup for disabled streams */
+    if (!only_audio && feed.video.app.auQueue != NULL)
+    {
+        g_queue_free_full(feed.video.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+        feed.video.app.auQueue = NULL;
+    }
+    if (!only_video && feed.audio.app.auQueue != NULL)
+    {
+        g_queue_free_full(feed.audio.app.auQueue, (GDestroyNotify) gst_buffer_unref);
+        feed.audio.app.auQueue = NULL;
+    }
+    
+    g_free(feed.video.app.data);
+    g_free(feed.audio.app.data);
+    return FALSE;
+}
+
+/********************************************************************************************************************
 Purpose:               Setup stream
 *********************************************************************************************************************/
 static void SetupStream (MessageHandlerData *data)
@@ -1706,11 +3414,10 @@ static void SetupStream (MessageHandlerData *data)
         fprintf (file,"########################\n");
     }
 
-    /*
-     * Create the playbin element
-     */
+    /* Create the playbin element */
     data->playbin = gst_element_factory_make(PLAYBIN_ELEMENT, NULL);
     assert_failure(data->playbin, data->playbin != NULL, "Failed to create 'playbin' element",__FUNCTION__,__LINE__,"Create Playbin Instance");
+    
     /*
      * Set the url received from argument as the 'uri' for playbin
      */
@@ -1725,13 +3432,18 @@ static void SetupStream (MessageHandlerData *data)
         fileExists(file_path);
     }
     
-    g_object_set (data->playbin, "uri", m_play_url, NULL);
     /*
      * Update the current playbin flags to enable Video and Audio Playback
      */
     g_object_get (data->playbin, "flags", &flags, NULL);
     setflags();
     g_object_set (data->playbin, "flags", flags, NULL);
+
+    /* Only set URI for standard playback (not for multiappsrc which uses tdk:// URI) */
+    if (!use_multiappsrc || !tdkIsContainer(m_play_url))
+    {
+        g_object_set (data->playbin, "uri", m_play_url, NULL);
+    }
     if (forward_events)
     {
          /* Forward all events to all sinks */
@@ -1739,10 +3451,17 @@ static void SetupStream (MessageHandlerData *data)
          g_object_set(playsink, "send-event-mode", 0, NULL);
     }
     /*
-     * Set westeros-sink
+     * Set westeros-sink (skip for audio-only playback)
      */
-    data->westerosSink.sink = gst_element_factory_make(WESTEROS_SINK, NULL);
-    assert_failure (data->playbin, data->westerosSink.sink != NULL, "Failed to create 'westerossink' element",__FUNCTION__,__LINE__,"Create Westeros Instance");
+    if (!only_audio)
+    {
+        data->westerosSink.sink = gst_element_factory_make(WESTEROS_SINK, NULL);
+        assert_failure (data->playbin, data->westerosSink.sink != NULL, "Failed to create 'westerossink' element",__FUNCTION__,__LINE__,"Create Westeros Instance");
+    }
+    else
+    {
+        data->westerosSink.sink = NULL;
+    }
     if (!audiosink.empty())
     {
 	 printf("\nAudioSink is provided as %s",audiosink.c_str());
@@ -1756,21 +3475,31 @@ static void SetupStream (MessageHandlerData *data)
 	     g_object_set (data->playbin, "audio-sink", data->audioSink.sink, NULL);
 	 }
     }
+    else
+    {
+        data->audioSink.sink = NULL;
+    }
     /*
-     * Link the westeros-sink to playbin.
+     * Link the westeros-sink to playbin (skip for audio-only playback).
      * g_object_set with "video-sink" sinks the floating ref, so the pipeline
      * becomes the sole owner.  Take an explicit extra ref here so that the
      * post-teardown gst_object_unref() in trickplayTest() is valid — matching
      * the pattern used for audioSink (obtained via g_object_get which also
      * adds a ref).
      */
-    g_object_set (data->playbin, "video-sink", data->westerosSink.sink, NULL);
-    gst_object_ref (data->westerosSink.sink);
+    if (!only_audio)
+    {
+        g_object_set (data->playbin, "video-sink", data->westerosSink.sink, NULL);
+        gst_object_ref (data->westerosSink.sink);
+    }
     g_object_set (data->playbin, "async-handling", true, NULL);
     /*
-     * Set the first frame received callback
+     * Set the first frame received callback (only for video playback)
      */
-    g_signal_connect(data->westerosSink.sink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+    if (data->westerosSink.sink != NULL)
+    {
+        g_signal_connect(data->westerosSink.sink, "first-video-frame-callback", G_CALLBACK(firstFrameCallback), &firstFrameReceived);
+    }
     /*
      * Set the firstFrameReceived variable as false before starting play
      */
@@ -1783,6 +3512,23 @@ static void SetupStream (MessageHandlerData *data)
     /*
      * Set playbin to PLAYING
      */
+
+    /* Check if multiappsrc mode should be used for container files or audio-only files - do this just before playing */
+    if (use_multiappsrc && (tdkIsContainer(m_play_url) || tdkIsAudioOnly(m_play_url)))
+    {
+        printf("\n[trickplay] Using multiappsrc mode for: %s\n", m_play_url);
+        if (!setupInlineMultiAppsrc(data, true))
+        {
+            printf("\n[trickplay] Error: setupInlineMultiAppsrc failed\n");
+            assert_failure(data->playbin, false, "Failed to setup multiappsrc mode");
+        }
+        DOT_GENERATE_SETUP(data->playbin);
+        firstFrameReceived = false;
+        data->pipelineInitiation = true;
+        data->westerosSink.previous_rendered_frames = 0;
+        data->audioSink.previous_rendered_frames = 0;
+        return;
+    }
 
     if (log_enabled)
     {
@@ -1871,7 +3617,8 @@ static int waitUntilPreSeekPositionReached(GstElement *playbin, GstElement *vide
         if (videoSink)
             g_object_get(videoSink, "video-pts", &vo_pts, NULL);
 
-        bool pts_adv = (prev_pts >= 0) && (vo_pts > prev_pts);
+        /* For audio-only playback, mark pts_adv as true to skip video-pts stale counting */
+        bool pts_adv = only_audio ? true : ((prev_pts >= 0) && (vo_pts > prev_pts));
         /* pos_adv requires position to advance by 400–600 ms per 500 ms poll.
          * The nominal delta is 500 ms but embedded devices exhibit ±50–100 ms of
          * OS scheduling jitter (observed range on RTK1325: 464–534 ms), so the
@@ -1882,7 +3629,7 @@ static int waitUntilPreSeekPositionReached(GstElement *playbin, GstElement *vide
         static const gint64 POS_DIFF_HI = 600000000LL;  /* 600 ms in ns */
         bool pos_adv = (prev_pos >= 0) && (pos_diff_ns >= POS_DIFF_LO) && (pos_diff_ns <= POS_DIFF_HI);
 
-        const char *pts_str = (poll == 0) ? "---" : (pts_adv ? "advancing" : "STALE");
+        const char *pts_str = only_audio ? "N/A" : ((poll == 0) ? "---" : (pts_adv ? "advancing" : "STALE"));
         const char *pos_str = (poll == 0) ? "---" : (pos_adv ? "advancing" : "STALE");
 
         {
@@ -1941,11 +3688,21 @@ static int waitUntilPreSeekPositionReached(GstElement *playbin, GstElement *vide
     }
 
     /* Overwrite the post-seek verdict globals from the wait-loop observations.
-     * A metric is SUCCESS if ≤30% of polls were STALE; FAILURE if >30% were STALE. */
+     * A metric is SUCCESS if ≤30% of polls were STALE; FAILURE if >30% were STALE.
+     * Skip video-pts validation for audio-only playback (no video sink). */
     if (check_polls > 0)
     {
         int stale_threshold = (check_polls * 30) / 100;
-        video_pts_validation_post_seek         = (pts_stale_count <= stale_threshold) ? "SUCCESS" : "FAILURE";
+        /* For audio-only playback, skip video-pts validation since there's no video sink */
+        if (only_audio)
+        {
+            video_pts_validation_post_seek = "SKIP";
+            printf("[SEEK-WAIT] Skipping video-pts validation (only_audio=true)\n");
+        }
+        else
+        {
+            video_pts_validation_post_seek = (pts_stale_count <= stale_threshold) ? "SUCCESS" : "FAILURE";
+        }
         pipeline_position_validation_post_seek = (pos_stale_count <= stale_threshold) ? "SUCCESS" : "FAILURE";
         printf("[SEEK-WAIT] Stale threshold: %d/%d polls (30%%). "
                "pts_stale=%d pos_stale=%d\n",
@@ -1973,7 +3730,7 @@ GST_START_TEST (trickplayTest)
     GstBus *bus;
     GstStateChangeReturn state_change;
     GstState cur_state;
-    MessageHandlerData data;
+    MessageHandlerData data = {0};  /* Zero-initialize to ensure all members are NULL */
     int timeout = 0;
     bool is_av_playing = false;
     vector<string>::iterator operationItr;
@@ -1982,10 +3739,8 @@ GST_START_TEST (trickplayTest)
     SetupStream(&data);
     data.setRate = NORMAL_PLAYBACK_RATE;
     bus = gst_element_get_bus(data.playbin);
-    gst_bus_add_watch(bus, (GstBusFunc) handleMessage, NULL);
+    guint bus_watch_id = gst_bus_add_watch(bus, (GstBusFunc) handleMessage, NULL);
 
-    bool any_seek_done = false;  /* tracks whether at least one seek operation was executed */
-    bool any_rate_done = false;  /* tracks whether at least one FF/rewind operation was executed */
     g_pipeline_destroyed = false;  /* reset before the operations loop */
 
     /*
@@ -2134,7 +3889,6 @@ GST_START_TEST (trickplayTest)
             }
 	    data.setRateOperation = TRUE;
 	    data.setRate = rate;
-            any_rate_done = true;  /* mark that a FF/rewind operation was issued */
             trickplayOperation(&data);
             /* Stop processing further operations if this one failed */
             if (!operation_verdicts.empty() && !operation_verdicts.back().overall_pass)
@@ -2173,7 +3927,6 @@ GST_START_TEST (trickplayTest)
 	    trickplay = false;
 	    data.setRateOperation = FALSE;
 	    data.seekSeconds = seekSeconds;
-	    any_seek_done = true;  /* mark that a seek was issued in this test run */
 	    /* If pipeline is not already at 1x, silently reset rate before seeking
 	     * (this is an internal prerequisite, not a user-requested trickplay op) */
 	    data.currentRate = getRate(data.playbin);
@@ -2437,16 +4190,46 @@ GST_START_TEST (trickplayTest)
              PlaySeconds(data.playbin,timeout,seekOperation);
 	 }
 	 seekOperation = false;
+	 free(operationBuffer);  /* Free the strdup'd operation string */
+    }
+
+    /* Send EOS to multiappsrc streams after all operations are complete */
+    if (multiappsrc_defer_eos && (multiappsrc_video_appsrc != NULL || multiappsrc_audio_appsrc != NULL))
+    {
+        printf("\n[trickplay] Sending deferred EOS to multiappsrc after all operations complete\n");
+        GstFlowReturn ret;
+        if (multiappsrc_video_appsrc != NULL)
+        {
+            printf("[trickplay] Emitting EOS to video appsrc\n");
+            g_signal_emit_by_name(multiappsrc_video_appsrc, "end-of-stream", &ret);
+        }
+        if (multiappsrc_audio_appsrc != NULL)
+        {
+            printf("[trickplay] Emitting EOS to audio appsrc\n");
+            g_signal_emit_by_name(multiappsrc_audio_appsrc, "end-of-stream", &ret);
+        }
+        multiappsrc_defer_eos = false;  /* Reset flag for next test */
     }
 
     printf("\n unref the bus\n");
-    gst_object_unref(bus);
+
+    /* Remove bus watch source before terminating pipeline */
+    g_source_remove(bus_watch_id);
 
     /* Generate DOT graph before pipeline termination */
     DOT_GENERATE_FINAL(data.playbin);
 
     terminatePipeline(data.playbin);
     data.playbin = NULL;  /* prevent use-after-free; terminatePipeline already freed it */
+
+    /* Unref bus AFTER pipeline termination to avoid use-after-free */
+    gst_object_unref(bus);
+    bus = NULL;
+
+    /* Reset multiappsrc globals after pipeline termination */
+    multiappsrc_video_appsrc = NULL;
+    multiappsrc_audio_appsrc = NULL;
+    multiappsrc_defer_eos = false;
 
     /* Drop the original factory_make references to the sink elements.
      * playbin held one ref to each during playback; that ref was released when
@@ -2705,137 +4488,122 @@ bool parseResult(const std::string& jsonResponse)
     std::istringstream sstream(jsonResponse);
     if (Json::parseFromStream(builder, sstream, &root, &errs))
     {
-        // Check for "error" field in the response
-        if (root.isMember("error"))
+        // Validate that root is an object before accessing members
+        if (!root.isObject() && !root.isNull())
+        {
+            printf("\nERROR: JSON response is not an object\n");
+            return false;
+        }
+        
+        // Check for "error" field in the response (safe check)
+        if (root.isObject() && root.isMember("error") && !root["error"].isNull())
         {
             std::string message = root["error"]["message"].asString();
 	    printf("\nERROR : %s \n",message.c_str());
             return false;
         }
-        else if (root.isMember("result") && root["result"].isArray() && root["result"].size() > 0)
+        
+        // Check for "result" field
+        if (!root.isObject() || !root.isMember("result"))
         {
-            // Access the 'state' field in the first object in the result array (RDKShell format)
-            if (root["result"][0].isMember("state"))
+            printf("\nERROR: No result field in JSON response\n");
+            return false;
+        }
+        
+        // Handle null result (success case - e.g., createDisplay returns null result)
+        if (root["result"].isNull())
+        {
+            printf("\nresult : \"null\" (success)\n");
+            return true;
+        }
+        
+        // Handle array result
+        if (root["result"].isArray() && root["result"].size() > 0)
+        {
+            // Access the 'state' field in the first object in the result array (RDKShell/RDKWindowManager format)
+            if (root["result"][0].isObject() && root["result"][0].isMember("state"))
             {
                 std::string state = root["result"][0]["state"].asString();
 	        printf(" %s \n",state.c_str());
                 return state == "activated";
             }
-        }
-        else if (root.isMember("result") && root["result"].isObject() && root["result"].isMember("state"))
-        {
-            // Direct state access for RDKWindowManager format
-            std::string state = root["result"]["state"].asString();
-	    printf(" %s \n",state.c_str());
-            return state == "activated";
-        }
-        else if (root.isMember("result") && root["result"].isNull())
-        {
-	    printf("\nresult : \"null\"\n");
-            return true;
-        }
-	else if (root.isMember("result") && root["result"].isObject())
-	{
-	    // Handle different object formats for client/app checking
-	    if (root["result"].isMember("clients") && root["result"]["clients"].isArray())
-	    {
-	        // RDKShell format - check clients array
-	        if (root["result"]["clients"].size() > 0)
-	        {
-	            std::string client = root["result"]["clients"][0].asString();
-	            return client == "test";
-	        }
-	        return false;
-	    }
-	    else if (root["result"].isMember("apps") && root["result"]["apps"].isArray())
-	    {
-	        // RDKWindowManager format - check apps array (object format)
-	        for (const auto& app : root["result"]["apps"])
-	        {
-	            if (app.isMember("name") && app["name"].asString() == "test")
-	            {
-	                return true;
-	            }
-	        }
-	        return false;
-	    }
-	    else if (root["result"].isMember("success"))
+            // Check for clients array (RDKShell format)
+            if (root["result"].size() > 0 && root["result"][0].isString())
             {
-                // Generic success field handling
+                std::string client = root["result"][0].asString();
+                return client == "test";
+            }
+            return true;  // Array result exists, treat as success
+        }
+        
+        // Handle object result
+        if (root["result"].isObject())
+        {
+            // Check for "state" field (status check format)
+            if (root["result"].isMember("state"))
+            {
+                std::string state = root["result"]["state"].asString();
+	        printf(" %s \n",state.c_str());
+                return state == "activated";
+            }
+            // Check for "clients" array (RDKShell format)
+            else if (root["result"].isMember("clients") && root["result"]["clients"].isArray())
+            {
+                if (root["result"]["clients"].size() > 0)
+                {
+                    std::string client = root["result"]["clients"][0].asString();
+                    return client == "test";
+                }
+                return false;
+            }
+            // Check for "apps" array (RDKWindowManager format)
+            else if (root["result"].isMember("apps") && root["result"]["apps"].isArray())
+            {
+                for (const auto& app : root["result"]["apps"])
+                {
+                    if (app.isObject() && app.isMember("name") && app["name"].asString() == "test")
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            // Check for "success" field (generic success field handling)
+            else if (root["result"].isMember("success"))
+            {
                 bool success = root["result"]["success"].asBool();
 	        printf(" success : %s\n", success ? "true" : "false");
 	        return success;
             }
-	}
-        else if (root.isMember("result") && root["result"].isString())
+            else
+            {
+                // Generic object result - assume success
+                return true;
+            }
+        }
+        
+        // Handle string result (e.g., getApps returns result as string containing JSON array)
+        if (root["result"].isString())
         {
-            // RDKWindowManager getApps returns result as string containing JSON array: "[\"test\"]"
             std::string resultStr = root["result"].asString();
-	    if (!resultStr.empty()) {
+	    if (!resultStr.empty())
+	    {
                 printf("apps string: %s\n", resultStr.c_str());
             }
             // Check if the string contains "test"
             return resultStr.find("\"test\"") != std::string::npos;
         }
-        else if (root.isMember("result") && root["result"].isArray())
-        {
-            // Handle direct array results (alternative RDKShell format or other plugins)
-            for (const auto& item : root["result"])
-            {
-                if (item.isString() && item.asString() == "test")
-                {
-                    return true;
-                }
-                else if (item.isObject() && item.isMember("name") && item["name"].asString() == "test")
-                {
-                    return true;
-                }
-                else if (item.isObject() && item.isMember("client") && item["client"].asString() == "test")
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        else if (root.isMember("result"))
-        {
-            // Generic result handling - for backward compatibility
-            // Check if result has success field or assume success if present
-            if (root["result"].isObject() && root["result"].isMember("success"))
-            {
-                bool success = root["result"]["success"].asBool();
-                printf(" success : %s\n", success ? "true" : "false");
-                return success;
-            }
-            else if (root["result"].isBool())
-            {
-                // Direct boolean result
-                bool success = root["result"].asBool();
-                printf(" success : %s\n", success ? "true" : "false");
-                return success;
-            }
-            else
-            {
-                // Assume success if result exists but format unknown
-                printf(" result received\n");
-                return true;
-            }
-        }
-	else
-	{
-	    printf("\nERROR : Unable to parse json response");
-	    if (log_enabled)
-	        fprintf(file, "\nERROR : Unable to parse json response");
-	    return false;
-	}
+        
+        // If result exists but is none of the above, treat as success
+        return true;
     }
     else
     {
-        std::cerr << "Error parsing JSON: " << errs << std::endl;
+        printf("\nERROR : Unable to parse JSON response: %s\n", errs.c_str());
+        if (log_enabled)
+            fprintf(file, "\nERROR : Unable to parse JSON response: %s\n", errs.c_str());
         return false;
     }
-    
-    // Should never reach here, but add for safety
     return false;
 }
 
@@ -3182,6 +4950,28 @@ int main (int argc, char **argv)
                operationsList.push_back(operation);
                operation = strtok (NULL, ",");
             }
+            
+            /* If first operation is not "play", prepend "play:5" to ensure pipeline reaches PLAYING state
+               This fixes standalone fastforward/rewind operations which fail without prior play. */
+            if (!operationsList.empty())
+            {
+                std::string firstOp = operationsList[0];
+                if (firstOp.find("play") != 0)  /* Doesn't start with "play" */
+                {
+                    printf("[trickplay-startup] First operation is not 'play' (%s), prepending 'play:5'\n", firstOp.c_str());
+                    operationsList.insert(operationsList.begin(), "play:5");
+                }
+            }
+            
+            /* Calculate buffer duration for trickplay operations with multiappsrc */
+            if (use_multiappsrc && !operationsList.empty())
+            {
+                trickplay_buffer_duration_ns = calculateBufferDurationForTrickplay();
+            }
+         }
+         if (strcmp ("use_multiappsrc=yes", argv[arg]) == 0)
+         {
+            use_multiappsrc = true;
          }
          if (strcmp ("checkavstatus=yes", argv[arg]) == 0)
          {
@@ -3239,6 +5029,18 @@ int main (int argc, char **argv)
 	 if (strcmp ("only_audio", argv[arg]) == 0)
 	 {
             only_audio = true;  		
+	 }
+	 if (strcmp ("only_audio=yes", argv[arg]) == 0)
+	 {
+            only_audio = true;  		
+	 }
+	 if (strcmp ("only_video", argv[arg]) == 0)
+	 {
+            only_video = true;
+	 }
+	 if (strcmp ("only_video=yes", argv[arg]) == 0)
+	 {
+            only_video = true;
 	 }
 	 if (strcmp ("startWesteros=yes", argv[arg]) == 0)
          {

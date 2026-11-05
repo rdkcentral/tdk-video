@@ -25,15 +25,17 @@ AM_CXXFLAGS = -I${PKG_CONFIG_SYSROOT_DIR}$(includedir) \
               -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/glib-2.0 \
               -I${PKG_CONFIG_SYSROOT_DIR}/usr/lib/glib-2.0/include \
               -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/gstreamer-1.0 \
+              -I${PKG_CONFIG_SYSROOT_DIR}$(includedir)/rdk/ds-hal \
+              -I${top_srcdir}/../MediaPipelineTests_stub/src \
               -I${top_srcdir}/../agent/include
 
 
 bin_PROGRAMS = tdk_mediapipelinetests
 
-tdk_mediapipelinetests_SOURCES = src/MediaPipelineSuite.cpp
-tdk_mediapipelinetests_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0 -lgstaudio-1.0 -lcurl -ltinyxml2 -ljsoncpp
+tdk_mediapipelinetests_SOURCES = src/MediaPipelineSuite.cpp src/GstTdkSrc.cpp
+tdk_mediapipelinetests_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgstapp-1.0 -lgobject-2.0 -lglib-2.0 -lgstaudio-1.0 -lcurl -ltinyxml2 -ljsoncpp -lgstbase-1.0
 
 bin_PROGRAMS += tdk_mediapipelinetests_trickplay
 
-tdk_mediapipelinetests_trickplay_SOURCES = src/mediapipelinetests_trickplay.cpp
-tdk_mediapipelinetests_trickplay_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0 -lcurl -ljsoncpp
+tdk_mediapipelinetests_trickplay_SOURCES = src/mediapipelinetests_trickplay.cpp src/GstTdkSrc.cpp
+tdk_mediapipelinetests_trickplay_LDADD = $(GST_LIBS) $(GST_CHECK_LIBS) $(GLIBS) -ldl -lpthread -lgstreamer-1.0 -lgstcheck-1.0 -lgobject-2.0 -lglib-2.0 -lcurl -ljsoncpp -lgstapp-1.0 -lgstbase-1.0
