@@ -2692,150 +2692,78 @@ std::string sendRequest(const std::string& jsonData) {
 /********************************************************************************************************************
  * Purpose      : Function to parse json Response
  ********************************************************************************************************************/
+
 bool parseResult(const std::string& jsonResponse)
 {
-    //Check if response is FAILURE
+    // Check if response is FAILURE
     if (jsonResponse == "FAILURE")
-	return false;
+        return false;
+
     // Parse JSON response using jsoncpp
     Json::Value root;
     Json::CharReaderBuilder builder;
     std::string errs;
-    // Use istringstream to parse the response
     std::istringstream sstream(jsonResponse);
-    if (Json::parseFromStream(builder, sstream, &root, &errs))
-    {
-        // Check for "error" field in the response
-        if (root.isMember("error"))
-        {
-            std::string message = root["error"]["message"].asString();
-	    printf("\nERROR : %s \n",message.c_str());
-            return false;
-        }
-        else if (root.isMember("result") && root["result"].isArray() && root["result"].size() > 0)
-        {
-            // Access the 'state' field in the first object in the result array (RDKShell format)
-            if (root["result"][0].isMember("state"))
-            {
-                std::string state = root["result"][0]["state"].asString();
-	        printf(" %s \n",state.c_str());
-                return state == "activated";
-            }
-        }
-        else if (root.isMember("result") && root["result"].isObject() && root["result"].isMember("state"))
-        {
-            // Direct state access for RDKWindowManager format
-            std::string state = root["result"]["state"].asString();
-	    printf(" %s \n",state.c_str());
-            return state == "activated";
-        }
-        else if (root.isMember("result") && root["result"].isNull())
-        {
-	    printf("\nresult : \"null\"\n");
-            return true;
-        }
-	else if (root.isMember("result") && root["result"].isObject())
-	{
-	    // Handle different object formats for client/app checking
-	    if (root["result"].isMember("clients") && root["result"]["clients"].isArray())
-	    {
-	        // RDKShell format - check clients array
-	        if (root["result"]["clients"].size() > 0)
-	        {
-	            std::string client = root["result"]["clients"][0].asString();
-	            return client == "test";
-	        }
-	        return false;
-	    }
-	    else if (root["result"].isMember("apps") && root["result"]["apps"].isArray())
-	    {
-	        // RDKWindowManager format - check apps array (object format)
-	        for (const auto& app : root["result"]["apps"])
-	        {
-	            if (app.isMember("name") && app["name"].asString() == "test")
-	            {
-	                return true;
-	            }
-	        }
-	        return false;
-	    }
-	    else if (root["result"].isMember("success"))
-            {
-                // Generic success field handling
-                bool success = root["result"]["success"].asBool();
-	        printf(" success : %s\n", success ? "true" : "false");
-	        return success;
-            }
-	}
-        else if (root.isMember("result") && root["result"].isString())
-        {
-            // RDKWindowManager getApps returns result as string containing JSON array: "[\"test\"]"
-            std::string resultStr = root["result"].asString();
-	    if (!resultStr.empty()) {
-                printf("apps string: %s\n", resultStr.c_str());
-            }
-            // Check if the string contains "test"
-            return resultStr.find("\"test\"") != std::string::npos;
-        }
-        else if (root.isMember("result") && root["result"].isArray())
-        {
-            // Handle direct array results (alternative RDKShell format or other plugins)
-            for (const auto& item : root["result"])
-            {
-                if (item.isString() && item.asString() == "test")
-                {
-                    return true;
-                }
-                else if (item.isObject() && item.isMember("name") && item["name"].asString() == "test")
-                {
-                    return true;
-                }
-                else if (item.isObject() && item.isMember("client") && item["client"].asString() == "test")
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        else if (root.isMember("result"))
-        {
-            // Generic result handling - for backward compatibility
-            // Check if result has success field or assume success if present
-            if (root["result"].isObject() && root["result"].isMember("success"))
-            {
-                bool success = root["result"]["success"].asBool();
-                printf(" success : %s\n", success ? "true" : "false");
-                return success;
-            }
-            else if (root["result"].isBool())
-            {
-                // Direct boolean result
-                bool success = root["result"].asBool();
-                printf(" success : %s\n", success ? "true" : "false");
-                return success;
-            }
-            else
-            {
-                // Assume success if result exists but format unknown
-                printf(" result received\n");
-                return true;
-            }
-        }
-	else
-	{
-	    printf("\nERROR : Unable to parse json response");
-	    if (log_enabled)
-	        fprintf(file, "\nERROR : Unable to parse json response");
-	    return false;
-	}
-    }
-    else
-    {
-        std::cerr << "Error parsing JSON: " << errs << std::endl;
+
+    if (!Json::parseFromStream(builder, sstream, &root, &errs)) {
+        printf("JSON Parse Error: %s\n", errs.c_str());
         return false;
     }
-    
-    // Should never reach here, but add for safety
+
+    // Check if result field exists
+    if (!root.isMember("result")) {
+        printf("Result field not found in response\n");
+        return false;
+    }
+
+    Json::Value resultField = root["result"];
+
+    // Handle null result (success case for operations like create/destroy)
+    if (resultField.isNull()) {
+        return true;
+    }
+
+    // Check if result is an array (new getApps format or plugin status)
+    if (resultField.isArray()) {
+
+        // Check first element type
+        if (resultField.size() > 0 && resultField[0].isObject()) {
+            // Array of objects - plugin status format
+            if (resultField[0].isMember("state")) {
+                std::string state = resultField[0]["state"].asString();
+                printf("Plugin state: %s\n", state.c_str());
+                return state == "activated";
+            }
+            return false;
+        }
+
+        // Array of strings - getApps format
+        for (unsigned int i = 0; i < resultField.size(); i++) {
+            if (resultField[i].isString()) {
+                std::string item = resultField[i].asString();
+
+                // Check if 'test' (display client name) is in the list
+                if (item == "test") {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+    // Check if result is a string (legacy string format)
+    else if (resultField.isString()) {
+        std::string resultStr = resultField.asString();
+        // Check if string contains test
+        return resultStr.find("test") != std::string::npos;
+    }
+    // Check if result is an object with state field (status format)
+    else if (resultField.isObject() && resultField.isMember("state")) {
+        std::string state = resultField["state"].asString();
+        return state == "activated";
+    }
+
+    printf("Result field has unexpected type or format\n");
     return false;
 }
 

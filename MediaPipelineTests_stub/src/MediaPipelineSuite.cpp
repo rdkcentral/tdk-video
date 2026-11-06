@@ -1932,45 +1932,44 @@ static void play_set_relative_volume (GstElement *playbin)
   volume = gst_stream_volume_get_volume (GST_STREAM_VOLUME (playbin),
       GST_STREAM_VOLUME_FORMAT_CUBIC);
 
-  printf ("Previous volume : %.0f%% \n", volume * 100);
+  printf ("Previous volume : %.6f%% \n", volume * 100);
 
   printf  ("Setting volume to %f \n", volume_set);
 
   if (log_enabled)
   {
-      fprintf(file, "Previous volume : %.0f%% \n", volume * 100);
+      fprintf(file, "Previous volume : %.6f%% \n", volume * 100);
       fprintf(file, "Setting volume to %f \n", volume_set);
-  }      
-  
+  }
+
   set_volume = volume_set;
 
-  printf ("Volume setted : %.0f%% \n", set_volume * 100);
+  printf ("Volume setted : %.6f%% \n", set_volume * 100);
   if (log_enabled)
-      fprintf(file, "Volume setted : %.0f%% \n", set_volume * 100);
+      fprintf(file, "Volume setted : %.6f%% \n", set_volume * 100);
 
   gst_stream_volume_set_volume (GST_STREAM_VOLUME (playbin),
       GST_STREAM_VOLUME_FORMAT_CUBIC, set_volume);
 
   get_volume = gst_stream_volume_get_volume (GST_STREAM_VOLUME (playbin),
       GST_STREAM_VOLUME_FORMAT_CUBIC);
- 
-  printf ("Volume: %.0f%% \n", get_volume * 100);
+
+  printf ("Volume: %.6f%% \n", get_volume * 100);
   if (log_enabled)
-       fprintf(file, "Volume: %.0f%% \n", get_volume * 100);
+       fprintf(file, "Volume: %.6f%% \n", get_volume * 100);
 
   GstElement* audio_sink = NULL;
   g_object_get(playbin, "audio-sink", &audio_sink, NULL);
   if (audio_sink)
   {
-       if (g_object_class_find_property(G_OBJECT_GET_CLASS(audio_sink), "volume"))
+       if (GST_IS_STREAM_VOLUME(audio_sink))
        {
-           double sink_volume;
-           g_object_get(G_OBJECT(audio_sink), "volume", &sink_volume, NULL);
-	   printf("\n\nVolume from audiosink = %.0f\n", sink_volume);
-	   printf("\nExpected volume = %0.f\n\n", set_volume);
+           double sink_volume = gst_stream_volume_get_volume(GST_STREAM_VOLUME(audio_sink),
+               GST_STREAM_VOLUME_FORMAT_CUBIC);
+           printf("\n\nVolume from audiosink = %.6f\n", sink_volume);
+           printf("\nExpected volume = %.6f\n\n", set_volume);
 
-
-	   assert_failure (playbin, sink_volume == set_volume, "audio-sink doesn't return the expected volume", __FUNCTION__, __LINE__, "Verify if volume is properly set in audio-sink");
+           assert_failure (playbin, sink_volume == set_volume, "audio-sink doesn't return the expected volume", __FUNCTION__, __LINE__, "Verify if volume is properly set in audio-sink");
        }
        g_object_unref(audio_sink);
   }
@@ -4774,135 +4773,79 @@ std::string sendRequest(const std::string& jsonData) {
 /********************************************************************************************************************
  * Purpose      : Function to parse json Response
  ********************************************************************************************************************/
+
 bool parseResult(const std::string& jsonResponse)
 {
-    //Check if response is FAILURE
+    // Check if response is FAILURE
     if (jsonResponse == "FAILURE")
-	return false;
+        return false;
+
     // Parse JSON response using jsoncpp
     Json::Value root;
     Json::CharReaderBuilder builder;
     std::string errs;
-    // Use istringstream to parse the response
     std::istringstream sstream(jsonResponse);
-    if (Json::parseFromStream(builder, sstream, &root, &errs))
-    {
-        // Check for "error" field in the response
-        if (root.isMember("error"))
-        {
-            std::string message = root["error"]["message"].asString();
-	    printf("\nERROR : %s \n",message.c_str());
-            return false;
-        }
-        else if (root.isMember("result") && root["result"].isArray() && root["result"].size() > 0)
-        {
-            // Access the 'state' field in the first object in the result array (Thunder Controller status format)
-            if (root["result"][0].isMember("state"))
-            {
-                std::string state = root["result"][0]["state"].asString();
-	        printf(" %s \n",state.c_str());
-                return state == "activated";
-            }
-        }
-        else if (root.isMember("result") && root["result"].isObject() && root["result"].isMember("state"))
-        {
-            // Direct state access for RDKWindowManager format
-            std::string state = root["result"]["state"].asString();
-	    printf(" %s \n",state.c_str());
-            return state == "activated";
-        }
-        else if (root.isMember("result") && root["result"].isNull())
-        {
-	    printf("\nresult : \"null\"\n");
-            return true;
-        }
-	else if (root.isMember("result") && root["result"].isObject())
-	{
-	    // Handle different object formats for app checking
-	    if (root["result"].isMember("apps") && root["result"]["apps"].isArray())
-	    {
-	        // RDKWindowManager format - check apps array (object format)
-	        for (const auto& app : root["result"]["apps"])
-	        {
-	            if (app.isMember("name") && app["name"].asString() == "test")
-	            {
-	                return true;
-	            }
-	        }
-	        return false;
-	    }
-	    else if (root["result"].isMember("success"))
-            {
-                // Generic success field handling
-                bool success = root["result"]["success"].asBool();
-	        printf(" success : %s\n", success ? "true" : "false");
-	        return success;
-            }
-	}
-        else if (root.isMember("result") && root["result"].isString())
-        {
-            // RDKWindowManager getApps returns result as string containing JSON array: "[\"test\"]"
-            std::string resultStr = root["result"].asString();
-	    if (!resultStr.empty())
-	    {
-                printf("apps string: %s\n", resultStr.c_str());
-            }
-            // Check if the string contains "test"
-            return resultStr.find("\"test\"") != std::string::npos;
-        }
-        else if (root.isMember("result") && root["result"].isArray())
-        {
-            // Handle direct array results
-            for (const auto& item : root["result"])
-            {
-                if (item.isString() && item.asString() == "test")
-                {
-                    return true;
-                }
-                else if (item.isObject() && item.isMember("name") && item["name"].asString() == "test")
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-        else if (root.isMember("result"))
-        {
-            // Generic result handling - for backward compatibility
-            // Check if result has success field or assume success if present
-            if (root["result"].isObject() && root["result"].isMember("success"))
-            {
-                bool success = root["result"]["success"].asBool();
-                printf(" success : %s\n", success ? "true" : "false");
-                return success;
-            }
-            else if (root["result"].isBool())
-            {
-                // Direct boolean result
-                bool success = root["result"].asBool();
-                printf(" success : %s\n", success ? "true" : "false");
-                return success;
-            }
-            else
-            {
-                // Assume success if result exists but format unknown
-                printf(" result received\n");
-                return true;
-            }
-        }
-	else
-	{
-	    printf("\nERROR : Unable to parse json response");
-	    if (log_enabled)
-	        fprintf(file, "\nERROR : Unable to parse json response");
-	    return false;
-	}
-    }
-    else
-    {
-        std::cerr << "Error parsing JSON: " << errs << std::endl;
+
+    if (!Json::parseFromStream(builder, sstream, &root, &errs)) {
+        printf("JSON Parse Error: %s\n", errs.c_str());
         return false;
     }
+
+    // Check if result field exists
+    if (!root.isMember("result")) {
+        printf("Result field not found in response\n");
+        return false;
+    }
+
+    Json::Value resultField = root["result"];
+
+    // Handle null result (success case for operations like create/destroy)
+    if (resultField.isNull()) {
+        return true;
+    }
+
+    // Check if result is an array (new getApps format or plugin status)
+    if (resultField.isArray()) {
+
+        // Check first element type
+        if (resultField.size() > 0 && resultField[0].isObject()) {
+            // Array of objects - plugin status format
+            if (resultField[0].isMember("state")) {
+                std::string state = resultField[0]["state"].asString();
+                printf("Plugin state: %s\n", state.c_str());
+                return state == "activated";
+            }
+            return false;
+        }
+
+        // Array of strings - getApps format
+        for (unsigned int i = 0; i < resultField.size(); i++) {
+            if (resultField[i].isString()) {
+                std::string item = resultField[i].asString();
+
+                // Check if 'test' (display client name) is in the list
+                if (item == "test") {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+    // Check if result is a string (legacy string format)
+    else if (resultField.isString()) {
+        std::string resultStr = resultField.asString();
+        // Check if string contains test
+        return resultStr.find("test") != std::string::npos;
+    }
+    // Check if result is an object with state field (status format)
+    else if (resultField.isObject() && resultField.isMember("state")) {
+        std::string state = resultField["state"].asString();
+        return state == "activated";
+    }
+
+    printf("Result field has unexpected type or format\n");
+    return false;
 }
 
 /********************************************************************************************************************

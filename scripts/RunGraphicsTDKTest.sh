@@ -23,7 +23,6 @@ TEST=$1
 TIMEOUT=$2
 TEST_OPTION=$3
 
-
 if [ "$1" == "--help" ];then
    printf '#%.0s' {1..100}
    printf "\nThis Test Script executes Essos_TDKTestApp, Westeros_TDKTestApp and waymetric along with all the pre-requisites\n"
@@ -56,22 +55,37 @@ then
     fi
 fi
 
-if [[ ! -z `systemctl status wpeframework 2>/dev/null | grep "active (running)"` ]]; then
+if systemctl is-active --quiet wpeframework 2>/dev/null; then
     #Stop wpeframework to get EGL Display
+    echo "wpeframework is active, stopping it"
     systemctl stop wpeframework
-    echo "WPEFramework stopped"
+    echo "wpeframework stopped"
     wpeframework_stop=1
 fi
-
 
 #Run waymetric --no-multi test
 if [ "$TEST" == "Waymetric" ];
 then
+    hdmiservice_stop=0
+    if systemctl is-active --quiet hdmiservice 2>/dev/null; then
+        echo "hdmiservice is active, stopping it"
+        systemctl stop hdmiservice
+	echo "hdmiservice stopped"
+        hdmiservice_stop=1
+    fi
     printf "Starting waymetric test"
+    wayland_egl_library=`find /usr/lib -iname "libwayland-egl.so*" | head -n1`
+    export LD_PRELOAD=${LD_PRELOAD}:${wayland_egl_library}
     waymetric --no-multi
     #Reset wpeframework to original state
     if [[ "$wpeframework_stop" == 1 ]]; then
         systemctl start wpeframework
+	wpeframework_stop=0
+    fi
+    #Reset hdmiservice to original state
+    if [[ "$hdmiservice_stop" == 1 ]]; then
+        systemctl start hdmiservice
+	hdmiservice_stop=0
     fi
     exit
 fi
@@ -127,6 +141,7 @@ then
 	#Reset wpeframework to original state
         if [[ "$wpeframework_stop" == 1 ]]; then
              systemctl start wpeframework
+	     wpeframework_stop=0
         fi
         exit
     fi
@@ -169,6 +184,7 @@ then
     #Reset wpeframework to original state
     if [[ "$wpeframework_stop" == 1 ]]; then
         systemctl start wpeframework
+	wpeframework_stop=0
     fi
     exit
 fi
@@ -194,5 +210,5 @@ fi
 
 if [[ "$wpeframework_stop" == 1 ]]; then
      systemctl start wpeframework
+     wpeframework_stop=0
 fi
-
